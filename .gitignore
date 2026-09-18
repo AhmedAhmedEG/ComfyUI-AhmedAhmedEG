@@ -23,3 +23,5 @@ output/
 .vscode/
 .idea/
 workflows/
+*.json
+MiniMax H3 Master Director.json
