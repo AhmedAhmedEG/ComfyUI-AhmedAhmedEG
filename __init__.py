@@ -77,6 +77,33 @@ if getattr(PromptServer, "instance", None) is not None:
         except Exception as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=500)
 
+    @routes.post("/minimax_director/update")
+    async def update_custom_node(request):
+        """Self-update the ComfyUI-AhmedAhmedEG custom node from its upstream Git repository."""
+        import subprocess
+        try:
+            repo_dir = os.path.dirname(os.path.abspath(__file__))
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "pull", "--no-rebase"],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            out = proc.stdout.strip()
+            err = proc.stderr.strip()
+            if proc.returncode == 0:
+                msg = out or "Already up to date."
+                return web.json_response({"ok": True, "message": msg})
+            else:
+                return web.json_response({
+                    "ok": False,
+                    "error": f"Git pull failed (exit code {proc.returncode}):\n{err or out}"
+                }, status=500)
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
     @routes.post("/minimax_director/smart_split")
     async def smart_split(request):
         """Smart shot detection using PySceneDetect for V2V timeline editing."""

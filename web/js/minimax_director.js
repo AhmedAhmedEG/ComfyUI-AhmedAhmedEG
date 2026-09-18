@@ -224,8 +224,37 @@ function mountDirectorUI(node) {
         }
       };
 
+      const updateBtn = document.createElement("button");
+      updateBtn.className = "mmx-action-btn";
+      updateBtn.innerHTML = "🔄 Update Node";
+      updateBtn.title = "Pull latest updates directly from GitHub for ComfyUI-AhmedAhmedEG";
+      updateBtn.onclick = async () => {
+        const origText = updateBtn.innerHTML;
+        updateBtn.disabled = true;
+        updateBtn.innerHTML = "⏳ Updating...";
+        try {
+          const res = await api.fetchApi("/minimax_director/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          const data = await res.json();
+          if (data.ok) {
+            alert("✅ ComfyUI-AhmedAhmedEG Update Result:\n\n" + data.message + "\n\nRestart ComfyUI or refresh your browser to apply changes.");
+          } else {
+            alert("❌ Update Error:\n\n" + (data.error || "Git pull failed"));
+          }
+        } catch (err) {
+          alert("❌ Network Error:\n\n" + err);
+        } finally {
+          updateBtn.disabled = false;
+          updateBtn.innerHTML = origText;
+        }
+      };
+
       actionGroup.appendChild(exportBtn);
       actionGroup.appendChild(importBtn);
+      actionGroup.appendChild(updateBtn);
       actionGroup.appendChild(clearBtn);
       toolbar.appendChild(actionGroup);
       root.appendChild(toolbar);
