@@ -12,6 +12,7 @@ class MiniMaxH3DirectorRefine:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "enabled": ("BOOLEAN", {"default": True, "tooltip": "Toggle 2nd-pass refinement"}),
                 "mode": (["refine", "upscale", "latent_upscale"], {"default": "refine", "tooltip": "Refinement mode"}),
                 "steps": ("INT", {"default": 3, "min": 1, "max": 50, "step": 1, "tooltip": "Refine sampling steps"}),
                 "denoise": ("FLOAT", {"default": 0.45, "min": 0.05, "max": 1.0, "step": 0.01, "tooltip": "Denoise strength for refine sample"}),
@@ -39,10 +40,11 @@ class MiniMaxH3DirectorRefine:
         target_height: int,
         enable_tiling: bool,
         tile_count: int,
+        enabled: bool = True,
         refine_model=None,
     ):
         return ({
-            "enabled": True,
+            "enabled": bool(enabled),
             "mode": mode,
             "steps": int(steps),
             "denoise": float(denoise),
