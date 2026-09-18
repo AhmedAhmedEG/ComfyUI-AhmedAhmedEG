@@ -121,10 +121,10 @@ class MiniMaxH3MasterDirector:
                 "sigmas": ("SIGMAS", {"forceInput": True, "tooltip": "External sigma schedule override."}),
                 "ref_pack": ("REF_PACK", {"tooltip": "External reference pack bridge."}),
                 "prompt_pack": ("PROMPT_PACK", {"tooltip": "External prompt pack bridge."}),
-            },
-            "hidden": {
                 "timeline_data": ("STRING", {"default": "{\"version\":1,\"clips\":[],\"tracks\":[]}", "multiline": False}),
                 "builder_state": ("STRING", {"default": "{}", "multiline": False}),
+            },
+            "hidden": {
                 "unique_id": "UNIQUE_ID",
             },
         }

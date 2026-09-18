@@ -19,6 +19,7 @@ from .core.cache_manager import ProjectCacheManager
 
 __version__ = "1.0.0"
 WEB_DIRECTORY = "./web"
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 log = logging.getLogger("MiniMaxH3MasterDirector")
 
