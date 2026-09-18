@@ -1,0 +1,22 @@
+[project]
+name = "comfyui-minimax-h3-master-director"
+version = "1.0.0"
+description = "Unified master director and sequence extender for ComfyUI MiniMax H3"
+authors = [{ name = "AI Master Director Team" }]
+license = { text = "Apache-2.0" }
+dependencies = [
+    "torch>=2.1.0",
+    "numpy>=1.24.0",
+    "Pillow>=9.5.0",
+    "safetensors>=0.4.0",
+    "av>=11.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/AhmedAhmedEG/ComfyUI-AhmedAhmedEG"
+Repository = "https://github.com/AhmedAhmedEG/ComfyUI-AhmedAhmedEG"
+
+[tool.comfy]
+PublisherId = "minimax_h3"
+DisplayName = "MiniMax H3 Master Director"
+Icon = ""
