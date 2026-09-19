@@ -32,24 +32,547 @@ if (!api) {
   }
 }
 
-let cssInjected = false;
-function injectCSS() {
-  if (cssInjected) return;
-  cssInjected = true;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  try {
-    link.href = new URL("../css/minimax_director.css", import.meta.url).href;
-  } catch (e) {
-    try {
-      link.href = new URL("css/minimax_director.css", import.meta.url).href;
-    } catch (e2) {
-      link.href = "/extensions/ComfyUI-AhmedAhmedEG/css/minimax_director.css";
-    }
-  }
-  document.head.appendChild(link);
+const INLINED_CSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Master Director */
+
+.mmx-director-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 680px;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #e2e8f0;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px;
+  user-select: none;
 }
 
+/* Toolbar */
+.mmx-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.mmx-pill-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #090d16;
+  padding: 3px;
+  border-radius: 20px;
+  border: 1px solid #1e293b;
+}
+
+.mmx-pill-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mmx-pill-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mmx-pill-btn.active {
+  background: #6366f1;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+.mmx-action-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.mmx-action-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+.mmx-action-btn.primary {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: #6366f1;
+  color: #a5b4fc;
+}
+
+.mmx-action-btn.primary:hover {
+  background: #6366f1;
+  color: #ffffff;
+}
+
+/* Timeline tracks area */
+.mmx-timeline-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+}
+
+.mmx-track {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-height: 84px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 4px 8px;
+  gap: 8px;
+}
+
+.mmx-track-header {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.mmx-track-items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-top: 14px;
+  overflow-x: auto;
+}
+
+/* Media Item Tile */
+.mmx-tile {
+  position: relative;
+  width: 96px;
+  height: 64px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+
+.mmx-tile:hover {
+  border-color: #6366f1;
+  transform: translateY(-1px);
+}
+
+.mmx-tile.selected {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8, 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+.mmx-tile-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.75;
+}
+
+.mmx-tile-badge {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #38bdf8;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  z-index: 3;
+}
+
+.mmx-tile-stream-pills {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  z-index: 3;
+}
+
+.mmx-stream-pill {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #94a3b8;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+}
+
+.mmx-stream-pill.active {
+  background: #6366f1;
+  color: #ffffff;
+}
+
+.mmx-tile-label {
+  position: relative;
+  z-index: 2;
+  background: rgba(15, 23, 42, 0.85);
+  font-size: 9px;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #cbd5e1;
+}
+
+/* Audio waveform canvas */
+.mmx-waveform-canvas {
+  width: 100%;
+  height: 50px;
+  border-radius: 4px;
+}
+
+/* Plus add slot button */
+.mmx-add-slot {
+  width: 38px;
+  height: 64px;
+  border: 1px dashed #334155;
+  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.4);
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.mmx-add-slot:hover {
+  border-color: #6366f1;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* Sequence track clip card */
+.mmx-clip-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 130px;
+  height: 46px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mmx-clip-block:hover {
+  border-color: #6366f1;
+}
+
+.mmx-clip-block.validated {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.mmx-clip-block.active {
+  box-shadow: 0 0 0 1px #6366f1, 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+.mmx-clip-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.mmx-clip-meta {
+  font-size: 9px;
+  color: #94a3b8;
+}
+
+/* Drawer / Prompt area */
+.mmx-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.mmx-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.mmx-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 6px 8px;
+  resize: vertical;
+  min-height: 54px;
+}
+
+.mmx-textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+/* Modal overlays */
+.mmx-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.mmx-modal-panel {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  width: min(720px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+}
+
+.mmx-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e293b;
+  background: #090d16;
+}
+
+.mmx-modal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.mmx-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mmx-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid #1e293b;
+  background: #090d16;
+}
+
+/* View Navigation Tabs */
+.mmx-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 6px 0;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 4px;
+}
+
+.mmx-tab-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.mmx-tab-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+.mmx-tab-btn.active {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: #6366f1;
+  color: #c7d2fe;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+.mmx-track-empty-notice {
+  font-size: 10px;
+  color: #64748b;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  height: 64px;
+}
+
+/* RefMod Panel */
+.mmx-refmod-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.mmx-refmod-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.mmx-refmod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mmx-refmod-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.mmx-refmod-slot-badge {
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.mmx-refmod-input {
+  flex: 1;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  color: #f8fafc;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+
+.mmx-refmod-input:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.mmx-refmod-slider-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 140px;
+}
+
+.mmx-refmod-slider {
+  width: 90px;
+  cursor: pointer;
+}
+
+.mmx-refmod-val {
+  font-size: 10px;
+  font-weight: 600;
+  color: #38bdf8;
+  width: 32px;
+  text-align: right;
+}
+
+.mmx-refmod-note {
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.4;
+  padding: 4px 6px;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 4px;
+  border-left: 3px solid #6366f1;
+}
+
+`;
+
+function injectCSS() {
+  if (document.getElementById("mmx-director-styles")) return;
+  const style = document.createElement("style");
+  style.id = "mmx-director-styles";
+  style.textContent = INLINED_CSS;
+  document.head.appendChild(style);
+}
 
 function mountDirectorUI(node) {
   if (!node || node.__mmxDirectorMounted) return;
@@ -64,7 +587,7 @@ function mountDirectorUI(node) {
   const timelineWidget = node.widgets?.find((w) => w.name === "timeline_data");
   const builderWidget = node.widgets?.find((w) => w.name === "builder_state");
 
-  // Fully hide raw serialized widgets so LiteGraph doesn't render them or allocate space
+  // Fully hide raw serialized widgets and prompt textarea from canvas
   const hideWidget = (w) => {
     if (!w) return;
     w.hidden = true;
@@ -74,6 +597,7 @@ function mountDirectorUI(node) {
   };
   hideWidget(timelineWidget);
   hideWidget(builderWidget);
+  hideWidget(promptWidget);
 
   // State
   let timelineState = {
@@ -344,12 +868,12 @@ function mountDirectorUI(node) {
 
     if (domWidget) {
       domWidget.computeSize = function (width) {
-        return [width || 840, desiredHeight];
+        return [width || 920, desiredHeight];
       };
     }
 
-    const currentW = Math.max(node.size?.[0] || 0, 840);
-    const minNodeH = desiredHeight + 240;
+    const currentW = Math.max(node.size?.[0] || 0, 960);
+    const minNodeH = desiredHeight + 420;
     node.setSize([currentW, Math.max(node.size?.[1] || 0, minNodeH)]);
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
   };
@@ -918,8 +1442,17 @@ function mountDirectorUI(node) {
 
   if (domWidget) {
     domWidget.computeSize = function (width) {
-      return [width || 840, 360];
+      return [width || 920, 360];
     };
+  }
+
+  // Move domWidget to the very TOP of node.widgets (index 0) so the Timeline is at the top of the node!
+  if (node.widgets && domWidget) {
+    const domIdx = node.widgets.indexOf(domWidget);
+    if (domIdx > 0) {
+      node.widgets.splice(domIdx, 1);
+      node.widgets.unshift(domWidget);
+    }
   }
 
   // Apply initial tab display
@@ -929,6 +1462,7 @@ function mountDirectorUI(node) {
   node.__mmxDirectorRefresh = () => {
     hideWidget(timelineWidget);
     hideWidget(builderWidget);
+    hideWidget(promptWidget);
     loadState();
     renderTracks();
     renderPromptDrawer();

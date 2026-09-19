@@ -6,6 +6,7 @@ from .node_refine import MiniMaxH3DirectorRefine
 from .node_face_refine import MiniMaxH3DirectorFaceRefine
 from .node_bridges import MiniMaxH3ReferenceBridge, MiniMaxH3PromptBridge
 from .node_tail_extract import MiniMaxH3TailFromLatent
+from .node_video_combine import MiniMaxH3VideoCombine
 
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3MasterDirector": MiniMaxH3MasterDirector,
@@ -17,6 +18,8 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3PromptBridge": MiniMaxH3PromptBridge,
     "MiniMaxH3PromptPackBridge": MiniMaxH3PromptBridge,
     "MiniMaxH3TailFromLatent": MiniMaxH3TailFromLatent,
+    "MiniMaxH3VideoCombine": MiniMaxH3VideoCombine,
+    "DaSiWa_EnhancedVideoCombine": MiniMaxH3VideoCombine,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -29,4 +32,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3PromptBridge": "MiniMax H3 Prompt Pack Bridge",
     "MiniMaxH3PromptPackBridge": "MiniMax H3 Prompt Pack Bridge",
     "MiniMaxH3TailFromLatent": "MiniMax H3 Tail From Latent",
+    "MiniMaxH3VideoCombine": "Video Combine & Audio Muxer",
+    "DaSiWa_EnhancedVideoCombine": "Video Combine & Audio Muxer",
 }
