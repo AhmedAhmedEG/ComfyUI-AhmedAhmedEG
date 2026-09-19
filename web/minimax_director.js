@@ -1484,8 +1484,34 @@ app.registerExtension({
     };
 
     const onConfigure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function () {
+    nodeType.prototype.onConfigure = function (info) {
       if (onConfigure) onConfigure.apply(this, arguments);
+
+      // Protect against any array-shift during deserialization
+      if (info && this.widgets) {
+        const named = info.widgets_values_named || {};
+        const values = Array.isArray(info.widgets_values) ? info.widgets_values : [];
+        const offset = (values.length > 0 && values[0] === null) ? 1 : 0;
+
+        const standardOrder = [
+          "mode", "execution_mode", "width", "height", "duration", "frame_rate",
+          "prompt", "prompt_mode", "run_mode", "continuity_mode", "context_length",
+          "steps", "cfg", "sampler", "scheduler", "shift_video", "shift_audio", "seed",
+          "control_after_generate", "timeline_data", "builder_state"
+        ];
+
+        standardOrder.forEach((name, idx) => {
+          const w = this.widgets.find((x) => x.name === name);
+          if (!w) return;
+
+          if (named[name] !== undefined) {
+            w.value = named[name];
+          } else if (values[idx + offset] !== undefined) {
+            w.value = values[idx + offset];
+          }
+        });
+      }
+
       if (this.__mmxDirectorRefresh) {
         this.__mmxDirectorRefresh();
       } else {
@@ -1502,6 +1528,12 @@ app.registerExtension({
 
   loadedGraphNode(node) {
     if (node.comfyClass === "MiniMaxH3MasterDirector" || node.type === "MiniMaxH3MasterDirector") {
+      if (node.widgets && node.widgets_values_named) {
+        for (const [name, val] of Object.entries(node.widgets_values_named)) {
+          const w = node.widgets.find((x) => x.name === name);
+          if (w) w.value = val;
+        }
+      }
       if (node.__mmxDirectorRefresh) {
         node.__mmxDirectorRefresh();
       } else {
