@@ -1333,9 +1333,9 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
+  width: 1px;
   background: #ef4444;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.9), 0 0 2px #ffffff;
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.8);
   pointer-events: none;
   z-index: 50;
   transform: translateX(-50%);
@@ -1344,21 +1344,60 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-playhead-handle {
   position: absolute;
   top: 0;
-  left: -7px;
-  width: 14px;
-  height: 20px;
-  background: #ef4444;
-  clip-path: polygon(0% 0%, 100% 0%, 100% 65%, 50% 100%, 0% 65%);
-  border: 1px solid #ffffff;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 11px;
+  height: 14px;
   cursor: ew-resize;
   pointer-events: auto;
   z-index: 51;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 
-.mmx-playhead-handle:hover {
+.mmx-playhead-handle::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: -6px;
+  right: -6px;
+  cursor: ew-resize;
+}
+
+.mmx-playhead-handle:empty {
+  background: #ef4444;
+  clip-path: polygon(0% 0%, 100% 0%, 100% 60%, 50% 100%, 0% 60%);
+}
+
+.mmx-playhead-handle svg {
+  display: block;
+  width: 11px;
+  height: 14px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.mmx-playhead-handle svg path {
+  fill: #ef4444;
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1;
+  transition: fill 0.15s ease, stroke 0.15s ease;
+}
+
+.mmx-playhead-handle:hover svg path,
+.mmx-playhead-handle:hover:empty {
+  fill: #f87171;
   background: #f87171;
-  filter: brightness(1.2);
+  stroke: #ffffff;
+}
+
+.mmx-playhead-handle:active svg path,
+.mmx-playhead-handle:active:empty {
+  fill: #dc2626;
+  background: #dc2626;
 }
 
 /* LTX Director Toolbar Buttons */
@@ -2521,6 +2560,7 @@ function mountDirectorUI(node) {
   playheadNeedle.className = "mmx-playhead-needle";
   const playheadHandle = document.createElement("div");
   playheadHandle.className = "mmx-playhead-handle";
+  playheadHandle.innerHTML = `<svg width="11" height="14" viewBox="0 0 11 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 0.5 0.5 H 10.5 V 8.5 L 5.5 13.5 L 0.5 8.5 Z" fill="#ef4444" stroke="rgba(255, 255, 255, 0.5)" stroke-width="1"/></svg>`;
   playheadNeedle.appendChild(playheadHandle);
 
   // Row 0: Time Ruler
