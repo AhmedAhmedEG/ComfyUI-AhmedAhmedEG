@@ -1793,6 +1793,7 @@ function injectCSS() {
 }
 
 function mountDirectorUI(node) {
+  console.log("[DirectorUI] Attempting to mount:", node.id, node.type);
   if (!node || node.__mmxDirectorMounted) return;
   node.__mmxDirectorMounted = true;
 
