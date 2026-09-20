@@ -3542,18 +3542,8 @@ function mountDirectorUI(node) {
     tailItem.appendChild(tailNum);
     tailItem.appendChild(document.createTextNode(" f"));
     timingRow.appendChild(tailItem);
-      if (f === 0) {
-        activeClip.continuity = false;
-        activeClip.tail_frames = 0;
-        activeClip.tail_seconds = 0.0;
-      } else {
-        activeClip.continuity = true;
-        activeClip.tail_frames = f;
-        activeClip.tail_seconds = Math.round((f / 24) * 100) / 100;
-      }
-      syncState();
-      renderTimeline();
-    };
+    timingRow.appendChild(tailItem);
+
 
     tailSelect.onchange = () => {
       const val = tailSelect.value;
