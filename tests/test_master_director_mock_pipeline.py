@@ -503,6 +503,86 @@ class TestMockPipeline(unittest.TestCase):
             final_frames = res[0]
             self.assertEqual(final_frames.shape[0], 5)
 
+    def test_lazy_evaluation_status(self):
+        """Verify check_lazy_status requests fl2va_model and ref2va_model only when relevant."""
+        # 1. Timeline with only T2V (FL2VA)
+        tl_fl2va = json.dumps({"clips": [{"type": "T2V"}]})
+        req_fl2va = self.director.check_lazy_status(timeline_data=tl_fl2va)
+        self.assertIn("fl2va_model", req_fl2va)
+        self.assertNotIn("ref2va_model", req_fl2va)
+
+        # 2. Timeline with only REF2VA
+        tl_ref2va = json.dumps({"clips": [{"type": "REF2VA"}]})
+        req_ref2va = self.director.check_lazy_status(timeline_data=tl_ref2va)
+        self.assertIn("ref2va_model", req_ref2va)
+        self.assertNotIn("fl2va_model", req_ref2va)
+
+        # 3. Timeline with both
+        tl_both = json.dumps({"clips": [{"type": "T2V"}, {"type": "REF2VA"}]})
+        req_both = self.director.check_lazy_status(timeline_data=tl_both)
+        self.assertIn("fl2va_model", req_both)
+        self.assertIn("ref2va_model", req_both)
+
+    def test_structured_prompt_key_aliases(self):
+        """Verify prompt parsing supports both soundscape/overall_soundscape and music/non_diegetic_music."""
+        # Test with legacy keys: soundscape, music
+        tl_legacy = json.dumps({
+            "clips": [{
+                "type": "T2V",
+                "prompt_mode": "structured",
+                "structured_prompt": {
+                    "imd": "A serene beach",
+                    "soundscape": "Gentle ocean waves",
+                    "music": "Acoustic guitar melody",
+                }
+            }]
+        })
+
+        with patch("core.executor.get_native_h3_node") as mock_get_native:
+            mock_native = MagicMock()
+            mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
+            mock_get_native.return_value = mock_native
+
+            res = self.director.execute(
+                model=self.mock_model,
+                video_vae=self.mock_vae,
+                audio_vae=self.mock_audio_vae,
+                clip=self.mock_clip,
+                timeline_data=tl_legacy,
+                execution_mode="Conditioning Guide Output",
+            )
+            emitted_prompt = res[5]
+            self.assertIn("Gentle ocean waves", emitted_prompt)
+            self.assertIn("Acoustic guitar melody", emitted_prompt)
+
+    def test_seam_continuity_duplicate_frame_trimming(self):
+        """Verify chained clips have duplicate frame 0 trimmed upon concatenation, preventing frozen frame."""
+        tl_chained = json.dumps({
+            "clips": [
+                {"id": "c1", "type": "T2V", "duration": 5.0, "seed": 100, "continuity": True},
+                {"id": "c2", "type": "I2V", "duration": 5.0, "seed": 200, "continuity": True},
+            ]
+        })
+
+        with patch("core.executor.get_native_h3_node") as mock_get_native, \
+             patch("comfy.sample.sample") as mock_sample:
+            mock_native = MagicMock()
+            mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
+            mock_get_native.return_value = mock_native
+
+            mock_sample.side_effect = lambda *args, **kwargs: {"samples": (torch.zeros((1, 16, 5, 16, 16)), torch.zeros((1, 32, 2, 4)))}
+
+            res = self.director.execute(
+                model=self.mock_model,
+                video_vae=self.mock_vae,
+                audio_vae=self.mock_audio_vae,
+                clip=self.mock_clip,
+                timeline_data=tl_chained,
+            )
+            final_frames = res[0]
+            # 5 frames from c1 + (5 - 1) frames from c2 = 9 frames
+            self.assertEqual(final_frames.shape[0], 9)
+
 
 if __name__ == "__main__":
     unittest.main()

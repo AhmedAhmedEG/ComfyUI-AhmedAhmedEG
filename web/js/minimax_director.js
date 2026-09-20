@@ -2781,7 +2781,9 @@ function mountDirectorUI(node) {
             retention_analysis: "",
             detailed_description: "",
             overall_soundscape: "",
+            soundscape: "",
             non_diegetic_music: "",
+            music: "",
           },
           ref_ids: [],
           continuity: true,
@@ -2860,7 +2862,9 @@ function mountDirectorUI(node) {
       retention_analysis: rets.join("\n"),
       detailed_description: `${clip.name} opens with smooth camera tracking following the subject through the scene with realistic motion.`,
       overall_soundscape: "Natural environmental ambience and synchronized diegetic audio.",
+      soundscape: "Natural environmental ambience and synchronized diegetic audio.",
       non_diegetic_music: "N/A",
+      music: "N/A",
     };
   };
 
@@ -3783,7 +3787,9 @@ function mountDirectorUI(node) {
         retention_analysis: "",
         detailed_description: "",
         overall_soundscape: "",
+        soundscape: "",
         non_diegetic_music: "",
+        music: "",
       };
     } else {
       if (activeClip.structured_prompt.soundscape && !activeClip.structured_prompt.overall_soundscape) {
@@ -3853,7 +3859,9 @@ function mountDirectorUI(node) {
           retention_analysis: "",
           detailed_description: "",
           overall_soundscape: "",
+          soundscape: "",
           non_diegetic_music: "",
+          music: "",
         };
         activeClip.prompt = "";
         syncState();
@@ -3886,6 +3894,11 @@ function mountDirectorUI(node) {
         input.value = rawVal;
         input.oninput = () => {
           activeClip.structured_prompt[key] = input.value;
+          if (key === "overall_soundscape") {
+            activeClip.structured_prompt.soundscape = input.value;
+          } else if (key === "non_diegetic_music") {
+            activeClip.structured_prompt.music = input.value;
+          }
           activeClip.prompt = compileStructuredPrompt(activeClip.structured_prompt);
           syncState();
           if (promptWidget) promptWidget.value = activeClip.prompt;

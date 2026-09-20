@@ -96,12 +96,12 @@ class MiniMaxH3MasterDirector:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": ("MODEL", {"lazy": True, "tooltip": "MiniMax H3 diffusion model (or use fl2va_model / ref2va_model sockets)."}),
                 "video_vae": ("VAE", {"tooltip": "MiniMax H3 Video VAE (minimax_h3_video_vae)."}),
                 "audio_vae": ("VAE", {"tooltip": "MiniMax H3 Audio VAE (minimax_h3_audio_vae). Required for REF2VA & Audio."}),
                 "clip": ("CLIP", {"tooltip": "MiniMax H3 Qwen3-VL CLIP model."}),
             },
             "optional": {
+                "model": ("MODEL", {"lazy": True, "tooltip": "General MiniMax H3 diffusion model (or use fl2va_model / ref2va_model sockets)."}),
                 "config": ("MMX_DIRECTOR_CONFIG", {"tooltip": "Sampling, canvas, and pipeline settings (MiniMaxH3DirectorSettings)."}),
                 "ref_pack": ("MMX_REF_PACK", {"tooltip": "Reference pool containing images, videos, and audios (MiniMaxH3RefPack)."}),
                 "fl2va_model": ("MODEL", {"lazy": True, "tooltip": "Lazy-loaded FL2VA UNET."}),
@@ -136,25 +136,31 @@ class MiniMaxH3MasterDirector:
         timeline_data="{}",
         **kwargs,
     ):
-        """Lazy evaluate only the model required for active timeline clips."""
-        try:
-            tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
-            clips = tl.get("clips", []) if isinstance(tl, dict) else []
-            types = {c.get("type", "T2V").upper() for c in clips} if clips else {"REF2VA"}
-        except Exception:
-            types = {"REF2VA"}
-
-        needs_fl2va = any(t in ("FL2VA", "FL2V", "I2VA", "I2V", "L2VA", "T2VA", "T2V") for t in types)
-        needs_ref2va = any(t in ("REF2VA", "REF2V", "V2V") for t in types)
-
-        needed = []
+        """Determine which model inputs need evaluation based on active timeline clip modes."""
         if model is not None:
             return []
 
-        if needs_fl2va and fl2va_model is None and model is None:
-            needed.append("model")
-        elif needs_ref2va and ref2va_model is None and model is None:
-            needed.append("model")
+        try:
+            tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
+            clips = tl.get("clips", []) if isinstance(tl, dict) else []
+            if clips:
+                types = {c.get("type", "T2V").upper() for c in clips}
+            else:
+                types = set()
+        except Exception:
+            types = set()
+
+        if not types:
+            return ["model"] if model is None else []
+
+        needs_fl2va = any(t in ("FL2VA", "FL2V", "I2VA", "I2V", "L2VA", "T2VA", "T2V", "IMAGE INPAINT") for t in types)
+        needs_ref2va = any(t in ("REF2VA", "REF2V", "V2V") for t in types)
+
+        needed = []
+        if needs_fl2va and fl2va_model is None:
+            needed.append("fl2va_model")
+        if needs_ref2va and ref2va_model is None:
+            needed.append("ref2va_model")
 
         return needed
 
@@ -181,6 +187,19 @@ class MiniMaxH3MasterDirector:
         unique_id="default_director",
         **kwargs,
     ):
+        # Extract execution mode first to determine if diffusion models are required
+        cfg_dict = config if config and isinstance(config, dict) else {}
+        exec_mode = str(
+            kwargs.get("execution_mode")
+            or cfg_dict.get("execution_mode")
+            or "Full Generation"
+        )
+        if exec_mode != "Conditioning Guide Output" and model is None and fl2va_model is None and ref2va_model is None:
+            raise ValueError(
+                "MiniMaxH3MasterDirector requires at least one diffusion model input. "
+                "Please connect 'model', 'fl2va_model', or 'ref2va_model'."
+            )
+
         # Extract settings from config with sensible defaults or legacy kwargs
         cfg_dict = config if config and isinstance(config, dict) else {}
         width = int(kwargs.get("width", cfg_dict.get("width", 1344)))
@@ -291,6 +310,7 @@ class MiniMaxH3MasterDirector:
 
         all_decoded_frames: List[torch.Tensor] = []
         all_decoded_audios: List[Dict[str, Any]] = []
+        clip_chained_flags: List[bool] = [False] * len(clips)
         previous_tail: Optional[Dict[str, Any]] = None
         last_positive = None
         last_latent = None
@@ -334,6 +354,12 @@ class MiniMaxH3MasterDirector:
             clip_active_model = fl2va_model if canon_mode in ("FL2VA", "I2VA", "L2VA", "T2VA", "Image Inpaint") and fl2va_model is not None else (
                 ref2va_model if ref2va_model is not None else model
             )
+            if execution_mode != "Conditioning Guide Output" and clip_active_model is None:
+                needed_type = "fl2va_model" if canon_mode in ("FL2VA", "I2VA", "L2VA", "T2VA") else "ref2va_model"
+                raise ValueError(
+                    f"MiniMaxH3MasterDirector: Shot {clip_idx + 1} ({clip_type} -> {canon_mode}) requires a model, "
+                    f"but neither '{needed_type}' nor 'model' was connected."
+                )
 
             # Resolve local references assigned to this clip
             local_imgs = []
@@ -361,24 +387,30 @@ class MiniMaxH3MasterDirector:
             ref_audios = {}
 
             # Automatic internal continuity: inject previous clip's tail frame
+            is_chained_from_previous = False
             if clip_continuity and previous_tail is not None and clip_idx > 0:
                 first_frame = previous_tail["last_frame"]
+                is_chained_from_previous = True
 
             if clip_type in ("I2V", "IMAGE"):
                 if local_imgs:
                     first_frame = local_imgs[0]
+                    is_chained_from_previous = False
             elif clip_type in ("FL2V", "FIRST_LAST"):
                 if len(local_imgs) >= 2:
                     first_frame = local_imgs[0]
                     last_frame = local_imgs[1]
+                    is_chained_from_previous = False
                 elif len(local_imgs) == 1:
                     if first_frame is not None:
                         last_frame = local_imgs[0]
                     else:
                         first_frame = local_imgs[0]
+                        is_chained_from_previous = False
             elif clip_type in ("V2V", "VIDEO"):
                 for i, v in enumerate(local_vids):
                     ref_videos[f"ref_video_{i+1}"] = v
+                is_chained_from_previous = False
             else: # REF2VA
                 for i, img in enumerate(local_imgs):
                     ref_images[f"ref_image_{i+1}"] = img
@@ -393,6 +425,9 @@ class MiniMaxH3MasterDirector:
                         ref_images["ref_image_1"] = previous_tail["last_frame"]
                     if not ref_audios and previous_tail.get("tail_audio") is not None:
                         ref_audios["ref_audio_1"] = previous_tail["tail_audio"]
+                is_chained_from_previous = False
+
+            clip_chained_flags[clip_idx] = is_chained_from_previous
 
             # Build prompt (supporting per-clip structured prompts or raw prompts)
             tag_map = build_refmod_tag_map(refmod_items, len(ref_images), len(ref_videos), len(ref_audios))
@@ -400,22 +435,24 @@ class MiniMaxH3MasterDirector:
             clip_structured = clip_item.get("structured_prompt")
 
             if clip_prompt_mode == "structured" and isinstance(clip_structured, dict) and any(str(v).strip() for v in clip_structured.values()):
+                c_soundscape = clip_structured.get("overall_soundscape") or clip_structured.get("soundscape", "")
+                c_music = clip_structured.get("non_diegetic_music") or clip_structured.get("music", "")
                 if canon_mode == "REF2VA":
                     resolved_prompt = build_ref2va_prompt(
                         subject_definitions=translate_refmod_aliases(clip_structured.get("subject_definitions", ""), tag_map),
                         summary=translate_refmod_aliases(clip_structured.get("summary", ""), tag_map),
                         retention_analysis=translate_refmod_aliases(clip_structured.get("retention_analysis", ""), tag_map),
                         detailed_description=translate_refmod_aliases(clip_structured.get("detailed_description", ""), tag_map),
-                        soundscape=translate_refmod_aliases(clip_structured.get("soundscape", ""), tag_map),
-                        music=translate_refmod_aliases(clip_structured.get("music", ""), tag_map),
+                        soundscape=translate_refmod_aliases(c_soundscape, tag_map),
+                        music=translate_refmod_aliases(c_music, tag_map),
                         prompt_mode="structured",
                     )
                 else:
                     resolved_prompt = build_keyframe_mode_prompt(
                         mode=canon_mode,
                         imd=clip_structured.get("imd", clip_structured.get("detailed_description", "")),
-                        soundscape=clip_structured.get("soundscape", ""),
-                        music=clip_structured.get("music", ""),
+                        soundscape=c_soundscape,
+                        music=c_music,
                         duration_sec=clip_dur,
                         has_first_frame=first_frame is not None,
                         has_last_frame=last_frame is not None,
@@ -425,21 +462,25 @@ class MiniMaxH3MasterDirector:
                 resolved_prompt = translate_refmod_aliases(clip_prompt_text, tag_map)
             elif canon_mode == "REF2VA":
                 ref_dict = builder.get("ref", {})
+                b_soundscape = ref_dict.get("overall_soundscape") or ref_dict.get("soundscape", "")
+                b_music = ref_dict.get("non_diegetic_music") or ref_dict.get("music", "")
                 resolved_prompt = build_ref2va_prompt(
                     subject_definitions=translate_refmod_aliases(ref_dict.get("subject_definitions", ""), tag_map),
                     summary=translate_refmod_aliases(ref_dict.get("summary", ""), tag_map),
                     retention_analysis=translate_refmod_aliases(ref_dict.get("retention_analysis", ""), tag_map),
                     detailed_description=translate_refmod_aliases(ref_dict.get("detailed_description", ""), tag_map),
-                    soundscape=translate_refmod_aliases(ref_dict.get("soundscape", ""), tag_map),
-                    music=translate_refmod_aliases(ref_dict.get("music", ""), tag_map),
+                    soundscape=translate_refmod_aliases(b_soundscape, tag_map),
+                    music=translate_refmod_aliases(b_music, tag_map),
                     prompt_mode=prompt_mode,
                 )
             else:
+                b_soundscape = builder.get("overall_soundscape") or builder.get("soundscape", "")
+                b_music = builder.get("non_diegetic_music") or builder.get("music", "")
                 resolved_prompt = build_keyframe_mode_prompt(
                     mode=canon_mode,
                     imd=builder.get("imd", ""),
-                    soundscape=builder.get("soundscape", ""),
-                    music=builder.get("music", ""),
+                    soundscape=b_soundscape,
+                    music=b_music,
                     duration_sec=clip_dur,
                     has_first_frame=first_frame is not None,
                     has_last_frame=last_frame is not None,
@@ -587,6 +628,18 @@ class MiniMaxH3MasterDirector:
             decoded_frames = decode_video_latent(video_vae, v_stream)
             decoded_audio = decode_audio_latent(audio_vae, a_stream) if audio_vae else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
 
+            # Continuity Seam Color Grading
+            if clip_idx > 0 and clip_continuity and previous_tail is not None and "tail_frames" in previous_tail:
+                try:
+                    blend_w = min(12, int(decoded_frames.shape[0]))
+                    decoded_frames = match_color_temperature_and_grade(
+                        decoded_frames,
+                        previous_tail["tail_frames"],
+                        blend_window=blend_w,
+                    )
+                except Exception as cg_err:
+                    log.warning(f"Master Director: Seam color grading failed for clip {clip_idx}: {cg_err}")
+
             # Optional FaceRefine
             if face_refine is not None and face_refine.get("enabled", False):
                 decoded_frames, _ = apply_face_refinement(
@@ -642,12 +695,14 @@ class MiniMaxH3MasterDirector:
         # Filter outputs based on preview_mode
         output_frames = all_decoded_frames
         output_audios = all_decoded_audios
+        out_indices = list(range(len(clips)))
 
         if preview_mode in ("unvalidated", "unvalidated_only", "new_only"):
             unval_indices = [i for i, c in enumerate(clips) if not c.get("validated", False)]
             if unval_indices:
                 output_frames = [all_decoded_frames[i] for i in unval_indices]
                 output_audios = [all_decoded_audios[i] for i in unval_indices]
+                out_indices = unval_indices
                 log.info(f"Master Director: Preview Mode '{preview_mode}' active -> Outputting {len(unval_indices)} unvalidated clip(s).")
             else:
                 log.info("Master Director: Preview Mode 'unvalidated' selected, but all clips are validated. Emitting full sequence.")
@@ -656,16 +711,30 @@ class MiniMaxH3MasterDirector:
         if output_frames:
             target_h, target_w = output_frames[0].shape[1], output_frames[0].shape[2]
             standardized_frames = []
-            for f in output_frames:
+            standardized_audios = []
+            for k, f in enumerate(output_frames):
+                orig_idx = out_indices[k]
+                curr_audio = output_audios[k] if k < len(output_audios) else None
+
+                # Trim duplicate boundary frame and audio prefix if this clip was chained from the immediately preceding clip in output
+                if k > 0 and orig_idx == out_indices[k - 1] + 1 and clip_chained_flags[orig_idx]:
+                    f = trim_continuity_prefix(f, context_frames=1)
+                    if curr_audio is not None:
+                        curr_audio = trim_continuity_audio_prefix(curr_audio, context_frames=1)
+
+                if curr_audio is not None:
+                    standardized_audios.append(curr_audio)
+
                 if f.shape[1] != target_h or f.shape[2] != target_w:
                     f_res = F.interpolate(f.permute(0, 3, 1, 2), size=(target_h, target_w), mode="bilinear", align_corners=False).permute(0, 2, 3, 1)
                     standardized_frames.append(f_res)
                 else:
                     standardized_frames.append(f)
             final_frames = torch.cat(standardized_frames, dim=0)
+            final_audio = concatenate_audio_clips(standardized_audios, target_sample_rate=48000) if standardized_audios else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
         else:
             final_frames = torch.zeros((1, height, width, 3), dtype=torch.float32)
-        final_audio = concatenate_audio_clips(output_audios, target_sample_rate=48000) if output_audios else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
+            final_audio = {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
 
         video_obj = {"images": final_frames, "fps": frame_rate, "audio": final_audio}
         status_str = f"Successfully generated {len(clips)} clip(s) -> {final_frames.shape[0]} total frames @ {frame_rate} fps (preview: {preview_mode})."
