@@ -1797,8 +1797,12 @@ function mountDirectorUI(node) {
   if (!node || node.__mmxDirectorMounted) return;
   node.__mmxDirectorMounted = true;
 
-  // Set widgets_start_y = 2 so LiteGraph starts flush below the title bar (eliminating the empty top gap)
-  node.widgets_start_y = 2;
+  const getTopWidgetsHeight = (n) => {
+    const maxSlots = Math.max(n?.inputs?.length || 0, n?.outputs?.length || 0);
+    return maxSlots > 0 ? (maxSlots * 20 + 10) : 34;
+  };
+
+  node.widgets_start_y = getTopWidgetsHeight(node);
   node.onConnectionsChange = function () {
     resolveAvailableRefsFromGraph();
     syncState();
@@ -1816,30 +1820,27 @@ function mountDirectorUI(node) {
 
   const getMinDomHeight = () => 480;
 
-  const getTopWidgetsHeight = (n) => {
-    return (n && typeof n.widgets_start_y === "number") ? n.widgets_start_y : 2;
-  };
-
   const getAvailableDomHeight = (n, minH) => {
     if (!n || !n.size) return minH !== undefined ? minH : getMinDomHeight();
     const fallbackMin = minH !== undefined ? minH : getMinDomHeight();
-    const topY = (n && typeof n.widgets_start_y === "number") ? n.widgets_start_y : 2;
+    const topY = getTopWidgetsHeight(n);
     const avail = (n.size[1] || 0) - topY - 14;
     return Math.max(fallbackMin, Math.floor(avail));
   };
 
   const updateDomSize = () => {
     if (!domWidget || !domWidget.element) return;
-    node.widgets_start_y = 2;
-    if (domWidget) domWidget.last_y = 2;
+    const topY = getTopWidgetsHeight(node);
+    node.widgets_start_y = topY;
+    if (domWidget) domWidget.last_y = topY;
     const minH = getMinDomHeight();
     const availH = getAvailableDomHeight(node, minH);
     const nodeW = node.size?.[0] || 1200;
-    const availW = Math.max(nodeW - 290, 880);
+    const availW = Math.max(nodeW - 20, 880);
 
-    domWidget.element.style.width = "calc(100% - 290px)";
-    domWidget.element.style.marginLeft = "150px";
-    domWidget.element.style.marginRight = "140px";
+    domWidget.element.style.width = "calc(100% - 20px)";
+    domWidget.element.style.marginLeft = "10px";
+    domWidget.element.style.marginRight = "10px";
     domWidget.element.style.marginTop = "0px";
     domWidget.element.style.marginBottom = "0px";
     domWidget.element.style.height = `${availH}px`;
@@ -4012,17 +4013,19 @@ N/A`;
     domWidget.computeSize = function (width) {
       const minH = getMinDomHeight();
       const nodeW = node.size?.[0] || 1200;
-      return [width || Math.max(nodeW - 290, 880), minH];
+      return [width || Math.max(nodeW - 20, 880), minH];
     };
+    updateDomSize();
   }
 
-  // Hook node resize, computeSize, and onDrawForeground to enforce widgets_start_y = 2 and prevent unused empty space
+  // Hook node resize, computeSize, and onDrawForeground
   const origOnResize = node.onResize;
   node.onResize = function (size) {
-    this.widgets_start_y = 2;
-    if (domWidget) domWidget.last_y = 2;
+    const topY = getTopWidgetsHeight(this);
+    this.widgets_start_y = topY;
+    if (domWidget) domWidget.last_y = topY;
     const minH = getMinDomHeight();
-    const minNodeH = 2 + minH + 16;
+    const minNodeH = topY + minH + 16;
     const minNodeW = 1200;
 
     if (size) {
@@ -4037,10 +4040,11 @@ N/A`;
 
   const origComputeSize = node.computeSize;
   node.computeSize = function (out) {
-    this.widgets_start_y = 2;
-    if (domWidget) domWidget.last_y = 2;
+    const topY = getTopWidgetsHeight(this);
+    this.widgets_start_y = topY;
+    if (domWidget) domWidget.last_y = topY;
     const minH = getMinDomHeight();
-    const minNodeH = 2 + minH + 16;
+    const minNodeH = topY + minH + 16;
     const minNodeW = 1200;
 
     let sz = [minNodeW, minNodeH];
@@ -4054,8 +4058,9 @@ N/A`;
 
   const origOnDrawForeground = node.onDrawForeground;
   node.onDrawForeground = function (ctx) {
-    this.widgets_start_y = 2;
-    if (domWidget) domWidget.last_y = 2;
+    const topY = getTopWidgetsHeight(this);
+    this.widgets_start_y = topY;
+    if (domWidget) domWidget.last_y = topY;
     if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
   };
 
@@ -4070,7 +4075,8 @@ N/A`;
 
   // Ensure domWidget is positioned at the TOP of node.widgets (index 0) so it starts flush at widgets_start_y
   if (node.widgets && domWidget) {
-    domWidget.last_y = 2;
+    const topY = getTopWidgetsHeight(node);
+    domWidget.last_y = topY;
     const domIdx = node.widgets.indexOf(domWidget);
     if (domIdx > 0) {
       node.widgets.splice(domIdx, 1);
@@ -4080,8 +4086,9 @@ N/A`;
 
   // Refresh callback when node configuration or graph is reloaded
   node.__mmxDirectorRefresh = () => {
-    node.widgets_start_y = 2;
-    if (domWidget) domWidget.last_y = 2;
+    const topY = getTopWidgetsHeight(node);
+    node.widgets_start_y = topY;
+    if (domWidget) domWidget.last_y = topY;
     hideWidget(timelineWidget);
     hideWidget(builderWidget);
     hideWidget(promptWidget);

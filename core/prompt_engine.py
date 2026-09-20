@@ -54,7 +54,7 @@ def format_timestamp(seconds: float) -> str:
     return f"{mins:02d}:{secs:06.3f}"
 
 
-def format_alignment_header(mode: str, duration_sec: float, has_first_frame: bool, has_last_frame: bool) -> str:
+def format_alignment_header(mode: str, duration_sec: float, has_first_frame: bool = True, has_last_frame: bool = True) -> str:
     """Generate the official canonical alignment header line for FL2VA/I2VA/L2VA."""
     aligned_frames = align_frame_count(int(duration_sec * FPS))
     snapped_sec = aligned_frames / FPS
