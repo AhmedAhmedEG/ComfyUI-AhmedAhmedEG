@@ -13,11 +13,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: calc(100% - 290px);
-  margin-left: 150px;
-  margin-right: 140px;
-  margin-top: 0;
-  margin-bottom: 0;
+  width: 100%;
   height: 100%;
   flex: 1;
   min-width: 0;
@@ -28,7 +24,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   background: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
   user-select: none;
 }
 
@@ -965,6 +961,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-badge-ref2va { background: #4f46e5; }
 
 .mmx-clip-title {
+  display: none;
   font-size: 11px;
   font-weight: 600;
   color: #f1f5f9;
@@ -1801,6 +1798,12 @@ function mountDirectorUI(node) {
 
   // Set widgets_start_y = 2 so LiteGraph starts flush below the title bar (eliminating the empty top gap)
   node.widgets_start_y = 2;
+  node.onConnectionsChange = function () {
+    resolveAvailableRefsFromGraph();
+    syncState();
+    renderTimeline();
+    if (activeClipId) renderInspector();
+  };
 
   injectCSS();
 
@@ -3400,9 +3403,13 @@ function mountDirectorUI(node) {
     header.appendChild(headerActions);
     inspector.appendChild(header);
 
+    // Main Inputs Area (Placeholder for fields if needed)
+    // ...
+
     // Cards Grid: Card 1 (Timing & Seam Continuity) and Card 2 (Seed & Generation Parameters)
     const cardsGrid = document.createElement("div");
     cardsGrid.className = "mmx-inspector-cards-grid";
+    inspector.appendChild(cardsGrid);
 
     // Card 1: Timing & Seam Continuity
     const cardTiming = document.createElement("div");
@@ -3474,55 +3481,35 @@ function mountDirectorUI(node) {
     durItem.appendChild(durFramesBadge);
     timingRow.appendChild(durItem);
 
-    // 2. Seam Overlap Combobox (In Frames - Reference Repo Presets: Off (0f), 5f, 12f, 22f Rec, 39f, 56f, Custom)
+    // 2. Seam Overlap Controls (In Frames)
     const tailItem = document.createElement("div");
     tailItem.className = "mmx-ctrl-item";
-    tailItem.title = "Seam continuity overlap in frames. 0f disables continuity (hard cut). Reference repo presets: 5f (0.21s), 12f (0.50s), 22f (0.92s - recommended), 39f (1.63s), 56f (2.33s), or Custom.";
+    tailItem.title = "Seam continuity overlap in frames. 0f disables continuity (hard cut).";
 
     const tailLabel = document.createElement("label");
-    tailLabel.textContent = "Seam Overlap:";
+    tailLabel.textContent = "Seam Overlap (f):";
     tailItem.appendChild(tailLabel);
 
-    const tailSelect = document.createElement("select");
-    tailSelect.className = "mmx-mode-select";
-    tailSelect.style.fontSize = "11px";
-    tailSelect.style.padding = "2px 6px";
+    const tailSlider = document.createElement("input");
+    tailSlider.type = "range";
+    tailSlider.min = "0";
+    tailSlider.max = "60";
+    tailSlider.step = "1";
+    tailSlider.style.width = "80px";
 
-    const tailPresets = [
-      { val: "0", label: "Off (0f / Hard Cut)" },
-      { val: "5", label: "5f (0.21s)" },
-      { val: "12", label: "12f (0.50s)" },
-      { val: "22", label: "22f (0.92s - Rec)" },
-      { val: "39", label: "39f (1.63s)" },
-      { val: "56", label: "56f (2.33s)" },
-      { val: "custom", label: "Custom..." },
-    ];
-
-    tailPresets.forEach((p) => {
-      const opt = document.createElement("option");
-      opt.value = p.val;
-      opt.textContent = p.label;
-      tailSelect.appendChild(opt);
-    });
-
-    const customFrameInput = document.createElement("input");
-    customFrameInput.type = "number";
-    customFrameInput.min = "0";
-    customFrameInput.max = "240";
-    customFrameInput.step = "1";
-    customFrameInput.style.width = "42px";
-    customFrameInput.style.background = "#1e293b";
-    customFrameInput.style.border = "1px solid #334155";
-    customFrameInput.style.borderRadius = "4px";
-    customFrameInput.style.color = "#f8fafc";
-    customFrameInput.style.fontSize = "11px";
-    customFrameInput.style.textAlign = "center";
-    customFrameInput.style.marginLeft = "4px";
-
-    const customFrameUnit = document.createElement("span");
-    customFrameUnit.className = "mmx-ctrl-unit";
-    customFrameUnit.textContent = "f";
-    customFrameUnit.style.marginLeft = "2px";
+    const tailNum = document.createElement("input");
+    tailNum.type = "number";
+    tailNum.min = "0";
+    tailNum.max = "240";
+    tailNum.step = "1";
+    tailNum.style.width = "40px";
+    tailNum.style.background = "#1e293b";
+    tailNum.style.border = "1px solid #334155";
+    tailNum.style.borderRadius = "4px";
+    tailNum.style.color = "#f8fafc";
+    tailNum.style.fontSize = "11px";
+    tailNum.style.textAlign = "center";
+    tailNum.style.marginLeft = "4px";
 
     // Determine current frames value
     let currentFrames = 22;
@@ -3534,20 +3521,27 @@ function mountDirectorUI(node) {
       currentFrames = Math.round(parseFloat(activeClip.tail_seconds) * 24);
     }
 
-    const presetValues = [0, 5, 12, 22, 39, 56];
-    if (presetValues.includes(currentFrames)) {
-      tailSelect.value = String(currentFrames);
-      customFrameInput.style.display = "none";
-      customFrameUnit.style.display = "none";
-    } else {
-      tailSelect.value = "custom";
-      customFrameInput.value = String(currentFrames);
-      customFrameInput.style.display = "inline-block";
-      customFrameUnit.style.display = "inline";
-    }
+    tailSlider.value = String(currentFrames);
+    tailNum.value = String(currentFrames);
 
-    const setContinuityValues = (frames) => {
-      const f = Math.max(0, parseInt(frames, 10) || 0);
+    const updateContinuity = (val) => {
+      const f = Math.max(0, parseInt(val, 10) || 0);
+      activeClip.continuity = f > 0;
+      activeClip.tail_frames = f;
+      activeClip.tail_seconds = f / 24.0;
+      tailSlider.value = String(f);
+      tailNum.value = String(f);
+      syncState();
+      renderTimeline();
+    };
+
+    tailSlider.oninput = () => updateContinuity(tailSlider.value);
+    tailNum.onchange = () => updateContinuity(tailNum.value);
+
+    tailItem.appendChild(tailSlider);
+    tailItem.appendChild(tailNum);
+    tailItem.appendChild(document.createTextNode(" f"));
+    timingRow.appendChild(tailItem);
       if (f === 0) {
         activeClip.continuity = false;
         activeClip.tail_frames = 0;
@@ -3563,31 +3557,9 @@ function mountDirectorUI(node) {
 
     tailSelect.onchange = () => {
       const val = tailSelect.value;
-      if (val === "0") {
-        customFrameInput.style.display = "none";
-        customFrameUnit.style.display = "none";
-        setContinuityValues(0);
-      } else if (val === "custom") {
-        customFrameInput.style.display = "inline-block";
-        customFrameUnit.style.display = "inline";
-        const f = Math.max(1, parseInt(customFrameInput.value, 10) || 12);
-        customFrameInput.value = String(f);
-        setContinuityValues(f);
-      } else {
-        customFrameInput.style.display = "none";
-        customFrameUnit.style.display = "none";
-        setContinuityValues(parseInt(val, 10));
-      }
-    };
-
-    customFrameInput.oninput = () => {
-      setContinuityValues(customFrameInput.value);
-    };
-
-    tailItem.appendChild(tailSelect);
-    tailItem.appendChild(customFrameInput);
-    tailItem.appendChild(customFrameUnit);
     timingRow.appendChild(tailItem);
+
+    cardTiming.appendChild(timingRow);
 
     cardTiming.appendChild(timingRow);
     cardsGrid.appendChild(cardTiming);

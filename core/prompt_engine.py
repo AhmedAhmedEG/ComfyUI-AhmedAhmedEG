@@ -54,24 +54,24 @@ def format_timestamp(seconds: float) -> str:
     return f"{mins:02d}:{secs:06.3f}"
 
 
-def format_alignment_header(mode: str, duration_sec: float) -> str:
+def format_alignment_header(mode: str, duration_sec: float, has_first_frame: bool, has_last_frame: bool) -> str:
     """Generate the official canonical alignment header line for FL2VA/I2VA/L2VA."""
     aligned_frames = align_frame_count(int(duration_sec * FPS))
     snapped_sec = aligned_frames / FPS
     sec_str = f"{snapped_sec:.2f}"
 
-    if mode == "I2VA":
+    if mode == "I2VA" and has_first_frame:
         return (
             "For the target video, at 0.00 seconds into the target video, "
             "<Picture 1> (from [Shot 1]) is fully referenced."
         )
-    elif mode == "FL2VA":
+    elif mode == "FL2VA" and has_first_frame and has_last_frame:
         return (
             "How the reference pictures align with the target video — "
             "Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; "
             f"Picture 2 (from Shot 1) aligns with the {sec_str}-second mark of the target video."
         )
-    elif mode == "L2VA":
+    elif mode == "L2VA" and has_last_frame:
         return (
             "How the reference pictures align with the target video — "
             f"<Picture 1> (from [Shot 1]) aligns with the {sec_str}-second mark of the target video."
@@ -106,13 +106,7 @@ def build_keyframe_mode_prompt(
         return "\n\n".join(lines) if lines else imd_clean
 
     # Determine alignment header
-    header = ""
-    if mode == "FL2VA" and has_first_frame and has_last_frame:
-        header = format_alignment_header("FL2VA", duration_sec)
-    elif mode == "I2VA" or (mode == "FL2VA" and has_first_frame and not has_last_frame):
-        header = format_alignment_header("I2VA", duration_sec)
-    elif mode == "L2VA" or (mode == "FL2VA" and not has_first_frame and has_last_frame):
-        header = format_alignment_header("L2VA", duration_sec)
+    header = format_alignment_header(mode, duration_sec, has_first_frame, has_last_frame)
 
     body = (
         f"integrated_multimodal_description: {imd_clean}\n\n"
