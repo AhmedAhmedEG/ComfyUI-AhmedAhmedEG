@@ -1,5 +1,5 @@
-import { app } from "../../../scripts/app.js";
-import { api } from "../../../scripts/api.js";
+import { app } from "../../scripts/app.js";
+import { api } from "../../scripts/api.js";
 
 // Embedded CSS
 const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Master Director */
@@ -1810,20 +1810,9 @@ function mountDirectorUI(node) {
   
   // State initialization
   let domWidget = null;
-  let activeClipId = timelineState.clips[0]?.id || "clip_1";
   let playheadSeconds = 0.0;
-  let zoomLevel = 1.0; 
-
-  try {
-    // ... UI construction logic ...
-  } catch (err) {
-    console.error("Failed to mount Director UI:", err);
-    // Ensure widgets are still hidden even on failure
-    hideWidget(timelineWidget);
-    hideWidget(builderWidget);
-    hideWidget(promptWidget);
-    hideWidget(durationWidget);
-  }
+  let zoomLevel = 1.0;
+  let activeClipId = "clip_1";
 
   const getMinDomHeight = () => 480;
 
@@ -3555,15 +3544,6 @@ function mountDirectorUI(node) {
     tailItem.appendChild(tailNum);
     tailItem.appendChild(document.createTextNode(" f"));
     timingRow.appendChild(tailItem);
-    timingRow.appendChild(tailItem);
-
-
-    tailSelect.onchange = () => {
-      const val = tailSelect.value;
-    timingRow.appendChild(tailItem);
-
-    cardTiming.appendChild(timingRow);
-
     cardTiming.appendChild(timingRow);
     cardsGrid.appendChild(cardTiming);
 

@@ -18,7 +18,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 
 __version__ = "1.0.0"
-WEB_DIRECTORY = "./web"
+WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 log = logging.getLogger("MiniMaxH3MasterDirector")
