@@ -4279,7 +4279,7 @@ app.registerExtension({
         updateRefPackWidgets(this);
         if (app.graph && Array.isArray(app.graph._nodes)) {
           app.graph._nodes.forEach((n) => {
-            if (n && (n.comfyClass === "MiniMaxH3MasterDirector" || n.type === "MiniMaxH3MasterDirector")) {
+            if (n && (n.comfyClass === "MiniMaxH3MasterDirector" || n.type === "MiniMaxH3MasterDirector" || n.comfyClass === "MiniMaxH3MasterNode" || n.type === "MiniMaxH3MasterNode")) {
               if (n.__mmxDirectorRefresh) {
                 setTimeout(() => n.__mmxDirectorRefresh(), 50);
               }
@@ -4296,7 +4296,7 @@ app.registerExtension({
       return;
     }
 
-    if (nodeData.name !== "MiniMaxH3MasterDirector") return;
+    if (nodeData.name !== "MiniMaxH3MasterDirector" && nodeData.name !== "MiniMaxH3MasterNode") return;
 
     const onNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
@@ -4358,7 +4358,7 @@ app.registerExtension({
   },
 
   nodeCreated(node) {
-    if (node.comfyClass === "MiniMaxH3MasterDirector" || node.type === "MiniMaxH3MasterDirector") {
+    if (node.comfyClass === "MiniMaxH3MasterDirector" || node.type === "MiniMaxH3MasterDirector" || node.comfyClass === "MiniMaxH3MasterNode" || node.type === "MiniMaxH3MasterNode") {
       mountDirectorUI(node);
     } else if (node.comfyClass === "MiniMaxH3RefPack" || node.type === "MiniMaxH3RefPack") {
       updateRefPackWidgets(node);
@@ -4366,7 +4366,7 @@ app.registerExtension({
   },
 
   loadedGraphNode(node) {
-    if (node.comfyClass === "MiniMaxH3MasterDirector" || node.type === "MiniMaxH3MasterDirector") {
+    if (node.comfyClass === "MiniMaxH3MasterDirector" || node.type === "MiniMaxH3MasterDirector" || node.comfyClass === "MiniMaxH3MasterNode" || node.type === "MiniMaxH3MasterNode") {
       if (node.widgets && node.widgets_values_named) {
         for (const [name, val] of Object.entries(node.widgets_values_named)) {
           const w = node.widgets.find((x) => x.name === name);

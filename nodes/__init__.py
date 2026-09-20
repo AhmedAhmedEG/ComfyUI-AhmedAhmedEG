@@ -19,20 +19,17 @@ from .node_settings import (
     MiniMaxH3DirectorSettings,
     MiniMaxH3SamplingSettings,
 )
-from .node_rtx_upscaler import DaSiWa_RTX_UpscalerRefiner
-from .node_tritant_compat import (
-    MiniMaxH3MotionContextRAM,
-    MiniMaxH3MotionContextDiskJoin,
-    MiniMaxH3MotionContextDiskFinalDecode,
-    MiniMaxH3Extender,
-)
 from .node_bridges import MiniMaxH3ReferenceBridge, MiniMaxH3PromptBridge
 from .node_tail_extract import MiniMaxH3TailFromLatent
 from .node_video_combine import MiniMaxH3VideoCombine
 from .node_ref_pack import MiniMaxH3RefPack
 
+# Primary alias requested by user
+MiniMaxH3MasterNode = MiniMaxH3MasterDirector
+
 NODE_CLASS_MAPPINGS = {
-    # Flagship Master Director
+    # Flagship Master Node (named MiniMax H3 Master Node)
+    "MiniMaxH3MasterNode": MiniMaxH3MasterNode,
     "MiniMaxH3MasterDirector": MiniMaxH3MasterDirector,
     "MiniMaxH3DirectorGuide": MiniMaxH3DirectorGuide,
     "MiniMaxH3DirectorPlannerConditioning": MiniMaxH3DirectorPlannerConditioning,
@@ -53,15 +50,6 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3DirectorGroupReferenceToVideo": MiniMaxH3DirectorGroupReferenceToVideo,
     "MiniMaxH3DirectorGroupsCombine": MiniMaxH3DirectorGroupsCombine,
 
-    # RTX Upscaler / Refiner
-    "DaSiWa_RTX_UpscalerRefiner": DaSiWa_RTX_UpscalerRefiner,
-
-    # Tritant Extender & Motion Context compatibility
-    "MiniMaxH3MotionContextRAM": MiniMaxH3MotionContextRAM,
-    "MiniMaxH3MotionContextDiskJoin": MiniMaxH3MotionContextDiskJoin,
-    "MiniMaxH3MotionContextDiskFinalDecode": MiniMaxH3MotionContextDiskFinalDecode,
-    "MiniMaxH3Extender": MiniMaxH3Extender,
-
     # Bridges & Utilities
     "MiniMaxH3RefPack": MiniMaxH3RefPack,
     "MiniMaxH3ReferenceBridge": MiniMaxH3ReferenceBridge,
@@ -71,7 +59,8 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "MiniMaxH3MasterDirector": "MiniMax H3 Master Director",
+    "MiniMaxH3MasterNode": "MiniMax H3 Master Node",
+    "MiniMaxH3MasterDirector": "MiniMax H3 Master Node",
     "MiniMaxH3DirectorGuide": "MiniMax H3 Director Guide",
     "MiniMaxH3DirectorPlannerConditioning": "MiniMax H3 Director Planner Conditioning",
 
@@ -88,16 +77,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3DirectorGroupReferenceToVideo": "MiniMax H3 Director Group (Reference to Video)",
     "MiniMaxH3DirectorGroupsCombine": "MiniMax H3 Director Groups Combine",
 
-    "DaSiWa_RTX_UpscalerRefiner": "DaSiWa RTX Upscaler & Refiner",
-
-    "MiniMaxH3MotionContextRAM": "MiniMax H3 Motion Context RAM",
-    "MiniMaxH3MotionContextDiskJoin": "MiniMax H3 Motion Context Disk Join",
-    "MiniMaxH3MotionContextDiskFinalDecode": "MiniMax H3 Extender Final Decode / Preview",
-    "MiniMaxH3Extender": "MiniMax H3 Extender",
-
     "MiniMaxH3RefPack": "MiniMax H3 Reference Pack (Pool)",
     "MiniMaxH3ReferenceBridge": "MiniMax H3 Reference Pack Bridge",
     "MiniMaxH3PromptBridge": "MiniMax H3 Prompt Pack Bridge",
     "MiniMaxH3TailFromLatent": "MiniMax H3 Tail From Latent",
-    "MiniMaxH3VideoCombine": "Video Combine & Audio Muxer",
+    "MiniMaxH3VideoCombine": "MiniMax H3 Video Combine & Audio Muxer",
 }

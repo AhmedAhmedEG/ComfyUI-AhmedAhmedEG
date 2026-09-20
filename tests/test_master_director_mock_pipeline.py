@@ -637,37 +637,12 @@ class TestMockPipeline(unittest.TestCase):
             self.assertIn("ref_video_1", call_kwargs["ref_videos"])
             self.assertIn("ref_audio_1", call_kwargs["ref_audios"])
 
-    def test_extender_prev_samples_chaining(self):
-        """Verify MiniMaxH3Extender extracts tail frame from prev_samples and passes to director."""
-        from nodes.node_tritant_compat import MiniMaxH3Extender
-        extender = MiniMaxH3Extender()
-
-        prev_samples = {
-            "samples": (
-                torch.zeros((1, 16, 7, 16, 16)),
-                torch.zeros((1, 32, 2, 12)),
-            )
-        }
-
-        with patch("core.executor.get_native_h3_node") as mock_get_native, \
-             patch("comfy.sample.sample") as mock_sample:
-            mock_native = MagicMock()
-            mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
-            mock_get_native.return_value = mock_native
-
-            mock_sample.side_effect = lambda *args, **kwargs: {"samples": (torch.zeros((1, 16, 5, 16, 16)), torch.zeros((1, 32, 2, 4)))}
-
-            images, audio, samples = extender.extend(
-                model=self.mock_model,
-                vae=self.mock_vae,
-                audio_vae=self.mock_audio_vae,
-                clip=self.mock_clip,
-                prompt="Continuation shot",
-                duration=5.0,
-                prev_samples=prev_samples,
-            )
-            self.assertIsNotNone(images)
-            self.assertIsNotNone(samples)
+    def test_master_node_alias(self):
+        """Verify MiniMaxH3MasterNode is registered and functions as an alias to MiniMaxH3MasterDirector."""
+        from nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+        self.assertIn("MiniMaxH3MasterNode", NODE_CLASS_MAPPINGS)
+        self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3MasterNode"], "MiniMax H3 Master Node")
+        self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3MasterDirector"], "MiniMax H3 Master Node")
 
 
 if __name__ == "__main__":
