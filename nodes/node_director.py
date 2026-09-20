@@ -275,6 +275,8 @@ class MiniMaxH3MasterDirector:
                     if isinstance(r, dict):
                         if "id" in r:
                             ref_pool[r["id"]] = r
+                        if "alt_id" in r:
+                            ref_pool[r["alt_id"]] = r
                         if "slot_id" in r and (r.get("pack_index", 1) == 1 or r["slot_id"] not in ref_pool):
                             ref_pool[r["slot_id"]] = r
                         if "ref_id" in r:

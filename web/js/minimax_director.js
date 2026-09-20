@@ -1928,16 +1928,16 @@ function mountDirectorUI(node) {
     ],
     refmods: [],
     available_refs: [
-      { id: "img_1", name: "Character 1", type: "image" },
-      { id: "img_2", name: "Character 2", type: "image" },
-      { id: "img_3", name: "Setting / Environment", type: "image" },
-      { id: "img_4", name: "Prop / Object", type: "image" },
-      { id: "vid_1", name: "Video 1", type: "video" },
-      { id: "vid_2", name: "Video 2", type: "video" },
-      { id: "aud_1", name: "Dialogue 1", type: "audio" },
-      { id: "aud_2", name: "Soundtrack 1", type: "audio" },
-      { id: "mod_1", name: "Character Concept 1", type: "refmod" },
-      { id: "mod_2", name: "Character Concept 2", type: "refmod" },
+      { id: "image_1", alt_id: "img_1", name: "image_1", type: "image" },
+      { id: "image_2", alt_id: "img_2", name: "image_2", type: "image" },
+      { id: "image_3", alt_id: "img_3", name: "image_3", type: "image" },
+      { id: "image_4", alt_id: "img_4", name: "image_4", type: "image" },
+      { id: "video_1", alt_id: "vid_1", name: "video_1", type: "video" },
+      { id: "video_2", alt_id: "vid_2", name: "video_2", type: "video" },
+      { id: "audio_1", alt_id: "aud_1", name: "audio_1", type: "audio" },
+      { id: "audio_2", alt_id: "aud_2", name: "audio_2", type: "audio" },
+      { id: "refmod_1", alt_id: "mod_1", name: "refmod_1", type: "refmod" },
+      { id: "refmod_2", alt_id: "mod_2", name: "refmod_2", type: "refmod" },
     ],
   };
 
@@ -2160,46 +2160,55 @@ function mountDirectorUI(node) {
         const img2 = getConnectedAsset("image_2");
         const img3 = getConnectedAsset("image_3");
         const img4 = getConnectedAsset("image_4");
-        discoveredRefs.push({ id: `${idPrefix}img_1`, name: prefix + getVal("label_img_1", "Character 1"), type: "image", url: img1.url, filename: img1.filename });
-        discoveredRefs.push({ id: `${idPrefix}img_2`, name: prefix + getVal("label_img_2", "Character 2"), type: "image", url: img2.url, filename: img2.filename });
-        discoveredRefs.push({ id: `${idPrefix}img_3`, name: prefix + getVal("label_img_3", "Setting / Environment"), type: "image", url: img3.url, filename: img3.filename });
-        discoveredRefs.push({ id: `${idPrefix}img_4`, name: prefix + getVal("label_img_4", "Prop / Object"), type: "image", url: img4.url, filename: img4.filename });
+        discoveredRefs.push({ id: `${idPrefix}image_1`, alt_id: `${idPrefix}img_1`, name: `${prefix}image_1`, type: "image", url: img1.url, filename: img1.filename });
+        discoveredRefs.push({ id: `${idPrefix}image_2`, alt_id: `${idPrefix}img_2`, name: `${prefix}image_2`, type: "image", url: img2.url, filename: img2.filename });
+        discoveredRefs.push({ id: `${idPrefix}image_3`, alt_id: `${idPrefix}img_3`, name: `${prefix}image_3`, type: "image", url: img3.url, filename: img3.filename });
+        discoveredRefs.push({ id: `${idPrefix}image_4`, alt_id: `${idPrefix}img_4`, name: `${prefix}image_4`, type: "image", url: img4.url, filename: img4.filename });
 
         // Videos 1-2
         const vid1 = getConnectedAsset("video_1");
         const vid2 = getConnectedAsset("video_2");
-        discoveredRefs.push({ id: `${idPrefix}vid_1`, name: prefix + getVal("label_vid_1", "Video 1"), type: "video", url: vid1.url, filename: vid1.filename });
-        discoveredRefs.push({ id: `${idPrefix}vid_2`, name: prefix + getVal("label_vid_2", "Video 2"), type: "video", url: vid2.url, filename: vid2.filename });
+        discoveredRefs.push({ id: `${idPrefix}video_1`, alt_id: `${idPrefix}vid_1`, name: `${prefix}video_1`, type: "video", url: vid1.url, filename: vid1.filename });
+        discoveredRefs.push({ id: `${idPrefix}video_2`, alt_id: `${idPrefix}vid_2`, name: `${prefix}video_2`, type: "video", url: vid2.url, filename: vid2.filename });
 
         // Audios 1-2
         const aud1 = getConnectedAsset("audio_1");
         const aud2 = getConnectedAsset("audio_2");
-        discoveredRefs.push({ id: `${idPrefix}aud_1`, name: prefix + getVal("label_aud_1", "Dialogue 1"), type: "audio", url: aud1.url, filename: aud1.filename });
-        discoveredRefs.push({ id: `${idPrefix}aud_2`, name: prefix + getVal("label_aud_2", "Soundtrack 1"), type: "audio", url: aud2.url, filename: aud2.filename });
+        discoveredRefs.push({ id: `${idPrefix}audio_1`, alt_id: `${idPrefix}aud_1`, name: `${prefix}audio_1`, type: "audio", url: aud1.url, filename: aud1.filename });
+        discoveredRefs.push({ id: `${idPrefix}audio_2`, alt_id: `${idPrefix}aud_2`, name: `${prefix}audio_2`, type: "audio", url: aud2.url, filename: aud2.filename });
 
         // RefMods 1-2 (from RefPack)
         const mod1 = getVal("refmod_1", "None");
         const mod2 = getVal("refmod_2", "None");
-        discoveredRefs.push({ id: `${idPrefix}mod_1`, name: prefix + getVal("label_mod_1", "Character Concept 1"), type: "refmod", model: mod1 });
-        discoveredRefs.push({ id: `${idPrefix}mod_2`, name: prefix + getVal("label_mod_2", "Character Concept 2"), type: "refmod", model: mod2 });
+        discoveredRefs.push({ id: `${idPrefix}refmod_1`, alt_id: `${idPrefix}mod_1`, name: `${prefix}refmod_1`, type: "refmod", model: mod1 });
+        discoveredRefs.push({ id: `${idPrefix}refmod_2`, alt_id: `${idPrefix}mod_2`, name: `${prefix}refmod_2`, type: "refmod", model: mod2 });
       });
 
       // Preserve any custom user-added tags (e.g. added via + Add Ref Tag)
       const customRefs = (timelineState.available_refs || []).filter(
-        (r) => !discoveredRefs.some((d) => d.id === r.id) && !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
+        (r) => !discoveredRefs.some((d) => d.id === r.id || d.alt_id === r.id) && !r.id.startsWith("img_") && !r.id.startsWith("image_") && !r.id.startsWith("vid_") && !r.id.startsWith("video_") && !r.id.startsWith("aud_") && !r.id.startsWith("audio_") && !r.id.startsWith("mod_") && !r.id.startsWith("refmod_") && !r.id.match(/^p\d+_/)
       );
       timelineState.available_refs = [...discoveredRefs, ...customRefs];
 
-      // Clean up any clip ref_ids that are no longer available in the graph
-      const validIds = new Set(timelineState.available_refs.map((r) => r.id));
+      // Clean up any clip ref_ids that are no longer available in the graph, migrating any legacy alt_ids
+      const validIds = new Set();
+      discoveredRefs.forEach((d) => { validIds.add(d.id); if (d.alt_id) validIds.add(d.alt_id); });
+      customRefs.forEach((c) => validIds.add(c.id));
+
       (timelineState.clips || []).forEach((c) => {
         if (Array.isArray(c.ref_ids)) {
-          c.ref_ids = c.ref_ids.filter((id) => validIds.has(id));
+          c.ref_ids = c.ref_ids.map((id) => {
+            const found = discoveredRefs.find((d) => d.alt_id === id);
+            return found ? found.id : id;
+          }).filter((id) => validIds.has(id));
         }
       });
     } catch (e) {
-      console.warn("Could not inspect upstream RefPack:", e);
+      console.warn("Could not resolve RefPack references from graph:", e);
     }
+
+    renderTimeline();
+    if (activeClipId) renderInspector();
   };
 
   const loadState = () => {
@@ -4249,57 +4258,8 @@ N/A`;
 }
 
 // Dynamic RefPack widget visibility: hide unconnected label text boxes to avoid canvas clutter
-const updateRefPackWidgets = (node) => {
-  if (!node.widgets || !node.inputs) return;
-  const slotMap = [
-    { input: "image_1", widget: "label_img_1" },
-    { input: "image_2", widget: "label_img_2" },
-    { input: "image_3", widget: "label_img_3" },
-    { input: "image_4", widget: "label_img_4" },
-    { input: "video_1", widget: "label_vid_1" },
-    { input: "video_2", widget: "label_vid_2" },
-    { input: "audio_1", widget: "label_aud_1" },
-    { input: "audio_2", widget: "label_aud_2" },
-    { input: "refmod_1", widget: "label_mod_1" },
-    { input: "refmod_2", widget: "label_mod_2" },
-  ];
-
-  let changed = false;
-  for (const pair of slotMap) {
-    const inp = node.inputs.find((i) => i.name === pair.input);
-    const wid = node.widgets.find((w) => w.name === pair.widget);
-    if (!wid) continue;
-
-    let isConnected = false;
-    if (pair.input.startsWith("refmod_")) {
-      const rWid = node.widgets.find((w) => w.name === pair.input);
-      isConnected = (rWid && rWid.value && rWid.value !== "None") || (inp && inp.link != null);
-    } else {
-      isConnected = inp && inp.link != null;
-    }
-
-    if (isConnected) {
-      if (wid.type === "hidden" || wid.hidden) {
-        wid.type = wid.__origType || "customtext";
-        wid.hidden = false;
-        changed = true;
-      }
-    } else {
-      if (wid.type !== "hidden" || !wid.hidden) {
-        if (!wid.__origType) wid.__origType = wid.type;
-        wid.type = "hidden";
-        wid.hidden = true;
-        changed = true;
-      }
-    }
-  }
-
-  if (changed) {
-    const computed = node.computeSize ? node.computeSize() : [node.size[0], 120];
-    node.setSize([node.size[0], Math.max(120, computed[1])]);
-    node.setDirtyCanvas?.(true, true);
-  }
-};
+// Dynamic RefPack widget visibility (no-op as label text boxes have been removed)
+const updateRefPackWidgets = (node) => {};
 
 app.registerExtension({
   name: "ComfyUI.MiniMaxH3MasterDirector",

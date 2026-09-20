@@ -180,18 +180,18 @@ class TestDeepValidation(unittest.TestCase):
 
         # Pack 1
         img1 = torch.zeros((1, 64, 64, 3))
-        res1 = pack_node.pack(image_1=img1, label_img_1="Hero")[0]
+        res1 = pack_node.pack(image_1=img1)[0]
         self.assertEqual(len(res1["refs"]), 1)
-        self.assertEqual(res1["refs"][0]["id"], "img_1")
-        self.assertEqual(res1["refs"][0]["name"], "Hero")
+        self.assertEqual(res1["refs"][0]["id"], "image_1")
+        self.assertEqual(res1["refs"][0]["name"], "image_1")
 
         # Pack 2 chained from Pack 1
         img2 = torch.zeros((1, 64, 64, 3))
-        res2 = pack_node.pack(ref_pack_optional=res1, image_1=img2, label_img_1="Villain")[0]
+        res2 = pack_node.pack(ref_pack_optional=res1, image_1=img2)[0]
         self.assertEqual(len(res2["refs"]), 2)
-        self.assertEqual(res2["refs"][0]["id"], "img_1")
-        self.assertEqual(res2["refs"][1]["id"], "p2_img_1")
-        self.assertEqual(res2["refs"][1]["name"], "Villain")
+        self.assertEqual(res2["refs"][0]["id"], "image_1")
+        self.assertEqual(res2["refs"][1]["id"], "p2_image_1")
+        self.assertEqual(res2["refs"][1]["name"], "p2_image_1")
         self.assertEqual(res2["pack_count"], 2)
 
 

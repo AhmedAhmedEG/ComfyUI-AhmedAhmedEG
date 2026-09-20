@@ -33,26 +33,23 @@ class TestRefPackAndClipModes(unittest.TestCase):
         # Pack 1
         pack1, = self.ref_pack_node.pack(
             image_1=img1,
-            label_img_1="Hero Character",
             audio_1=aud1,
-            label_aud_1="Hero Voice",
         )
         self.assertIn("refs", pack1)
         self.assertEqual(len(pack1["refs"]), 2)
-        self.assertEqual(pack1["refs"][0]["name"], "Hero Character")
+        self.assertEqual(pack1["refs"][0]["name"], "image_1")
         self.assertEqual(pack1["refs"][0]["type"], "image")
-        self.assertEqual(pack1["refs"][1]["name"], "Hero Voice")
+        self.assertEqual(pack1["refs"][1]["name"], "audio_1")
         self.assertEqual(pack1["refs"][1]["type"], "audio")
 
         # Daisy chain into Pack 2
         pack2, = self.ref_pack_node.pack(
             ref_pack_optional=pack1,
             image_1=img2,
-            label_img_1="Villain Character",
         )
         self.assertEqual(len(pack2["refs"]), 3)
-        self.assertEqual(pack2["refs"][0]["name"], "Hero Character")
-        self.assertEqual(pack2["refs"][2]["name"], "Villain Character")
+        self.assertEqual(pack2["refs"][0]["name"], "image_1")
+        self.assertEqual(pack2["refs"][2]["name"], "p2_image_1")
 
     def test_reference_bridge_mmx_format(self):
         img = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
@@ -160,40 +157,38 @@ class TestRefPackAndClipModes(unittest.TestCase):
         img3 = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
 
         # Pack 1 (root)
-        pack1, = self.ref_pack_node.pack(image_1=img1, label_img_1="Hero 1")
+        pack1, = self.ref_pack_node.pack(image_1=img1)
         self.assertEqual(pack1["pack_count"], 1)
-        self.assertEqual(pack1["refs"][0]["id"], "img_1")
+        self.assertEqual(pack1["refs"][0]["id"], "image_1")
 
         # Pack 2 (chained from Pack 1)
-        pack2, = self.ref_pack_node.pack(ref_pack_optional=pack1, image_1=img2, label_img_1="Hero 2")
+        pack2, = self.ref_pack_node.pack(ref_pack_optional=pack1, image_1=img2)
         self.assertEqual(pack2["pack_count"], 2)
-        # Pack 2 has 2 refs: img_1 from pack 1, and p2_img_1 from pack 2
+        # Pack 2 has 2 refs: image_1 from pack 1, and p2_image_1 from pack 2
         self.assertEqual(len(pack2["refs"]), 2)
-        self.assertEqual(pack2["refs"][0]["id"], "img_1")
-        self.assertEqual(pack2["refs"][1]["id"], "p2_img_1")
-        self.assertEqual(pack2["refs"][1]["name"], "Hero 2")
+        self.assertEqual(pack2["refs"][0]["id"], "image_1")
+        self.assertEqual(pack2["refs"][1]["id"], "p2_image_1")
+        self.assertEqual(pack2["refs"][1]["name"], "p2_image_1")
 
         # Pack 3 (chained from Pack 2)
-        pack3, = self.ref_pack_node.pack(ref_pack_optional=pack2, image_1=img3, label_img_1="Hero 3")
+        pack3, = self.ref_pack_node.pack(ref_pack_optional=pack2, image_1=img3)
         self.assertEqual(pack3["pack_count"], 3)
         self.assertEqual(len(pack3["refs"]), 3)
-        self.assertEqual(pack3["refs"][2]["id"], "p3_img_1")
-        self.assertEqual(pack3["refs"][2]["name"], "Hero 3")
+        self.assertEqual(pack3["refs"][2]["id"], "p3_image_1")
+        self.assertEqual(pack3["refs"][2]["name"], "p3_image_1")
 
     def test_refmod_pooling_and_director_integration(self):
         """Verify RefMod models pool into ref_pack and are recognized by MasterDirector."""
         pack, = self.ref_pack_node.pack(
             refmod_1="character_cyberpunk.safetensors",
-            label_mod_1="Cyberpunk Hero",
             refmod_2="style_anime.safetensors",
-            label_mod_2="Anime Concept",
         )
         self.assertEqual(len(pack["refs"]), 2)
         self.assertEqual(pack["refs"][0]["type"], "refmod")
-        self.assertEqual(pack["refs"][0]["name"], "Cyberpunk Hero")
+        self.assertEqual(pack["refs"][0]["name"], "refmod_1")
         self.assertEqual(pack["refs"][0]["data"], "character_cyberpunk.safetensors")
         self.assertEqual(pack["refs"][1]["type"], "refmod")
-        self.assertEqual(pack["refs"][1]["name"], "Anime Concept")
+        self.assertEqual(pack["refs"][1]["name"], "refmod_2")
 
         # Test director execution with RefMods and unified REF2VA mode
         timeline_data = json.dumps({
@@ -204,8 +199,8 @@ class TestRefPackAndClipModes(unittest.TestCase):
                     "name": "Shot 1",
                     "type": "REF2V", # Unified to REF2VA
                     "duration": 5.0,
-                    "prompt": "Scene featuring <Cyberpunk Hero> with high fidelity.",
-                    "ref_ids": ["mod_1"],
+                    "prompt": "Scene featuring <refmod_1> with high fidelity.",
+                    "ref_ids": ["refmod_1"],
                     "continuity": True,
                 }
             ]
