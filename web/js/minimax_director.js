@@ -4207,6 +4207,7 @@ const updateRefPackWidgets = (node) => {
 
 app.registerExtension({
   name: "ComfyUI.MiniMaxH3MasterDirector",
+  init: () => console.log("[DirectorUI] Extension initialized"),
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name === "MiniMaxH3RefPack") {
