@@ -303,7 +303,14 @@ class MiniMaxH3MasterDirector:
             clip_prompt_text = str(clip_item.get("prompt", "") or prompt or "")
             clip_continuity = bool(clip_item.get("continuity", True))
             clip_ref_ids = clip_item.get("ref_ids", [])
-            clip_tail_sec = float(clip_item.get("tail_seconds", 0.5))
+            if "tail_seconds" in clip_item:
+                clip_tail_sec = float(clip_item["tail_seconds"])
+            elif "tail_frames" in clip_item:
+                clip_tail_sec = float(clip_item["tail_frames"]) / frame_rate
+            else:
+                clip_tail_sec = 0.5
+            if clip_tail_sec <= 0.0:
+                clip_continuity = False
             clip_validated = bool(clip_item.get("validated", False))
 
             if clip_item.get("seed") is not None and str(clip_item.get("seed")).isdigit():

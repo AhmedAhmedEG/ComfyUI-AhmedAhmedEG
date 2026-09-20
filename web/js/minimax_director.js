@@ -1749,7 +1749,41 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   min-height: 44px;
 }
 
+/* Prompt Mode Tabs (Raw vs Structured) */
+.mmx-prompt-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  background: #090d16;
+  padding: 2px 4px;
+  border-radius: 20px;
+  border: 1px solid #1e293b;
+  gap: 3px;
+}
 
+.mmx-prompt-mode-tab {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.mmx-prompt-mode-tab:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mmx-prompt-mode-tab.active {
+  background: #6366f1;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
 
 `;
 
@@ -1765,8 +1799,8 @@ function mountDirectorUI(node) {
   if (!node || node.__mmxDirectorMounted) return;
   node.__mmxDirectorMounted = true;
 
-  // Set widgets_start_y so LiteGraph does not push widgets down 275px below the 13 input sockets
-  node.widgets_start_y = 34;
+  // Set widgets_start_y = 2 so LiteGraph starts flush below the title bar (eliminating the empty top gap)
+  node.widgets_start_y = 2;
 
   injectCSS();
 
@@ -1778,21 +1812,21 @@ function mountDirectorUI(node) {
   const getMinDomHeight = () => 480;
 
   const getTopWidgetsHeight = (n) => {
-    return (n && typeof n.widgets_start_y === "number") ? n.widgets_start_y : 34;
+    return (n && typeof n.widgets_start_y === "number") ? n.widgets_start_y : 2;
   };
 
   const getAvailableDomHeight = (n, minH) => {
     if (!n || !n.size) return minH !== undefined ? minH : getMinDomHeight();
     const fallbackMin = minH !== undefined ? minH : getMinDomHeight();
-    const topY = (n && typeof n.widgets_start_y === "number") ? n.widgets_start_y : 34;
+    const topY = (n && typeof n.widgets_start_y === "number") ? n.widgets_start_y : 2;
     const avail = (n.size[1] || 0) - topY - 14;
     return Math.max(fallbackMin, Math.floor(avail));
   };
 
   const updateDomSize = () => {
     if (!domWidget || !domWidget.element) return;
-    node.widgets_start_y = 34;
-    if (domWidget) domWidget.last_y = 34;
+    node.widgets_start_y = 2;
+    if (domWidget) domWidget.last_y = 2;
     const minH = getMinDomHeight();
     const availH = getAvailableDomHeight(node, minH);
     const nodeW = node.size?.[0] || 1200;
@@ -1880,13 +1914,23 @@ function mountDirectorUI(node) {
     try {
       if (typeof app === "undefined" || !app.graph) return;
       const refPackInput = node.inputs?.find((i) => i.name === "ref_pack");
-      if (!refPackInput || refPackInput.link == null) return;
+      const link = (refPackInput && refPackInput.link != null) ? app.graph.links[refPackInput.link] : null;
+      let upstreamNode = link ? app.graph.getNodeById(link.origin_id) : null;
       
-      const link = app.graph.links[refPackInput.link];
-      if (!link) return;
-      
-      let upstreamNode = app.graph.getNodeById(link.origin_id);
-      if (!upstreamNode) return;
+      // If ref_pack input is disconnected or has no upstream node, clear discovered pack refs and clean up clip ref_ids
+      if (!upstreamNode) {
+        const customRefs = (timelineState.available_refs || []).filter(
+          (r) => !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
+        );
+        timelineState.available_refs = customRefs;
+        const validIds = new Set(customRefs.map((r) => r.id));
+        (timelineState.clips || []).forEach((c) => {
+          if (Array.isArray(c.ref_ids)) {
+            c.ref_ids = c.ref_ids.filter((id) => validIds.has(id));
+          }
+        });
+        return;
+      }
 
       // Follow any intermediate Reroute nodes
       let rerouteSteps = 0;
@@ -1899,7 +1943,19 @@ function mountDirectorUI(node) {
           break;
         }
       }
-      if (!upstreamNode) return;
+      if (!upstreamNode) {
+        const customRefs = (timelineState.available_refs || []).filter(
+          (r) => !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
+        );
+        timelineState.available_refs = customRefs;
+        const validIds = new Set(customRefs.map((r) => r.id));
+        (timelineState.clips || []).forEach((c) => {
+          if (Array.isArray(c.ref_ids)) {
+            c.ref_ids = c.ref_ids.filter((id) => validIds.has(id));
+          }
+        });
+        return;
+      }
 
       const chain = [];
       let curr = upstreamNode;
@@ -2083,13 +2139,19 @@ function mountDirectorUI(node) {
         discoveredRefs.push({ id: `${idPrefix}mod_2`, name: prefix + getVal("label_mod_2", "Character Concept 2"), type: "refmod", model: mod2 });
       });
 
-      if (discoveredRefs.length > 0) {
-        // Preserve any custom user-added tags (e.g. added via + Add Ref Tag)
-        const customRefs = (timelineState.available_refs || []).filter(
-          (r) => !discoveredRefs.some((d) => d.id === r.id) && !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
-        );
-        timelineState.available_refs = [...discoveredRefs, ...customRefs];
-      }
+      // Preserve any custom user-added tags (e.g. added via + Add Ref Tag)
+      const customRefs = (timelineState.available_refs || []).filter(
+        (r) => !discoveredRefs.some((d) => d.id === r.id) && !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
+      );
+      timelineState.available_refs = [...discoveredRefs, ...customRefs];
+
+      // Clean up any clip ref_ids that are no longer available in the graph
+      const validIds = new Set(timelineState.available_refs.map((r) => r.id));
+      (timelineState.clips || []).forEach((c) => {
+        if (Array.isArray(c.ref_ids)) {
+          c.ref_ids = c.ref_ids.filter((id) => validIds.has(id));
+        }
+      });
     } catch (e) {
       console.warn("Could not inspect upstream RefPack:", e);
     }
@@ -2190,15 +2252,6 @@ function mountDirectorUI(node) {
   // Left action buttons
   const toolbarLeft = document.createElement("div");
   toolbarLeft.className = "mmx-toolbar-left";
-
-  const brand = document.createElement("span");
-  brand.style.fontSize = "12px";
-  brand.style.fontWeight = "800";
-  brand.style.color = "#818cf8";
-  brand.style.letterSpacing = "0.5px";
-  brand.style.marginRight = "6px";
-  brand.textContent = "🎬 MiniMax H3 Director";
-  toolbarLeft.appendChild(brand);
 
   const syncRefsBtn = document.createElement("button");
   syncRefsBtn.className = "mmx-action-btn";
@@ -3359,7 +3412,7 @@ function mountDirectorUI(node) {
     const timingRow = document.createElement("div");
     timingRow.className = "mmx-inspector-card-row";
 
-    // Duration Controls
+    // 1. Duration Controls
     const durItem = document.createElement("div");
     durItem.className = "mmx-ctrl-item";
     const durLabel = document.createElement("label");
@@ -3392,11 +3445,18 @@ function mountDirectorUI(node) {
     durUnit.className = "mmx-ctrl-unit";
     durUnit.textContent = "s";
 
+    const durFramesBadge = document.createElement("span");
+    durFramesBadge.style.fontSize = "10px";
+    durFramesBadge.style.color = "#94a3b8";
+    durFramesBadge.style.marginLeft = "2px";
+    durFramesBadge.textContent = `(${Math.round((activeClip.duration || 5.0) * 24)}f)`;
+
     const updateDur = (val) => {
       const v = Math.max(0.5, Math.min(60.0, parseFloat(val) || 5.0));
       activeClip.duration = v;
       durSlider.value = String(v);
       durNum.value = String(v);
+      durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
       syncState();
       renderTimeline();
     };
@@ -3407,84 +3467,122 @@ function mountDirectorUI(node) {
     durItem.appendChild(durSlider);
     durItem.appendChild(durNum);
     durItem.appendChild(durUnit);
+    durItem.appendChild(durFramesBadge);
     timingRow.appendChild(durItem);
 
-    // Auto-Tail Continuity Toggle
-    const contLabel = document.createElement("label");
-    contLabel.style.display = "inline-flex";
-    contLabel.style.alignItems = "center";
-    contLabel.style.gap = "4px";
-    contLabel.style.fontSize = "11px";
-    contLabel.style.color = activeClip.continuity ? "#60a5fa" : "#94a3b8";
-    contLabel.style.cursor = "pointer";
-    contLabel.style.fontWeight = activeClip.continuity ? "600" : "400";
-    contLabel.title = "Automatically continue motion and latent context from the previous shot's tail";
-
-    const contCheck = document.createElement("input");
-    contCheck.type = "checkbox";
-    contCheck.checked = !!activeClip.continuity;
-    contCheck.onchange = () => {
-      activeClip.continuity = contCheck.checked;
-      syncState();
-      renderTimeline();
-      renderInspector();
-    };
-    contLabel.appendChild(contCheck);
-    contLabel.appendChild(document.createTextNode("🔗 Seam Continuity"));
-    timingRow.appendChild(contLabel);
-
-    // Seam Overlap Duration Slider (0.1s - 1.5s, default 0.5s / 12 frames)
+    // 2. Seam Overlap Combobox (In Frames - Reference Repo Presets: Off (0f), 5f, 12f, 22f Rec, 39f, 56f, Custom)
     const tailItem = document.createElement("div");
     tailItem.className = "mmx-ctrl-item";
-    tailItem.title = "Seam overlap duration (0.1s - 1.5s, default 0.5s / 12 frames). Frames and audio from the previous shot's tail used for smooth scene transition.";
-    tailItem.style.opacity = activeClip.continuity ? "1" : "0.4";
-    tailItem.style.pointerEvents = activeClip.continuity ? "auto" : "none";
+    tailItem.title = "Seam continuity overlap in frames. 0f disables continuity (hard cut). Reference repo presets: 5f (0.21s), 12f (0.50s), 22f (0.92s - recommended), 39f (1.63s), 56f (2.33s), or Custom.";
 
     const tailLabel = document.createElement("label");
     tailLabel.textContent = "Seam Overlap:";
     tailItem.appendChild(tailLabel);
 
-    const tailSlider = document.createElement("input");
-    tailSlider.type = "range";
-    tailSlider.min = "0.1";
-    tailSlider.max = "1.5";
-    tailSlider.step = "0.05";
-    const initTail = Math.max(0.1, Math.min(1.5, activeClip.tail_seconds !== undefined ? activeClip.tail_seconds : 0.5));
-    tailSlider.value = String(initTail);
-    tailSlider.style.width = "65px";
+    const tailSelect = document.createElement("select");
+    tailSelect.className = "mmx-mode-select";
+    tailSelect.style.fontSize = "11px";
+    tailSelect.style.padding = "2px 6px";
 
-    const tailNum = document.createElement("input");
-    tailNum.type = "number";
-    tailNum.min = "0.1";
-    tailNum.max = "1.5";
-    tailNum.step = "0.05";
-    tailNum.value = String(initTail);
-    tailNum.style.width = "46px";
-    tailNum.style.background = "#1e293b";
-    tailNum.style.border = "1px solid #334155";
-    tailNum.style.borderRadius = "4px";
-    tailNum.style.color = "#f8fafc";
-    tailNum.style.fontSize = "11px";
-    tailNum.style.textAlign = "center";
+    const tailPresets = [
+      { val: "0", label: "Off (0f / Hard Cut)" },
+      { val: "5", label: "5f (0.21s)" },
+      { val: "12", label: "12f (0.50s)" },
+      { val: "22", label: "22f (0.92s - Rec)" },
+      { val: "39", label: "39f (1.63s)" },
+      { val: "56", label: "56f (2.33s)" },
+      { val: "custom", label: "Custom..." },
+    ];
 
-    const tailUnit = document.createElement("span");
-    tailUnit.className = "mmx-ctrl-unit";
-    tailUnit.textContent = "s";
+    tailPresets.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.val;
+      opt.textContent = p.label;
+      tailSelect.appendChild(opt);
+    });
 
-    const updateTail = (val) => {
-      const v = Math.max(0.1, Math.min(1.5, parseFloat(val) || 0.5));
-      activeClip.tail_seconds = Math.round(v * 100) / 100;
-      tailSlider.value = String(activeClip.tail_seconds);
-      tailNum.value = String(activeClip.tail_seconds);
+    const customFrameInput = document.createElement("input");
+    customFrameInput.type = "number";
+    customFrameInput.min = "0";
+    customFrameInput.max = "240";
+    customFrameInput.step = "1";
+    customFrameInput.style.width = "42px";
+    customFrameInput.style.background = "#1e293b";
+    customFrameInput.style.border = "1px solid #334155";
+    customFrameInput.style.borderRadius = "4px";
+    customFrameInput.style.color = "#f8fafc";
+    customFrameInput.style.fontSize = "11px";
+    customFrameInput.style.textAlign = "center";
+    customFrameInput.style.marginLeft = "4px";
+
+    const customFrameUnit = document.createElement("span");
+    customFrameUnit.className = "mmx-ctrl-unit";
+    customFrameUnit.textContent = "f";
+    customFrameUnit.style.marginLeft = "2px";
+
+    // Determine current frames value
+    let currentFrames = 22;
+    if (activeClip.continuity === false) {
+      currentFrames = 0;
+    } else if (activeClip.tail_frames !== undefined) {
+      currentFrames = parseInt(activeClip.tail_frames, 10);
+    } else if (activeClip.tail_seconds !== undefined) {
+      currentFrames = Math.round(parseFloat(activeClip.tail_seconds) * 24);
+    }
+
+    const presetValues = [0, 5, 12, 22, 39, 56];
+    if (presetValues.includes(currentFrames)) {
+      tailSelect.value = String(currentFrames);
+      customFrameInput.style.display = "none";
+      customFrameUnit.style.display = "none";
+    } else {
+      tailSelect.value = "custom";
+      customFrameInput.value = String(currentFrames);
+      customFrameInput.style.display = "inline-block";
+      customFrameUnit.style.display = "inline";
+    }
+
+    const setContinuityValues = (frames) => {
+      const f = Math.max(0, parseInt(frames, 10) || 0);
+      if (f === 0) {
+        activeClip.continuity = false;
+        activeClip.tail_frames = 0;
+        activeClip.tail_seconds = 0.0;
+      } else {
+        activeClip.continuity = true;
+        activeClip.tail_frames = f;
+        activeClip.tail_seconds = Math.round((f / 24) * 100) / 100;
+      }
       syncState();
+      renderTimeline();
     };
 
-    tailSlider.oninput = () => updateTail(tailSlider.value);
-    tailNum.onchange = () => updateTail(tailNum.value);
+    tailSelect.onchange = () => {
+      const val = tailSelect.value;
+      if (val === "0") {
+        customFrameInput.style.display = "none";
+        customFrameUnit.style.display = "none";
+        setContinuityValues(0);
+      } else if (val === "custom") {
+        customFrameInput.style.display = "inline-block";
+        customFrameUnit.style.display = "inline";
+        const f = Math.max(1, parseInt(customFrameInput.value, 10) || 12);
+        customFrameInput.value = String(f);
+        setContinuityValues(f);
+      } else {
+        customFrameInput.style.display = "none";
+        customFrameUnit.style.display = "none";
+        setContinuityValues(parseInt(val, 10));
+      }
+    };
 
-    tailItem.appendChild(tailSlider);
-    tailItem.appendChild(tailNum);
-    tailItem.appendChild(tailUnit);
+    customFrameInput.oninput = () => {
+      setContinuityValues(customFrameInput.value);
+    };
+
+    tailItem.appendChild(tailSelect);
+    tailItem.appendChild(customFrameInput);
+    tailItem.appendChild(customFrameUnit);
     timingRow.appendChild(tailItem);
 
     cardTiming.appendChild(timingRow);
@@ -3929,7 +4027,7 @@ N/A`;
     // Intercept draw to force topY = 34 so there is never an empty gap below title bar
     const origDomDraw = domWidget.draw;
     domWidget.draw = function (ctx, n, widget_width, y, widget_height) {
-      const topY = 34;
+      const topY = 2;
       this.last_y = topY;
       if (origDomDraw) origDomDraw.call(this, ctx, n, widget_width, topY, widget_height);
     };
@@ -3950,13 +4048,13 @@ N/A`;
     };
   }
 
-  // Hook node resize, computeSize, and onDrawForeground to enforce widgets_start_y = 34 and prevent unused empty space
+  // Hook node resize, computeSize, and onDrawForeground to enforce widgets_start_y = 2 and prevent unused empty space
   const origOnResize = node.onResize;
   node.onResize = function (size) {
-    this.widgets_start_y = 34;
-    if (domWidget) domWidget.last_y = 34;
+    this.widgets_start_y = 2;
+    if (domWidget) domWidget.last_y = 2;
     const minH = getMinDomHeight();
-    const minNodeH = 34 + minH + 16;
+    const minNodeH = 2 + minH + 16;
     const minNodeW = 1200;
 
     if (size) {
@@ -3971,10 +4069,10 @@ N/A`;
 
   const origComputeSize = node.computeSize;
   node.computeSize = function (out) {
-    this.widgets_start_y = 34;
-    if (domWidget) domWidget.last_y = 34;
+    this.widgets_start_y = 2;
+    if (domWidget) domWidget.last_y = 2;
     const minH = getMinDomHeight();
-    const minNodeH = 34 + minH + 16;
+    const minNodeH = 2 + minH + 16;
     const minNodeW = 1200;
 
     let sz = [minNodeW, minNodeH];
@@ -3988,8 +4086,8 @@ N/A`;
 
   const origOnDrawForeground = node.onDrawForeground;
   node.onDrawForeground = function (ctx) {
-    this.widgets_start_y = 34;
-    if (domWidget) domWidget.last_y = 34;
+    this.widgets_start_y = 2;
+    if (domWidget) domWidget.last_y = 2;
     if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
   };
 
@@ -4004,7 +4102,7 @@ N/A`;
 
   // Ensure domWidget is positioned at the TOP of node.widgets (index 0) so it starts flush at widgets_start_y
   if (node.widgets && domWidget) {
-    domWidget.last_y = 34;
+    domWidget.last_y = 2;
     const domIdx = node.widgets.indexOf(domWidget);
     if (domIdx > 0) {
       node.widgets.splice(domIdx, 1);
@@ -4014,6 +4112,8 @@ N/A`;
 
   // Refresh callback when node configuration or graph is reloaded
   node.__mmxDirectorRefresh = () => {
+    node.widgets_start_y = 2;
+    if (domWidget) domWidget.last_y = 2;
     hideWidget(timelineWidget);
     hideWidget(builderWidget);
     hideWidget(promptWidget);
