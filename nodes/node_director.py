@@ -407,11 +407,7 @@ class MiniMaxH3MasterDirector:
                     else:
                         first_frame = local_imgs[0]
                         is_chained_from_previous = False
-            elif clip_type in ("V2V", "VIDEO"):
-                for i, v in enumerate(local_vids):
-                    ref_videos[f"ref_video_{i+1}"] = v
-                is_chained_from_previous = False
-            else: # REF2VA
+            elif clip_type in ("V2V", "VIDEO", "REF2VA", "REF2V", "RV2V"):
                 for i, img in enumerate(local_imgs):
                     ref_images[f"ref_image_{i+1}"] = img
                 for i, v in enumerate(local_vids):
@@ -419,7 +415,7 @@ class MiniMaxH3MasterDirector:
                 for i, a in enumerate(local_auds):
                     ref_audios[f"ref_audio_{i+1}"] = a
 
-                # Automatic internal continuity for REF2VA: if no local visual references were assigned, inject tail
+                # Automatic internal continuity for reference modes: if no local visual references were assigned, inject tail
                 if clip_continuity and previous_tail is not None and clip_idx > 0:
                     if not ref_images and not ref_videos and previous_tail.get("last_frame") is not None:
                         ref_images["ref_image_1"] = previous_tail["last_frame"]
@@ -437,7 +433,7 @@ class MiniMaxH3MasterDirector:
             if clip_prompt_mode == "structured" and isinstance(clip_structured, dict) and any(str(v).strip() for v in clip_structured.values()):
                 c_soundscape = clip_structured.get("overall_soundscape") or clip_structured.get("soundscape", "")
                 c_music = clip_structured.get("non_diegetic_music") or clip_structured.get("music", "")
-                if canon_mode == "REF2VA":
+                if canon_mode in ("REF2VA", "V2V", "RV2V"):
                     resolved_prompt = build_ref2va_prompt(
                         subject_definitions=translate_refmod_aliases(clip_structured.get("subject_definitions", ""), tag_map),
                         summary=translate_refmod_aliases(clip_structured.get("summary", ""), tag_map),
@@ -460,7 +456,7 @@ class MiniMaxH3MasterDirector:
                     )
             elif clip_prompt_text:
                 resolved_prompt = translate_refmod_aliases(clip_prompt_text, tag_map)
-            elif canon_mode == "REF2VA":
+            elif canon_mode in ("REF2VA", "V2V", "RV2V"):
                 ref_dict = builder.get("ref", {})
                 b_soundscape = ref_dict.get("overall_soundscape") or ref_dict.get("soundscape", "")
                 b_music = ref_dict.get("non_diegetic_music") or ref_dict.get("music", "")

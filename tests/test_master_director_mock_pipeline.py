@@ -583,6 +583,92 @@ class TestMockPipeline(unittest.TestCase):
             # 5 frames from c1 + (5 - 1) frames from c2 = 9 frames
             self.assertEqual(final_frames.shape[0], 9)
 
+    def test_v2v_multi_reference_routing_and_prompt(self):
+        """Verify V2V clips can accept multiple references (image, video, audio) and use reference prompt structure."""
+        tl_v2v = json.dumps({
+            "clips": [{
+                "id": "c1",
+                "type": "V2V",
+                "duration": 5.0,
+                "prompt_mode": "structured",
+                "structured_prompt": {
+                    "subject_definitions": "<Subject 1> is the character in <Picture 1>.\n<Video 1> provides dynamic motion.",
+                    "summary": "[reference generation] V2V sequence",
+                    "retention_analysis": "<Subject 1>: fully_preserved.",
+                    "detailed_description": "Transform scene motion while preserving character identity.",
+                    "overall_soundscape": "Wind rustling trees",
+                    "non_diegetic_music": "Low strings",
+                },
+                "ref_ids": ["img_1", "vid_1", "aud_1"],
+            }]
+        })
+
+        ref_pack = {
+            "refs": [
+                {"id": "img_1", "type": "image", "data": torch.zeros((1, 64, 64, 3))},
+                {"id": "vid_1", "type": "video", "data": torch.zeros((5, 64, 64, 3))},
+                {"id": "aud_1", "type": "audio", "data": {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}},
+            ]
+        }
+
+        with patch("core.executor.get_native_h3_node") as mock_get_native:
+            mock_native = MagicMock()
+            mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
+            mock_get_native.return_value = mock_native
+
+            res = self.director.execute(
+                model=self.mock_model,
+                video_vae=self.mock_vae,
+                audio_vae=self.mock_audio_vae,
+                clip=self.mock_clip,
+                timeline_data=tl_v2v,
+                ref_pack=ref_pack,
+                execution_mode="Conditioning Guide Output",
+            )
+            # Verify prompt contains reference structure
+            emitted_prompt = res[5]
+            self.assertIn("subject_definitions:", emitted_prompt)
+            self.assertIn("retention_analysis:", emitted_prompt)
+            self.assertIn("detailed_description:", emitted_prompt)
+
+            # Verify native node was called with ref_images, ref_videos, ref_audios
+            call_kwargs = mock_native.execute.call_args[1]
+            self.assertIn("ref_image_1", call_kwargs["ref_images"])
+            self.assertIn("ref_video_1", call_kwargs["ref_videos"])
+            self.assertIn("ref_audio_1", call_kwargs["ref_audios"])
+
+    def test_extender_prev_samples_chaining(self):
+        """Verify MiniMaxH3Extender extracts tail frame from prev_samples and passes to director."""
+        from nodes.node_tritant_compat import MiniMaxH3Extender
+        extender = MiniMaxH3Extender()
+
+        prev_samples = {
+            "samples": (
+                torch.zeros((1, 16, 7, 16, 16)),
+                torch.zeros((1, 32, 2, 12)),
+            )
+        }
+
+        with patch("core.executor.get_native_h3_node") as mock_get_native, \
+             patch("comfy.sample.sample") as mock_sample:
+            mock_native = MagicMock()
+            mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
+            mock_get_native.return_value = mock_native
+
+            mock_sample.side_effect = lambda *args, **kwargs: {"samples": (torch.zeros((1, 16, 5, 16, 16)), torch.zeros((1, 32, 2, 4)))}
+
+            images, audio, samples = extender.extend(
+                model=self.mock_model,
+                vae=self.mock_vae,
+                audio_vae=self.mock_audio_vae,
+                clip=self.mock_clip,
+                prompt="Continuation shot",
+                duration=5.0,
+                prev_samples=prev_samples,
+            )
+            self.assertIsNotNone(images)
+            self.assertIsNotNone(samples)
+
 
 if __name__ == "__main__":
     unittest.main()

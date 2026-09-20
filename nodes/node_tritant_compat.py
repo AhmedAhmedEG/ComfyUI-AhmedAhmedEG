@@ -147,6 +147,17 @@ class MiniMaxH3Extender:
     def extend(self, model, vae, audio_vae, clip, prompt, duration=5.0, steps=25, seed=0, prev_samples=None, **kwargs):
         from .node_director import MiniMaxH3MasterDirector
         dir_node = MiniMaxH3MasterDirector()
+        local_ref_pack = None
+        if prev_samples is not None:
+            try:
+                v_stream, _ = extract_streams_from_av_latent(prev_samples)
+                decoded_prev = decode_video_latent(vae, v_stream)
+                if decoded_prev is not None and len(decoded_prev) > 0:
+                    first_frame = decoded_prev[-1:]
+                    local_ref_pack = {"refs": [{"id": "img_1", "type": "image", "data": first_frame}]}
+            except Exception as exc:
+                log.warning(f"Extender prev_samples extraction failed: {exc}")
+
         res = dir_node.execute(
             model=model,
             video_vae=vae,
@@ -157,5 +168,6 @@ class MiniMaxH3Extender:
             steps=steps,
             seed=seed,
             mode="REF2VA" if prev_samples is None else "FL2VA",
+            ref_pack=local_ref_pack,
         )
         return (res[0], res[1], res[4])
