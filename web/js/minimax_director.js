@@ -1806,11 +1806,23 @@ function mountDirectorUI(node) {
   };
 
   injectCSS();
-
+  
+  // State initialization
   let domWidget = null;
-  let activeClipId = null;
+  let activeClipId = timelineState.clips[0]?.id || "clip_1";
   let playheadSeconds = 0.0;
-  let zoomLevel = 1.0; // 0.5x to 3.0x
+  let zoomLevel = 1.0; 
+
+  try {
+    // ... UI construction logic ...
+  } catch (err) {
+    console.error("Failed to mount Director UI:", err);
+    // Ensure widgets are still hidden even on failure
+    hideWidget(timelineWidget);
+    hideWidget(builderWidget);
+    hideWidget(promptWidget);
+    hideWidget(durationWidget);
+  }
 
   const getMinDomHeight = () => 480;
 
