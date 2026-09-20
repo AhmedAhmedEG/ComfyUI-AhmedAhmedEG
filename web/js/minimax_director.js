@@ -2545,6 +2545,9 @@ function mountDirectorUI(node) {
     zoomLevel = parseFloat(zoomSlider.value) || 1.0;
     renderTimeline();
   };
+  ["mousedown", "pointerdown", "touchstart"].forEach((evt) => {
+    zoomSlider.addEventListener(evt, (e) => e.stopPropagation());
+  });
   zoomWrap.appendChild(zoomSlider);
   toolbarRight.appendChild(zoomWrap);
 
@@ -3477,7 +3480,7 @@ function mountDirectorUI(node) {
     durSlider.type = "range";
     durSlider.min = "0.5";
     durSlider.max = "30.0";
-    durSlider.step = "0.5";
+    durSlider.step = "0.1";
     durSlider.value = String(activeClip.duration || 5.0);
     durSlider.style.width = "75px";
 
@@ -3505,18 +3508,38 @@ function mountDirectorUI(node) {
     durFramesBadge.style.marginLeft = "2px";
     durFramesBadge.textContent = `(${Math.round((activeClip.duration || 5.0) * 24)}f)`;
 
-    const updateDur = (val) => {
-      const v = Math.max(0.5, Math.min(60.0, parseFloat(val) || 5.0));
+    ["mousedown", "pointerdown", "touchstart"].forEach((evt) => {
+      durSlider.addEventListener(evt, (e) => e.stopPropagation());
+      durNum.addEventListener(evt, (e) => e.stopPropagation());
+    });
+
+    durSlider.oninput = () => {
+      const v = Math.max(0.5, Math.min(60.0, parseFloat(durSlider.value) || 5.0));
+      activeClip.duration = v;
+      durNum.value = String(v);
+      durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
+      const activeBlock = shotsLane.querySelector(`.mmx-subtrack-block.active`);
+      if (activeBlock) {
+        const baseW = Math.max(160, Math.min(450, Math.round(v * 32 * zoomLevel)));
+        activeBlock.style.width = `${baseW}px`;
+      }
+    };
+
+    durSlider.onchange = () => {
+      syncState();
+      renderTimeline();
+      drawRuler();
+    };
+
+    durNum.onchange = () => {
+      const v = Math.max(0.5, Math.min(60.0, parseFloat(durNum.value) || 5.0));
       activeClip.duration = v;
       durSlider.value = String(v);
-      durNum.value = String(v);
       durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
       syncState();
       renderTimeline();
+      drawRuler();
     };
-
-    durSlider.oninput = () => updateDur(durSlider.value);
-    durNum.onchange = () => updateDur(durNum.value);
 
     durItem.appendChild(durSlider);
     durItem.appendChild(durNum);
@@ -3524,35 +3547,14 @@ function mountDirectorUI(node) {
     durItem.appendChild(durFramesBadge);
     timingRow.appendChild(durItem);
 
-    // 2. Seam Overlap Controls (In Frames)
+    // 2. Seam Overlap Controls (Canonical MiniMax H3 17k+5 Options + Custom)
     const tailItem = document.createElement("div");
     tailItem.className = "mmx-ctrl-item";
-    tailItem.title = "Seam continuity overlap in frames. 0f disables continuity (hard cut).";
+    tailItem.title = "Seam continuity overlap in frames (MiniMax H3 17k+5 grid). 0f disables continuity (hard cut).";
 
     const tailLabel = document.createElement("label");
-    tailLabel.textContent = "Seam Overlap (f):";
+    tailLabel.textContent = "Seam Overlap:";
     tailItem.appendChild(tailLabel);
-
-    const tailSlider = document.createElement("input");
-    tailSlider.type = "range";
-    tailSlider.min = "0";
-    tailSlider.max = "60";
-    tailSlider.step = "1";
-    tailSlider.style.width = "80px";
-
-    const tailNum = document.createElement("input");
-    tailNum.type = "number";
-    tailNum.min = "0";
-    tailNum.max = "240";
-    tailNum.step = "1";
-    tailNum.style.width = "40px";
-    tailNum.style.background = "#1e293b";
-    tailNum.style.border = "1px solid #334155";
-    tailNum.style.borderRadius = "4px";
-    tailNum.style.color = "#f8fafc";
-    tailNum.style.fontSize = "11px";
-    tailNum.style.textAlign = "center";
-    tailNum.style.marginLeft = "4px";
 
     // Determine current frames value
     let currentFrames = 22;
@@ -3564,26 +3566,93 @@ function mountDirectorUI(node) {
       currentFrames = Math.round(parseFloat(activeClip.tail_seconds) * 24);
     }
 
-    tailSlider.value = String(currentFrames);
-    tailNum.value = String(currentFrames);
+    const canonicalChoices = [
+      { val: 0, label: "0f (Off - Hard Cut)" },
+      { val: 5, label: "5f (~0.2s - Quick Blend)" },
+      { val: 22, label: "22f (~0.9s - Default)" },
+      { val: 39, label: "39f (~1.6s - Deep Blend)" },
+      { val: 56, label: "56f (~2.3s - Extended)" },
+    ];
 
-    const updateContinuity = (val) => {
-      const f = Math.max(0, parseInt(val, 10) || 0);
+    const tailSelect = document.createElement("select");
+    tailSelect.className = "mmx-select mmx-continuity-select";
+    tailSelect.style.fontSize = "11px";
+    tailSelect.style.padding = "2px 6px";
+    tailSelect.style.background = "#1e293b";
+    tailSelect.style.border = "1px solid #334155";
+    tailSelect.style.borderRadius = "4px";
+    tailSelect.style.color = "#f8fafc";
+
+    let isCanonical = false;
+    canonicalChoices.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = String(c.val);
+      opt.textContent = c.label;
+      if (c.val === currentFrames) {
+        opt.selected = true;
+        isCanonical = true;
+      }
+      tailSelect.appendChild(opt);
+    });
+
+    const customOpt = document.createElement("option");
+    customOpt.value = "custom";
+    customOpt.textContent = `Custom (${currentFrames}f)...`;
+    if (!isCanonical) customOpt.selected = true;
+    tailSelect.appendChild(customOpt);
+
+    const tailNum = document.createElement("input");
+    tailNum.type = "number";
+    tailNum.min = "0";
+    tailNum.max = "240";
+    tailNum.step = "1";
+    tailNum.value = String(currentFrames);
+    tailNum.style.width = "42px";
+    tailNum.style.background = "#1e293b";
+    tailNum.style.border = "1px solid #334155";
+    tailNum.style.borderRadius = "4px";
+    tailNum.style.color = "#f8fafc";
+    tailNum.style.fontSize = "11px";
+    tailNum.style.textAlign = "center";
+    tailNum.style.marginLeft = "4px";
+    tailNum.style.display = isCanonical ? "none" : "inline-block";
+
+    ["mousedown", "pointerdown", "touchstart"].forEach((evt) => {
+      tailSelect.addEventListener(evt, (e) => e.stopPropagation());
+      tailNum.addEventListener(evt, (e) => e.stopPropagation());
+    });
+
+    const setContinuity = (f) => {
       activeClip.continuity = f > 0;
       activeClip.tail_frames = f;
       activeClip.tail_seconds = f / 24.0;
-      tailSlider.value = String(f);
-      tailNum.value = String(f);
       syncState();
       renderTimeline();
     };
 
-    tailSlider.oninput = () => updateContinuity(tailSlider.value);
-    tailNum.onchange = () => updateContinuity(tailNum.value);
+    tailSelect.onchange = () => {
+      const val = tailSelect.value;
+      if (val === "custom") {
+        tailNum.style.display = "inline-block";
+        tailNum.focus();
+      } else {
+        tailNum.style.display = "none";
+        const f = parseInt(val, 10) || 0;
+        tailNum.value = String(f);
+        setContinuity(f);
+      }
+    };
 
-    tailItem.appendChild(tailSlider);
+    tailNum.onchange = () => {
+      const f = Math.max(0, parseInt(tailNum.value, 10) || 0);
+      tailNum.value = String(f);
+      customOpt.textContent = `Custom (${f}f)...`;
+      customOpt.selected = true;
+      setContinuity(f);
+    };
+
+    tailItem.appendChild(tailSelect);
     tailItem.appendChild(tailNum);
-    tailItem.appendChild(document.createTextNode(" f"));
     timingRow.appendChild(tailItem);
     cardTiming.appendChild(timingRow);
     cardsGrid.appendChild(cardTiming);
