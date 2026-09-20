@@ -4286,10 +4286,16 @@ app.registerExtension({
         }
       }
 
-      if (this.__mmxDirectorRefresh) {
-        this.__mmxDirectorRefresh();
+      // Ensure widgets are ready before mounting UI
+      if (this.widgets && this.widgets.length > 0) {
+        if (this.__mmxDirectorRefresh) {
+          this.__mmxDirectorRefresh();
+        } else {
+          mountDirectorUI(this);
+        }
       } else {
-        mountDirectorUI(this);
+        // Fallback: retry if widgets not ready
+        setTimeout(() => this.onConfigure(info), 100);
       }
     };
   },
