@@ -34,10 +34,7 @@ from .node_ref_pack import MiniMaxH3RefPack
 NODE_CLASS_MAPPINGS = {
     # Flagship Master Director
     "MiniMaxH3MasterDirector": MiniMaxH3MasterDirector,
-    "MiniMaxH3Director": MiniMaxH3MasterDirector,
-    "ComfyMiniMaxH3Director": MiniMaxH3MasterDirector,
     "MiniMaxH3DirectorGuide": MiniMaxH3DirectorGuide,
-    "MiniMaxH3DirectorConditioning": MiniMaxH3DirectorGuide,
     "MiniMaxH3DirectorPlannerConditioning": MiniMaxH3DirectorPlannerConditioning,
 
     # Dedicated Settings & Configuration
@@ -67,22 +64,15 @@ NODE_CLASS_MAPPINGS = {
 
     # Bridges & Utilities
     "MiniMaxH3RefPack": MiniMaxH3RefPack,
-    "MiniMaxH3ReferencePool": MiniMaxH3RefPack,
     "MiniMaxH3ReferenceBridge": MiniMaxH3ReferenceBridge,
-    "MiniMaxH3ReferencePackBridge": MiniMaxH3ReferenceBridge,
     "MiniMaxH3PromptBridge": MiniMaxH3PromptBridge,
-    "MiniMaxH3PromptPackBridge": MiniMaxH3PromptBridge,
     "MiniMaxH3TailFromLatent": MiniMaxH3TailFromLatent,
     "MiniMaxH3VideoCombine": MiniMaxH3VideoCombine,
-    "DaSiWa_EnhancedVideoCombine": MiniMaxH3VideoCombine,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3MasterDirector": "MiniMax H3 Master Director",
-    "MiniMaxH3Director": "MiniMax H3 Master Director",
-    "ComfyMiniMaxH3Director": "MiniMax H3 Master Director",
     "MiniMaxH3DirectorGuide": "MiniMax H3 Director Guide",
-    "MiniMaxH3DirectorConditioning": "MiniMax H3 Director Conditioning",
     "MiniMaxH3DirectorPlannerConditioning": "MiniMax H3 Director Planner Conditioning",
 
     "MiniMaxH3DirectorSettings": "MiniMax H3 Director Settings",
@@ -106,12 +96,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3Extender": "MiniMax H3 Extender",
 
     "MiniMaxH3RefPack": "MiniMax H3 Reference Pack (Pool)",
-    "MiniMaxH3ReferencePool": "MiniMax H3 Reference Pack (Pool)",
     "MiniMaxH3ReferenceBridge": "MiniMax H3 Reference Pack Bridge",
-    "MiniMaxH3ReferencePackBridge": "MiniMax H3 Reference Pack Bridge",
     "MiniMaxH3PromptBridge": "MiniMax H3 Prompt Pack Bridge",
-    "MiniMaxH3PromptPackBridge": "MiniMax H3 Prompt Pack Bridge",
     "MiniMaxH3TailFromLatent": "MiniMax H3 Tail From Latent",
     "MiniMaxH3VideoCombine": "Video Combine & Audio Muxer",
-    "DaSiWa_EnhancedVideoCombine": "Video Combine & Audio Muxer",
 }
