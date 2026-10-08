@@ -1,6 +1,7 @@
 """Unit tests for MiniMaxH3DirectorSettings, MiniMaxH3SamplingSettings, and streamlined Master Director."""
 
 import unittest
+from tests.cache_fixture import CacheIsolatedTestCase
 from unittest.mock import MagicMock
 import sys
 
@@ -16,8 +17,9 @@ from nodes.node_settings import MiniMaxH3DirectorSettings, MiniMaxH3SamplingSett
 from nodes.node_director import MiniMaxH3MasterDirector
 
 
-class TestDirectorSettings(unittest.TestCase):
+class TestDirectorSettings(CacheIsolatedTestCase):
     def setUp(self):
+        super().setUp()
         self.settings_node = MiniMaxH3DirectorSettings()
         self.sampling_node = MiniMaxH3SamplingSettings()
         self.director_node = MiniMaxH3MasterDirector()
@@ -70,8 +72,8 @@ class TestDirectorSettings(unittest.TestCase):
         from unittest.mock import patch
         config, = self.settings_node.build_config(
             width=1280,
-            height=720,
-            frame_rate=30.0,
+            height=736,
+            frame_rate=24.0,
             execution_mode="Conditioning Guide Output",
         )
 
@@ -95,9 +97,9 @@ class TestDirectorSettings(unittest.TestCase):
             )
 
             self.assertIsNotNone(result)
-            self.assertEqual(len(result), 9)
-            dummy_img, dummy_aud, vid, pos, lat, prompt_out, fps, fc, status = result
-            self.assertEqual(fps, 30.0)
+            self.assertEqual(len(result), 10)
+            dummy_img, dummy_aud, vid, pos, lat, prompt_out, fps, fc, status, project_state = result
+            self.assertEqual(fps, 24.0)
             self.assertIn("Emitted conditioning for 1 clip(s)", status)
 
     def test_master_director_execution_without_config_uses_defaults(self):
@@ -122,8 +124,8 @@ class TestDirectorSettings(unittest.TestCase):
             )
 
             self.assertIsNotNone(result)
-            self.assertEqual(len(result), 9)
-            dummy_img, dummy_aud, vid, pos, lat, prompt_out, fps, fc, status = result
+            self.assertEqual(len(result), 10)
+            dummy_img, dummy_aud, vid, pos, lat, prompt_out, fps, fc, status, project_state = result
             self.assertEqual(fps, 24.0)  # Default 24.0 fps
 
 

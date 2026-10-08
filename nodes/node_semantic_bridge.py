@@ -8,7 +8,7 @@ from __future__ import annotations
 import glob
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -96,7 +96,9 @@ def resolve_semantic_bridge_path(filename: str) -> Optional[str]:
 
 
 def load_semantic_student(path: str) -> SemanticStudent:
-    cached = _MODEL_CACHE.get(path)
+    stat = os.stat(path)
+    cache_key = f"{path}:{stat.st_mtime_ns}:{stat.st_size}"
+    cached = _MODEL_CACHE.get(cache_key)
     if cached is not None:
         return cached
     student = SemanticStudent()
@@ -110,9 +112,11 @@ def load_semantic_student(path: str) -> SemanticStudent:
             blob = torch.load(path, map_location="cpu")
         state_dict = blob.get("state_dict", blob) if isinstance(blob, dict) else blob
 
-    student.load_state_dict(state_dict, strict=False)
+    student.load_state_dict(state_dict, strict=True)
     student.eval()
-    _MODEL_CACHE[path] = student
+    if len(_MODEL_CACHE) >= 2:
+        _MODEL_CACHE.pop(next(iter(_MODEL_CACHE)))
+    _MODEL_CACHE[cache_key] = student
     return student
 
 

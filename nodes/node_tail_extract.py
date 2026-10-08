@@ -45,8 +45,11 @@ class MiniMaxH3TailFromLatent:
 
         s = samples["samples"]
         streams, _ = unpack_av_samples(s)
-        video_latent = streams[0]
-        audio_latent = streams[1] if len(streams) > 1 else torch.zeros((1, 32, 2, max(1, round(video_latent.shape[2] * 40 / 24))), device=video_latent.device, dtype=video_latent.dtype)
+        try:
+            from ..core.continuity import extract_streams_from_av_latent
+        except ImportError:
+            from core.continuity import extract_streams_from_av_latent
+        video_latent, audio_latent = extract_streams_from_av_latent(samples)
 
         frames = decode_video_latent(active_video_vae, video_latent)
         audio = decode_audio_latent(audio_vae, audio_latent) if audio_vae else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}

@@ -1,5 +1,10 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { installLocale } from "./minimax_locale.js";
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
 
 // Embedded CSS
 const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Master Director */
@@ -1850,7 +1855,7 @@ function mountDirectorUI(node) {
   };
 
   injectCSS();
-  
+
   // State initialization
   let domWidget = null;
   let playheadSeconds = 0.0;
@@ -1927,18 +1932,7 @@ function mountDirectorUI(node) {
       }
     ],
     refmods: [],
-    available_refs: [
-      { id: "image_1", alt_id: "img_1", name: "image_1", type: "image" },
-      { id: "image_2", alt_id: "img_2", name: "image_2", type: "image" },
-      { id: "image_3", alt_id: "img_3", name: "image_3", type: "image" },
-      { id: "image_4", alt_id: "img_4", name: "image_4", type: "image" },
-      { id: "video_1", alt_id: "vid_1", name: "video_1", type: "video" },
-      { id: "video_2", alt_id: "vid_2", name: "video_2", type: "video" },
-      { id: "audio_1", alt_id: "aud_1", name: "audio_1", type: "audio" },
-      { id: "audio_2", alt_id: "aud_2", name: "audio_2", type: "audio" },
-      { id: "refmod_1", alt_id: "mod_1", name: "refmod_1", type: "refmod" },
-      { id: "refmod_2", alt_id: "mod_2", name: "refmod_2", type: "refmod" },
-    ],
+    available_refs: [],
   };
 
   let builderState = {
@@ -1961,14 +1955,14 @@ function mountDirectorUI(node) {
       const refPackInput = node.inputs?.find((i) => i.name === "ref_pack");
       const link = (refPackInput && refPackInput.link != null) ? app.graph.links[refPackInput.link] : null;
       let upstreamNode = link ? app.graph.getNodeById(link.origin_id) : null;
-      
+
       // If ref_pack input is disconnected or has no upstream node, clear discovered pack refs and clean up clip ref_ids
       if (!upstreamNode) {
         const customRefs = (timelineState.available_refs || []).filter(
           (r) => !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
         );
         timelineState.available_refs = customRefs;
-        const validIds = new Set(customRefs.map((r) => r.id));
+        const validIds = new Set([...customRefs, ...(timelineState.references || [])].flatMap(r => [r.id, r.alt_id].filter(Boolean)));
         (timelineState.clips || []).forEach((c) => {
           if (Array.isArray(c.ref_ids)) {
             c.ref_ids = c.ref_ids.filter((id) => validIds.has(id));
@@ -1993,7 +1987,7 @@ function mountDirectorUI(node) {
           (r) => !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
         );
         timelineState.available_refs = customRefs;
-        const validIds = new Set(customRefs.map((r) => r.id));
+        const validIds = new Set([...customRefs, ...(timelineState.references || [])].flatMap(r => [r.id, r.alt_id].filter(Boolean)));
         (timelineState.clips || []).forEach((c) => {
           if (Array.isArray(c.ref_ids)) {
             c.ref_ids = c.ref_ids.filter((id) => validIds.has(id));
@@ -2106,8 +2100,8 @@ function mountDirectorUI(node) {
             let fn = null;
             // 1. Check direct widgets
             if (originNode.widgets) {
-              const wPriority = originNode.widgets.find((x) => 
-                x.name === "image" || x.name === "audio" || x.name === "video" || 
+              const wPriority = originNode.widgets.find((x) =>
+                x.name === "image" || x.name === "audio" || x.name === "video" ||
                 x.name === "upload" || x.name === "file" || x.name === "filename"
               );
               if (wPriority && wPriority.value && typeof wPriority.value === "string") {
@@ -2194,6 +2188,7 @@ function mountDirectorUI(node) {
       const validIds = new Set();
       discoveredRefs.forEach((d) => { validIds.add(d.id); if (d.alt_id) validIds.add(d.alt_id); });
       customRefs.forEach((c) => validIds.add(c.id));
+      (timelineState.references || []).forEach(r => { validIds.add(r.id); if (r.alt_id) validIds.add(r.alt_id); });
 
       (timelineState.clips || []).forEach((c) => {
         if (Array.isArray(c.ref_ids)) {
@@ -2254,18 +2249,7 @@ function mountDirectorUI(node) {
           });
           if (!Array.isArray(timelineState.refmods)) timelineState.refmods = [];
           if (!Array.isArray(timelineState.available_refs)) {
-            timelineState.available_refs = [
-              { id: "img_1", name: "Character 1", type: "image" },
-              { id: "img_2", name: "Character 2", type: "image" },
-              { id: "img_3", name: "Setting / Environment", type: "image" },
-              { id: "img_4", name: "Prop / Object", type: "image" },
-              { id: "vid_1", name: "Video 1", type: "video" },
-              { id: "vid_2", name: "Video 2", type: "video" },
-              { id: "aud_1", name: "Dialogue 1", type: "audio" },
-              { id: "aud_2", name: "Soundtrack 1", type: "audio" },
-              { id: "mod_1", name: "Character Concept 1", type: "refmod" },
-              { id: "mod_2", name: "Character Concept 2", type: "refmod" },
-            ];
+            timelineState.available_refs = [];
           }
         }
       }
@@ -2289,15 +2273,35 @@ function mountDirectorUI(node) {
   loadState();
 
   const syncState = () => {
+    timelineState.project_id ||= node.id >= 0 ? String(node.id) : `project_${crypto.randomUUID()}`;
     if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
     if (builderWidget) builderWidget.value = JSON.stringify(builderState);
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
     if (app.graph && app.graph.setDirtyCanvas) app.graph.setDirtyCanvas(true, true);
   };
 
+  const mediaUrl = (filename) => {
+    const parts = String(filename).replaceAll("\\", "/").split("/");
+    return api.apiURL(`/view?${new URLSearchParams({ filename: parts.pop(), subfolder: parts.join("/"), type: "input" })}`);
+  };
+  const refreshFileRefs = () => {
+    const files = (timelineState.references || []).map(row => ({ ...row, url: mediaUrl(row.filename) }));
+    timelineState.available_refs = [...new Map([...(timelineState.available_refs || []), ...files].map(row => [row.id, row])).values()];
+  };
+  const requestJson = async (url, body) => {
+    const response = await api.fetchApi(url, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+    return result;
+  };
+
+  syncState();
+
   // Create modern timeline root element
   const root = document.createElement("div");
   root.className = "mmx-director-root";
+  node.__mmxLocaleCleanup?.();
+  node.__mmxLocaleCleanup = installLocale(root);
 
   // 1. LTX Director Style Top Toolbar
   const toolbar = document.createElement("div");
@@ -2337,12 +2341,13 @@ function mountDirectorUI(node) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          project_id: String(node.id || "default"),
-          timeline: timelineState,
+          project_id: timelineState.project_id || String(node.id ?? "default_director"),
+          timeline: { ...timelineState, builder_state: builderWidget?.value || "{}" },
           name: "MiniMaxProject",
         }),
       });
       const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Project export failed");
       if (data.ok) {
         const blob = new Blob([JSON.stringify(data.project, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -2365,7 +2370,7 @@ function mountDirectorUI(node) {
   importBtn.onclick = () => {
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = ".json,.mmxproj";
+    fileInput.accept = ".json";
     fileInput.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -2378,15 +2383,20 @@ function mountDirectorUI(node) {
           body: JSON.stringify({ project: projectData }),
         });
         const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Project import failed");
         if (data.ok && data.timeline) {
-          timelineState = { ...timelineState, ...data.timeline };
+          const policy = prompt("Import policy: append or overwrite", "overwrite"); if (!policy) return;
+          const merged = await requestJson("/minimax_director/project/merge", {current:timelineState,incoming:data.timeline,policy});
+          timelineState = merged.timeline;
+          if (timelineState.builder_state !== undefined) builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state;
+          if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
           // Unify REF2V into REF2VA
           if (Array.isArray(timelineState.clips)) {
             timelineState.clips.forEach((c) => {
               if (c.type === "REF2V") c.type = "REF2VA";
             });
           }
-          syncState();
+          refreshFileRefs(); syncState();
           renderTimeline();
           alert("Project imported successfully!");
         }
@@ -2397,6 +2407,227 @@ function mountDirectorUI(node) {
     fileInput.click();
   };
   toolbarLeft.appendChild(importBtn);
+
+  const selectionLabel = document.createElement("label");
+  selectionLabel.style.cssText = "display:flex;gap:6px;align-items:center;font-size:11px";
+  const runSelection = document.createElement("input");
+  runSelection.type = "checkbox";
+  runSelection.checked = !!timelineState.run_selection;
+  runSelection.onchange = () => { timelineState.run_selection = runSelection.checked; syncState(); };
+  selectionLabel.append(runSelection, document.createTextNode("Generate selected shots"));
+  selectionLabel.title = "Other shots reuse matching cache or their original source video.";
+  toolbarLeft.appendChild(selectionLabel);
+  const progressLabel = document.createElement("span"); progressLabel.style.fontSize = "11px"; toolbarLeft.appendChild(progressLabel);
+
+  const projectTools = document.createElement("details");
+  const projectHeading = document.createElement("summary"); projectHeading.textContent = "Project tools";
+  projectTools.appendChild(projectHeading); toolbarLeft.appendChild(projectTools);
+  const addProjectAction = (label, handler) => {
+    const button = document.createElement("button"); button.textContent = label;
+    button.onclick = async () => { button.disabled = true; try { await handler(); } catch (error) { alert(error.message); } finally { button.disabled = false; } };
+    projectTools.appendChild(button);
+  };
+  addProjectAction("Create project exporter", async () => {
+    const exporter = LiteGraph.createNode("MiniMaxH3ProjectVideo");
+    if (!exporter) throw new Error("Project Video node is unavailable; reload ComfyUI after installing the update.");
+    exporter.pos = [(node.pos?.[0] || 0) + (node.size?.[0] || 1200) + 40, node.pos?.[1] || 0];
+    app.graph.add(exporter); node.connect(9, exporter, 0);
+  });
+  addProjectAction("Clear current project cache", async () => {
+    if (!confirm("Delete saved takes and cached outputs for this project? Uploaded reference files are retained.")) return;
+    await requestJson("/minimax_director/project/clear_cache", {project_id: timelineState.project_id});
+    timelineState.clips.forEach(shot => { shot.validated = false; }); syncState(); renderTimeline();
+  });
+  addProjectAction("Export with media", async () => {
+    const response = await api.fetchApi("/minimax_director/project/portable/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: timelineState.project_id, timeline: { ...timelineState, builder_state: builderState } }) });
+    if (!response.ok) throw new Error((await response.json()).error || "Export failed");
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a"); link.href = url; link.download = "MiniMaxProject.mmxproj"; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  addProjectAction("Import media pack", async () => {
+    const input = document.createElement("input"); input.type = "file"; input.accept = ".mmxproj,.zip";
+    input.onchange = async () => {
+      try {
+        if (!input.files?.[0]) return;
+        const data = new FormData(); data.append("project", input.files[0]);
+        const response = await api.fetchApi("/minimax_director/project/portable/import", { method: "POST", body: data });
+        const result = await response.json(); if (!response.ok) throw new Error(result.error || "Import failed");
+        const policy = prompt("Import policy: append or overwrite", "append"); if (!policy) return;
+        const merged = await requestJson("/minimax_director/project/merge", { current: timelineState, incoming: result.timeline, policy });
+        timelineState = { ...merged.timeline, project_id: timelineState.project_id };
+        if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
+        builderState = timelineState.builder_state || builderState; refreshFileRefs(); syncState(); renderTimeline();
+      } catch (error) { alert(error.message); }
+    }; input.click();
+  });
+  addProjectAction("Recover saved run", async () => {
+    const result = await requestJson(`/minimax_director/project/recover?project_id=${encodeURIComponent(timelineState.project_id || "default_director")}`);
+    timelineState = result.timeline; builderState = timelineState.builder_state || builderState;
+    refreshFileRefs(); syncState(); renderTimeline();
+  });
+  addProjectAction("Choose saved take for continuation", async () => {
+    const rows = await requestJson(`/minimax_director/project/takes?project_id=${encodeURIComponent(timelineState.project_id || "default_director")}`);
+    const panel = document.createElement("details"); panel.open = true;
+    const heading = document.createElement("summary"); heading.textContent = "Saved takes — choose explicitly"; panel.appendChild(heading);
+    for (const take of rows) {
+      const button = document.createElement("button");
+      button.textContent = `${take.clip_id} · seed ${take.seed || "unknown"} · ${new Date(take.updated_at*1000).toLocaleString()}`;
+      button.title = take.take_id;
+      button.onclick = () => {
+        const checkpoint = LiteGraph.createNode("MiniMaxH3Checkpoint");
+        if (!checkpoint) { alert("Checkpoint node is unavailable; restart ComfyUI after installing this version."); return; }
+        app.graph.add(checkpoint); checkpoint.pos = [node.pos[0]-340, node.pos[1]];
+        for (const [name, value] of Object.entries({ project_id: timelineState.project_id || "default_director", clip_id: take.clip_id, take_id: take.take_id })) {
+          const widget = checkpoint.widgets?.find(value => value.name === name); if (widget) widget.value = value;
+        }
+        const target = node.inputs?.findIndex(input => input.name === "continuation");
+        if (target >= 0) checkpoint.connect(0, node, target);
+        app.graph.setDirtyCanvas(true,true); panel.remove();
+      }; panel.appendChild(button);
+    }
+    if (!rows.length) panel.appendChild(document.createTextNode("No completed takes saved for this project."));
+    projectTools.appendChild(panel);
+  });
+  addProjectAction("New project", async () => {
+    timelineState = { version: 2, project_id: `project_${crypto.randomUUID()}`, clips: [{ id: "clip_1", name: "Shot 1", type: "T2V", duration: 5, prompt: "", seed: "0" }], references: [] };
+    builderState = {}; activeClipId = "clip_1"; syncState(); renderTimeline();
+  });
+  const sharedPrompt = document.createElement("textarea"); sharedPrompt.placeholder = "Shared prompt for every shot";
+  sharedPrompt.value = timelineState.shared_prompt || "";
+  sharedPrompt.onchange = () => { timelineState.shared_prompt = sharedPrompt.value; syncState(); };
+  projectTools.appendChild(sharedPrompt);
+  const fadeLabel = document.createElement("label"); fadeLabel.textContent = "Audio seam fade (ms) ";
+  const fade = document.createElement("input"); fade.type = "number"; fade.min = "0"; fade.max = "1000"; fade.value = timelineState.audio_fade_ms ?? 15;
+  fade.onchange = () => { timelineState.audio_fade_ms = Math.max(0,Math.min(1000,Number(fade.value)||0)); syncState(); }; fadeLabel.appendChild(fade); projectTools.appendChild(fadeLabel);
+  const gainLabel = document.createElement("label"); const gain = document.createElement("input"); gain.type = "checkbox"; gain.checked = timelineState.audio_gain_match ?? true;
+  gain.onchange = () => { timelineState.audio_gain_match = gain.checked; syncState(); }; gainLabel.append(gain,document.createTextNode("Match audio gain between shots")); projectTools.appendChild(gainLabel);
+  addProjectAction("Continue existing video", async () => {
+    const input = document.createElement("input"); input.type = "file"; input.accept = "video/*";
+    input.onchange = async () => {
+      try {
+        if (!input.files?.[0]) return;
+        const data = new FormData(); data.append("image", input.files[0]); data.append("type", "input");
+        const response = await api.fetchApi("/minimax_director/media/upload", { method: "POST", body: data });
+        const result = await response.json(); if (!response.ok || !result.name) throw new Error(result.error || "Upload failed");
+        const filename = [result.subfolder, result.name].filter(Boolean).join("/");
+        const info = await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
+        if (!(info.duration > 0)) throw new Error("Source duration is unavailable; enter a source range manually.");
+        const source = { id: `source_${crypto.randomUUID()}`, name: "Original video (locked)", type: "V2V", source: { filename },
+          duration: info.duration, source_start: 0, source_end: info.duration, locked: true, selected: false, audio_mode: "source", continuity: false };
+        timelineState.clips.unshift(source); timelineState.source_size = [info.width, info.height];
+        activeClipId = timelineState.clips[1]?.id || source.id; syncState(); renderTimeline();
+      } catch (error) { alert(error.message); }
+    }; input.click();
+  });
+  const canvasMode = document.createElement("select");
+  for (const mode of ["config", "original", "auto", "manual"]) { const option = document.createElement("option"); option.value = mode; option.textContent = `Canvas: ${mode}`; canvasMode.appendChild(option); }
+  canvasMode.value = timelineState.resolution?.mode || "config";
+  canvasMode.onchange = () => { if (canvasMode.value === "config") delete timelineState.resolution; else timelineState.resolution = { ...(timelineState.resolution || {}), mode: canvasMode.value }; syncState(); };
+  projectTools.appendChild(canvasMode);
+  for (const [key, placeholder, fallback] of [["width", "Manual width", 1344], ["height", "Manual height", 768], ["megapixels", "Auto megapixels", 1]]) {
+    const input = document.createElement("input"); input.type = "number"; input.placeholder = placeholder; input.value = timelineState.resolution?.[key] ?? fallback;
+    input.onchange = () => { timelineState.resolution ||= { mode: "manual" }; timelineState.resolution[key] = Number(input.value); syncState(); }; projectTools.appendChild(input);
+  }
+  const aspect = document.createElement("select");
+  for (const value of ["auto", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; aspect.appendChild(option); }
+  aspect.value = timelineState.resolution?.aspect || "16:9";
+  aspect.onchange = () => { timelineState.resolution ||= { mode: "auto" }; timelineState.resolution.aspect = aspect.value; syncState(); }; projectTools.appendChild(aspect);
+  const sharedPolicy = document.createElement("select");
+  for (const value of ["prepend", "append"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; sharedPolicy.appendChild(option); }
+  sharedPolicy.value = timelineState.shared_prompt_policy || "prepend";
+  sharedPolicy.onchange = () => { timelineState.shared_prompt_policy = sharedPolicy.value; syncState(); }; projectTools.appendChild(sharedPolicy);
+
+  const forgePanel = document.createElement("details"); const forgeHeading = document.createElement("summary"); forgeHeading.textContent = "Prompt Forge — draft and review";
+  forgePanel.appendChild(forgeHeading); projectTools.appendChild(forgePanel);
+  const forgeBackend = document.createElement("select");
+  for (const value of ["ollama", "compatible", "local"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; forgeBackend.appendChild(option); }
+  const localBackend = document.createElement("select");
+  for (const value of ["transformers","gguf"]) { const option = document.createElement("option"); option.value = value; option.textContent = `Local: ${value}`; localBackend.appendChild(option); }
+  const localProjection = document.createElement("input"); localProjection.placeholder = "GGUF vision projection in models/LLM (optional)";
+  const forgeEndpoint = document.createElement("input"); forgeEndpoint.placeholder = "Provider endpoint"; forgeEndpoint.value = "http://localhost:11434";
+  const forgeModel = document.createElement("input"); forgeModel.placeholder = "Model name";
+  const forgeKey = document.createElement("input"); forgeKey.type = "password"; forgeKey.placeholder = "API key (kept in this panel only)";
+  const forgeCount = document.createElement("input"); forgeCount.type = "number"; forgeCount.min = "1"; forgeCount.max = "100"; forgeCount.value = "1";
+  const forgeInstruction = document.createElement("textarea"); forgeInstruction.placeholder = "Describe the shots, identities and details to retain";
+  const forgeVision = document.createElement("input"); forgeVision.type = "checkbox";
+  const visionLabel = document.createElement("label"); visionLabel.append(forgeVision, document.createTextNode("Include uploaded visual references for vision review"));
+  const forgeReview = document.createElement("div");
+  let reviewedDraft = null;
+  const drawDraft = draft => {
+    reviewedDraft = draft; forgeReview.replaceChildren();
+    draft.shots.forEach((shot,index) => {
+      const card = document.createElement("fieldset");
+      const heading = document.createElement("legend"); heading.textContent = `Shot ${index+1}`; card.appendChild(heading);
+      const prompt = document.createElement("textarea"); prompt.value = shot.prompt; prompt.style.cssText = "display:block;width:95%;min-height:80px";
+      prompt.oninput = () => { shot.prompt = prompt.value; }; card.appendChild(prompt);
+      const duration = document.createElement("input"); duration.type = "number"; duration.min = ".01"; duration.max = "150"; duration.step = ".01"; duration.value = shot.duration || 5;
+      duration.onchange = () => { shot.duration = Number(duration.value); }; card.appendChild(duration);
+      const mode = document.createElement("select");
+      for (const value of ["T2VA","I2VA","FL2VA","L2VA","REF2VA","V2V","RV2V","Image Inpaint"]) {
+        const option = document.createElement("option"); option.value = value; option.textContent = value; mode.appendChild(option);
+      }
+      mode.value = shot.type || "T2VA"; mode.onchange = () => { shot.type = mode.value; }; card.appendChild(mode);
+      forgeReview.appendChild(card);
+    });
+  };
+  const forgeDraft = document.createElement("button"); forgeDraft.textContent = "Create draft";
+  forgeDraft.onclick = async () => {
+    forgeDraft.disabled = true;
+    try {
+      const result = await requestJson("/minimax_director/forge/draft", { timeline: timelineState, instruction: forgeInstruction.value,
+        backend: forgeBackend.value, endpoint: forgeEndpoint.value, model: forgeModel.value, api_key: forgeKey.value, count: Number(forgeCount.value),
+        local_backend: localBackend.value, projection: localProjection.value,
+        vision_ids: forgeVision.checked ? (timelineState.references || []).filter(row => ["image", "video"].includes(row.type)).map(row => row.id) : [] });
+      drawDraft(result);
+    } catch (error) { alert(error.message); } finally { forgeDraft.disabled = false; }
+  };
+  const forgeApply = document.createElement("button"); forgeApply.textContent = "Apply reviewed draft";
+  forgeApply.onclick = async () => {
+    try {
+      const draft = reviewedDraft; if (!draft) throw new Error("Create a draft before applying.");
+      const result = await requestJson("/minimax_director/forge/apply", { timeline: timelineState, draft });
+      timelineState = result.timeline; syncState(); renderTimeline();
+    } catch (error) { alert(error.message); }
+  };
+  forgePanel.append(forgeBackend, forgeEndpoint, forgeModel, forgeKey, localBackend, localProjection, forgeCount, forgeInstruction, visionLabel, forgeDraft, forgeReview, forgeApply);
+
+  const refmodLibrary = document.createElement("details"); const refmodHeading = document.createElement("summary"); refmodHeading.textContent = "RefMod library and descriptions";
+  refmodLibrary.appendChild(refmodHeading); projectTools.appendChild(refmodLibrary);
+  const refmodRows = document.createElement("div"); refmodLibrary.appendChild(refmodRows);
+  let refmodCatalog = [];
+  const drawRefmods = () => {
+    refmodRows.replaceChildren();
+    for (const row of timelineState.refmods || []) {
+      const card = document.createElement("fieldset");
+      const legend = document.createElement("legend"); legend.textContent = `<RefMod ${row.slot}>`; card.appendChild(legend);
+      const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.checked = row.enabled !== false;
+      enabled.onchange = () => { row.enabled = enabled.checked; syncState(); }; card.appendChild(enabled);
+      const name = document.createElement("select");
+      for (const entry of [{ name: row.name || "", description: "Select RefMod" }, ...refmodCatalog.filter(entry => entry.name !== row.name)]) {
+        const option = document.createElement("option"); option.value = entry.name; option.textContent = `${entry.name || "Select RefMod"} ${entry.kind || ""}`; option.title = entry.description || ""; name.appendChild(option);
+      }
+      name.value = row.name || "";
+      name.onchange = () => { row.name = name.value; row.description ||= refmodCatalog.find(entry => entry.name === row.name)?.description || ""; syncState(); drawRefmods(); }; card.appendChild(name);
+      const description = document.createElement("textarea"); description.placeholder = "Description saved with this workflow"; description.value = row.description || "";
+      description.onchange = () => { row.description = description.value; syncState(); }; card.appendChild(description);
+      const strength = document.createElement("input"); strength.type = "number"; strength.min = "0"; strength.max = "1"; strength.step = ".05"; strength.value = row.strength ?? 1;
+      strength.onchange = () => { row.strength = Number(strength.value); syncState(); }; card.appendChild(strength);
+      const remove = document.createElement("button"); remove.textContent = "Remove"; remove.onclick = () => { timelineState.refmods = timelineState.refmods.filter(item => item !== row); syncState(); drawRefmods(); }; card.appendChild(remove);
+      refmodRows.appendChild(card);
+    }
+  };
+  refmodLibrary.ontoggle = async () => {
+    if (!refmodLibrary.open) return;
+    try { refmodCatalog = await requestJson("/minimax_director/refmods"); drawRefmods(); }
+    catch (error) { refmodRows.textContent = error.message; }
+  };
+  const addRefmod = document.createElement("button"); addRefmod.textContent = "Add RefMod";
+  addRefmod.onclick = () => {
+    const used = new Set((timelineState.refmods || []).map(row => row.slot)); const slot = Array.from({length:8},(_,i)=>i+1).find(value => !used.has(value));
+    if (!slot) return;
+    (timelineState.refmods ||= []).push({ slot, name: "", description: "", strength: 1, enabled: true }); syncState(); drawRefmods();
+  }; refmodLibrary.appendChild(addRefmod); drawRefmods();
 
   // Helper: Deep Clone / Duplicate Clip
   const duplicateClip = (clipToClone) => {
@@ -2511,6 +2742,9 @@ function mountDirectorUI(node) {
 
   previewModeSelect.appendChild(optFull);
   previewModeSelect.appendChild(optUnval);
+  const optSelected = document.createElement("option");
+  optSelected.value = "selected"; optSelected.textContent = "Selected shots";
+  previewModeSelect.appendChild(optSelected);
 
   previewModeSelect.value = timelineState.preview_mode || "full";
   previewModeSelect.onchange = () => {
@@ -2802,6 +3036,18 @@ function mountDirectorUI(node) {
             </span>
             <span class="mmx-type-modal-btn-desc">Full multi-modal reference generation with character identity images, audio tracks, and RefMods.</span>
           </button>
+          <button class="mmx-type-modal-btn" data-type="L2VA">
+            <span class="mmx-type-modal-btn-title">L2VA · Last Frame</span>
+            <span class="mmx-type-modal-btn-desc">Generate a take ending at the selected image.</span>
+          </button>
+          <button class="mmx-type-modal-btn" data-type="RV2V">
+            <span class="mmx-type-modal-btn-title">RV2V · Reference Video Edit</span>
+            <span class="mmx-type-modal-btn-desc">Guide a source video using additional image and audio references.</span>
+          </button>
+          <button class="mmx-type-modal-btn" data-type="Image Inpaint">
+            <span class="mmx-type-modal-btn-title">Image Inpaint · Still Image</span>
+            <span class="mmx-type-modal-btn-desc">One reference image, a five-frame H3 pass, and one generated output image.</span>
+          </button>
         </div>
       </div>
     `;
@@ -2864,11 +3110,11 @@ function mountDirectorUI(node) {
     panel.style.maxWidth = "600px";
     panel.innerHTML = `
       <div class="mmx-modal-header">
-        <span class="mmx-modal-title">🎬 Video Preview: ${videoName || "Reference Video"}</span>
+        <span class="mmx-modal-title">🎬 Video Preview: ${escapeHtml(videoName || "Reference Video")}</span>
         <button class="mmx-action-btn" id="vid-modal-close-btn">✕</button>
       </div>
       <div class="mmx-modal-body" style="padding: 10px 0;">
-        <video src="${videoUrl}" controls autoplay style="width: 100%; max-height: 400px; border-radius: 6px; background: #000;"></video>
+        <video src="${escapeHtml(videoUrl)}" controls autoplay style="width: 100%; max-height: 400px; border-radius: 6px; background: #000;"></video>
       </div>
     `;
     document.body.appendChild(backdrop);
@@ -2940,6 +3186,7 @@ function mountDirectorUI(node) {
 
   // Render Multi-Track Timeline & Clips
   const renderTimeline = () => {
+    refreshFileRefs();
     shotsLane.innerHTML = "";
     imagesLane.innerHTML = "";
     videosLane.innerHTML = "";
@@ -3094,7 +3341,7 @@ function mountDirectorUI(node) {
           clip.duration = newDur;
           durTag.textContent = `${newDur.toFixed(1)}s`;
           const newWidth = Math.max(160, Math.min(450, Math.round(newDur * 32 * zoomLevel)));
-          
+
           // Synchronously resize all 4 track blocks in real time!
           shotBlock.style.width = `${newWidth}px`;
           imgBlock.style.width = `${newWidth}px`;
@@ -3145,14 +3392,14 @@ function mountDirectorUI(node) {
             cell.innerHTML = `
               <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: linear-gradient(135deg, #1e1b4b, #312e81); padding: 2px; text-align: center;">
                 <span style="font-size: 10px;">💎</span>
-                <span style="font-size: 8px; font-weight: 700; color: #fde68a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${r.name}</span>
+                <span style="font-size: 8px; font-weight: 700; color: #fde68a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${escapeHtml(r.name)}</span>
               </div>
             `;
           } else {
             cell.innerHTML = `
               <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: #1e293b; padding: 2px; text-align: center;">
                 <span style="font-size: 10px;">🖼️</span>
-                <span style="font-size: 8px; font-weight: 600; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${r.name}</span>
+                <span style="font-size: 8px; font-weight: 600; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${escapeHtml(r.name)}</span>
               </div>
             `;
           }
@@ -3206,7 +3453,7 @@ function mountDirectorUI(node) {
             cell.innerHTML = `
               <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: linear-gradient(135deg, #2e1065, #4c1d95); text-align: center;">
                 <span style="font-size: 11px;">🎬</span>
-                <span style="font-size: 8px; font-weight: 600; color: #ddd6fe; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${r.name}</span>
+                <span style="font-size: 8px; font-weight: 600; color: #ddd6fe; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${escapeHtml(r.name)}</span>
               </div>
             `;
           }
@@ -3256,6 +3503,8 @@ function mountDirectorUI(node) {
 
           let audioPlayer = null;
           let isPlaying = false;
+          let wavePeaks = [];
+          if (r.filename) requestJson(`/minimax_director/media/waveform?filename=${encodeURIComponent(r.filename)}`).then(data => { wavePeaks = data.peaks; renderWave(); }).catch(error => { waveCanvas.title = error.message; });
 
           const renderWave = (progress = 0) => {
             const ctx = waveCanvas.getContext("2d");
@@ -3265,7 +3514,7 @@ function mountDirectorUI(node) {
             ctx.clearRect(0, 0, cw, ch);
             const bars = Math.max(10, Math.floor(cw / 3));
             for (let b = 0; b < bars; b++) {
-              const norm = Math.sin(b * 0.5) * 0.4 + Math.cos(b * 0.2) * 0.3 + 0.5;
+              const norm = wavePeaks.length ? wavePeaks[Math.min(wavePeaks.length-1, Math.floor(b/bars*wavePeaks.length))] : 0;
               const bh = Math.max(2, norm * (ch - 4));
               const bx = b * 3;
               const by = (ch - bh) / 2;
@@ -3392,6 +3641,9 @@ function mountDirectorUI(node) {
       { id: "FL2V", label: "FL2V (First & Last Frame)" },
       { id: "V2V", label: "V2V (Video to Video)" },
       { id: "REF2VA", label: "REF2VA (Ref to Video + Audio)" },
+      { id: "L2VA", label: "L2VA (Last Frame)" },
+      { id: "RV2V", label: "RV2V (Reference Video Edit)" },
+      { id: "Image Inpaint", label: "Image Inpaint (Single Image)" },
     ];
     modes.forEach((m) => {
       const opt = document.createElement("option");
@@ -3413,6 +3665,13 @@ function mountDirectorUI(node) {
     headerActions.style.display = "flex";
     headerActions.style.alignItems = "center";
     headerActions.style.gap = "8px";
+
+    const selectedLabel = document.createElement("label");
+    const selected = document.createElement("input");
+    selected.type = "checkbox"; selected.checked = activeClip.selected !== false;
+    selected.onchange = () => { activeClip.selected = selected.checked; syncState(); };
+    selectedLabel.append(selected, document.createTextNode("Selected"));
+    headerActions.appendChild(selectedLabel);
 
     // 1. Validated Toggle Badge in Header (Prevents re-generation, reuses cached output)
     const valBtn = document.createElement("div");
@@ -3465,6 +3724,399 @@ function mountDirectorUI(node) {
     const cardsGrid = document.createElement("div");
     cardsGrid.className = "mmx-inspector-cards-grid";
     inspector.appendChild(cardsGrid);
+
+    const audioLabel = document.createElement("label");
+    audioLabel.textContent = "Shot audio: ";
+    const audioMode = document.createElement("select");
+    for (const [value, label] of [["generate", "Generate"], ["source", "Keep source audio"], ["mute", "Mute"]]) {
+      const option = document.createElement("option"); option.value = value; option.textContent = label;
+      audioMode.appendChild(option);
+    }
+    audioMode.value = activeClip.audio_mode || "generate";
+    audioMode.onchange = () => { activeClip.audio_mode = audioMode.value; syncState(); };
+    audioLabel.appendChild(audioMode); inspector.appendChild(audioLabel);
+
+    const referencePanel = document.createElement("details");
+    const referenceHeading = document.createElement("summary"); referenceHeading.textContent = "Upload and edit references";
+    referencePanel.appendChild(referenceHeading); inspector.appendChild(referencePanel);
+    const uploadReferences = async (files, replace = null) => {
+      for (const file of files) {
+        const data = new FormData(); data.append("image", file); data.append("type", "input");
+        const response = await api.fetchApi("/minimax_director/media/upload", { method: "POST", body: data });
+        const result = await response.json(); if (!response.ok || !result.name) throw new Error(result.error || "Reference upload failed");
+        const filename = [result.subfolder, result.name].filter(Boolean).join("/");
+        const type = result.media_type || (file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "image");
+        const row = replace || { id: `upload_${crypto.randomUUID()}`, name: file.name, role: "subject", description: "" };
+        Object.assign(row, { filename, type });
+        if (!replace) {
+          (timelineState.references ||= []).push(row);
+          (activeClip.ref_ids ||= []).push(row.id);
+        }
+        activeClip.validated = false;
+      }
+      refreshFileRefs(); syncState(); renderTimeline();
+    };
+    modeSelect.disabled = !!activeClip.locked;
+    const referenceUpload = document.createElement("input"); referenceUpload.type = "file"; referenceUpload.multiple = true;
+    referenceUpload.accept = "image/*,video/*,audio/*";
+    referenceUpload.onchange = () => uploadReferences(referenceUpload.files || []).catch(error => alert(error.message));
+    referencePanel.appendChild(referenceUpload);
+    referencePanel.ondragover = event => { event.preventDefault(); };
+    referencePanel.ondrop = event => { event.preventDefault(); event.stopPropagation(); uploadReferences(event.dataTransfer.files || []).catch(error => alert(error.message)); };
+    referencePanel.onpaste = event => {
+      const files = Array.from(event.clipboardData?.items || []).filter(item => item.kind === "file").map(item => item.getAsFile()).filter(Boolean);
+      if (files.length) { event.preventDefault(); uploadReferences(files).catch(error => alert(error.message)); }
+    };
+    for (const row of timelineState.references || []) {
+      const card = document.createElement("fieldset"); const title = document.createElement("legend"); title.textContent = row.name || row.filename; card.appendChild(title);
+      const shared = document.createElement("input"); shared.type = "checkbox"; shared.checked = (timelineState.shared_ref_ids || []).includes(row.id);
+      shared.onchange = () => { timelineState.shared_ref_ids = shared.checked ? [...new Set([...(timelineState.shared_ref_ids || []), row.id])] : (timelineState.shared_ref_ids || []).filter(id => id !== row.id); syncState(); };
+      const sharedLabel = document.createElement("label"); sharedLabel.append(shared, document.createTextNode("Shared across shots")); card.appendChild(sharedLabel);
+      const role = document.createElement("select");
+      for (const value of ["subject", "place", "style", "keyframe", "pose", "custom"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; role.appendChild(option); }
+      role.value = row.role || "subject"; role.onchange = () => { row.role = role.value; syncState(); }; card.appendChild(role);
+      const description = document.createElement("input"); description.placeholder = "Reference description"; description.value = row.description || "";
+      description.onchange = () => { row.description = description.value; syncState(); }; card.appendChild(description);
+      if (row.type === "video") {
+        const mediaMode = document.createElement("select");
+        for (const value of ["video", "audio", "both"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; mediaMode.appendChild(option); }
+        mediaMode.value = row.media_mode || "video"; mediaMode.onchange = () => { row.media_mode = mediaMode.value; syncState(); }; card.appendChild(mediaMode);
+      }
+      const preview = document.createElement(row.type === "image" ? "img" : row.type === "video" ? "video" : "audio");
+      preview.src = mediaUrl(row.filename); preview.style.cssText = "display:block;max-height:160px;max-width:100%;margin:6px 0";
+      if (row.type !== "image") {
+        preview.controls = true;
+        preview.ontimeupdate = () => { if (row.end != null && preview.currentTime >= row.end) { preview.pause(); preview.currentTime = row.start || 0; } };
+        preview.onplay = () => { if (preview.currentTime < (row.start || 0)) preview.currentTime = row.start || 0; };
+      }
+      card.appendChild(preview);
+      if (row.type !== "image") for (const key of ["start", "end"]) {
+        const label = document.createElement("label"); label.textContent = `${key} (s): `;
+        const value = document.createElement("input"); value.type = "number"; value.min = "0"; value.step = ".01"; value.style.width = "70px"; value.value = row[key] ?? "";
+        value.onchange = () => { row[key] = value.value === "" ? undefined : Number(value.value); syncState(); };
+        label.appendChild(value); card.appendChild(label);
+      }
+      if (row.type === "audio" || row.type === "video" && row.media_mode !== "video") {
+        const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 40; canvas.style.touchAction = "none"; card.appendChild(canvas);
+        requestJson(`/minimax_director/media/waveform?filename=${encodeURIComponent(row.filename)}`).then(result => {
+          const draw = () => {
+            const context = canvas.getContext("2d"); context.clearRect(0,0,256,40); context.fillStyle = "#818cf8";
+            result.peaks.forEach((value, i) => { const height = Math.max(1, value * 38); context.fillRect(i*256/result.peaks.length, 20-height/2, 256/result.peaks.length, height); });
+            const left = (row.start || 0)/result.duration*256; const right = (row.end ?? result.duration)/result.duration*256;
+            context.fillStyle = "rgba(0,0,0,.55)"; context.fillRect(0,0,left,40); context.fillRect(right,0,256-right,40);
+            context.fillStyle = "#fff"; context.fillRect(left,0,3,40); context.fillRect(right-3,0,3,40);
+          };
+          let handle = null;
+          const timeAt = event => Math.max(0, Math.min(result.duration, (event.clientX-canvas.getBoundingClientRect().left)/canvas.getBoundingClientRect().width*result.duration));
+          canvas.title = "Drag the left or right boundary to trim the reference";
+          canvas.onpointerdown = event => { event.preventDefault(); const time = timeAt(event); handle = Math.abs(time-(row.start || 0)) < Math.abs(time-(row.end ?? result.duration)) ? "start" : "end"; canvas.setPointerCapture(event.pointerId); };
+          canvas.onpointermove = event => {
+            if (!handle) return; const time = timeAt(event);
+            row[handle] = handle === "start" ? Math.min(time,(row.end ?? result.duration)-.01) : Math.max(time,(row.start || 0)+.01);
+            activeClip.validated = false; draw();
+          };
+          canvas.onpointerup = canvas.onpointercancel = () => { if (handle) { handle = null; syncState(); } };
+          draw();
+        }).catch(error => { canvas.title = error.message; });
+      }
+      if (row.type !== "audio") {
+        const scaling = document.createElement("select"); scaling.title = "Scaling";
+        for (const value of ["Off","Auto","Target","Fit","Fill and crop","Fit and pad","Divisible crop"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; scaling.appendChild(option); }
+        scaling.value = row.scaling || "Auto"; scaling.onchange = () => { row.scaling = scaling.value; activeClip.validated = false; syncState(); }; card.appendChild(scaling);
+        const bounds = document.createElement("div"); bounds.style.cssText = "position:relative;display:inline-block;max-width:100%;touch-action:none";
+        preview.style.margin = "0"; card.appendChild(bounds); bounds.appendChild(preview);
+        const selection = document.createElement("div"); selection.style.cssText = "position:absolute;border:2px solid #818cf8;box-sizing:border-box;cursor:move;touch-action:none";
+        selection.dataset.corner = "move"; bounds.appendChild(selection);
+        for (const corner of ["nw","ne","sw","se"]) {
+          const handle = document.createElement("span"); handle.dataset.corner = corner;
+          handle.style.cssText = `position:absolute;width:10px;height:10px;background:#fff;border:1px solid #818cf8;cursor:${corner}-resize;${corner.includes("n")?"top:-5px":"bottom:-5px"};${corner.includes("w")?"left:-5px":"right:-5px"}`;
+          selection.appendChild(handle);
+        }
+        const cropped = document.createElement("canvas"); cropped.style.cssText = "display:block;max-width:256px;max-height:160px;margin:6px 0"; card.appendChild(cropped);
+        const cropInputs = {};
+        const drawCrop = () => {
+          const crop = row.crop || { x:0,y:0,width:1,height:1 };
+          selection.style.left = `${crop.x*100}%`; selection.style.top = `${crop.y*100}%`;
+          selection.style.width = `${crop.width*100}%`; selection.style.height = `${crop.height*100}%`;
+          for (const [key, input] of Object.entries(cropInputs)) input.value = Math.round(crop[key]*10000)/100;
+          const sourceWidth = preview.naturalWidth || preview.videoWidth;
+          const sourceHeight = preview.naturalHeight || preview.videoHeight;
+          if (!sourceWidth || !sourceHeight) return;
+          cropped.width = Math.max(1,Math.min(256,Math.round(sourceWidth*crop.width)));
+          cropped.height = Math.max(1,Math.round(cropped.width*sourceHeight*crop.height/(sourceWidth*crop.width)));
+          const context = cropped.getContext("2d");
+          context.filter = `brightness(${2**(row.edits?.exposure || 0)}) contrast(${row.edits?.contrast ?? 1}) saturate(${row.edits?.saturation ?? 1})`;
+          try { context.drawImage(preview, crop.x*sourceWidth,crop.y*sourceHeight,crop.width*sourceWidth,crop.height*sourceHeight,0,0,cropped.width,cropped.height); } catch {}
+        };
+        const setCrop = value => {
+          const min = .001;
+          const width = Math.max(min,Math.min(1,value.width)); const height = Math.max(min,Math.min(1,value.height));
+          row.crop = { x:Math.max(0,Math.min(1-width,value.x)), y:Math.max(0,Math.min(1-height,value.y)), width,height };
+          activeClip.validated = false; drawCrop();
+        };
+        let drag = null;
+        bounds.onpointerdown = event => {
+          if (event.target !== selection && !event.target.dataset.corner) return;
+          event.preventDefault(); event.stopPropagation(); bounds.setPointerCapture(event.pointerId);
+          drag = { x:event.clientX,y:event.clientY,corner:event.target.dataset.corner || "move",crop:{ ...(row.crop || {x:0,y:0,width:1,height:1}) } };
+        };
+        bounds.onpointermove = event => {
+          if (!drag) return;
+          const rect = preview.getBoundingClientRect();
+          const dx = (event.clientX-drag.x)/rect.width; const dy = (event.clientY-drag.y)/rect.height;
+          const crop = { ...drag.crop };
+          if (drag.corner === "move") { crop.x += dx; crop.y += dy; }
+          else {
+            if (drag.corner.includes("w")) { const right = crop.x+crop.width; crop.x = Math.min(right-.001,Math.max(0,crop.x+dx)); crop.width = right-crop.x; }
+            if (drag.corner.includes("e")) crop.width = Math.max(.001,Math.min(1-crop.x,crop.width+dx));
+            if (drag.corner.includes("n")) { const bottom = crop.y+crop.height; crop.y = Math.min(bottom-.001,Math.max(0,crop.y+dy)); crop.height = bottom-crop.y; }
+            if (drag.corner.includes("s")) crop.height = Math.max(.001,Math.min(1-crop.y,crop.height+dy));
+          }
+          setCrop(crop);
+        };
+        bounds.onpointerup = bounds.onpointercancel = () => { if (drag) { drag = null; syncState(); } };
+        if (row.type === "image") preview.onload = drawCrop;
+        else {
+          preview.onloadeddata = drawCrop;
+          const timeUpdate = preview.ontimeupdate; preview.ontimeupdate = event => { timeUpdate?.(event); drawCrop(); };
+        }
+        for (const [key,label] of [["x","Left %"],["y","Top %"],["width","Width %"],["height","Height %"]]) {
+          const wrap = document.createElement("label"); wrap.textContent = label;
+          const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.max = "100"; input.step = ".1"; input.style.width = "65px";
+          input.onchange = () => { const value = Number(input.value); if (!Number.isFinite(value)) return; setCrop({ ...(row.crop || {x:0,y:0,width:1,height:1}),[key]:value/100 }); syncState(); };
+          cropInputs[key] = input; wrap.appendChild(input); card.appendChild(wrap);
+        }
+        const reset = document.createElement("button"); reset.textContent = "Reset crop"; reset.onclick = () => { delete row.crop; drawCrop(); syncState(); }; card.appendChild(reset);
+        for (const [key,label,low,high,fallback] of [["exposure","Exposure",-10,10,0],["contrast","Contrast",0,4,1],["saturation","Saturation",0,4,1]]) {
+          const wrap = document.createElement("label"); wrap.textContent = label;
+          const input = document.createElement("input"); input.type = "range"; input.min = low; input.max = high; input.step = ".05"; input.value = row.edits?.[key] ?? fallback;
+          input.oninput = () => { (row.edits ||= {})[key] = Number(input.value); drawCrop(); syncState(); };
+          wrap.appendChild(input); card.appendChild(wrap);
+        }
+        drawCrop();
+      }
+      const replace = document.createElement("button"); replace.textContent = "Replace file";
+      replace.onclick = () => { const input = document.createElement("input"); input.type = "file"; input.accept = referenceUpload.accept; input.onchange = () => uploadReferences(input.files || [], row).catch(error => alert(error.message)); input.click(); }; card.appendChild(replace);
+      const remove = document.createElement("button"); remove.textContent = "Remove reference";
+      remove.onclick = () => {
+        timelineState.references = timelineState.references.filter(value => value !== row);
+        timelineState.available_refs = (timelineState.available_refs || []).filter(value => value.id !== row.id);
+        timelineState.shared_ref_ids = (timelineState.shared_ref_ids || []).filter(id => id !== row.id);
+        for (const shot of timelineState.clips) shot.ref_ids = (shot.ref_ids || []).filter(id => id !== row.id);
+        syncState(); renderTimeline();
+      }; card.appendChild(remove); referencePanel.appendChild(card);
+    }
+
+    const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Shot models, guides and grading";
+    shotExtras.appendChild(extrasTitle); inspector.appendChild(shotExtras);
+    const modelOverride = document.createElement("input"); modelOverride.placeholder = "Named model override";
+    modelOverride.value = activeClip.model_override || "";
+    modelOverride.onchange = () => { activeClip.model_override = modelOverride.value.trim(); syncState(); };
+    shotExtras.appendChild(modelOverride);
+    const guideRows = document.createElement("div"); shotExtras.appendChild(guideRows);
+    const drawGuides = () => {
+      guideRows.replaceChildren();
+      (activeClip.guides || []).forEach((guide, index) => {
+        const line = document.createElement("div");
+        const reference = document.createElement("select");
+        for (const row of timelineState.available_refs || []) {
+          const option = document.createElement("option"); option.value = row.id; option.textContent = row.name || row.id; reference.appendChild(option);
+        }
+        reference.value = guide.ref_id || "";
+        reference.onchange = () => { guide.ref_id = reference.value; syncState(); };
+        const time = document.createElement("input"); time.type = "number"; time.min = "0"; time.step = ".041666667"; time.value = guide.time || 0; time.title = "Anchor time in seconds";
+        time.onchange = () => { guide.time = Number(time.value); syncState(); };
+        const remove = document.createElement("button"); remove.textContent = "Remove anchor";
+        remove.onclick = () => { activeClip.guides.splice(index,1); syncState(); drawGuides(); };
+        line.append(reference,time,remove); guideRows.appendChild(line);
+      });
+    };
+    const addGuide = document.createElement("button"); addGuide.textContent = "Add interior anchor";
+    addGuide.onclick = () => { (activeClip.guides ||= []).push({ ref_id: timelineState.available_refs?.[0]?.id || "", time: 0 }); syncState(); drawGuides(); };
+    shotExtras.appendChild(addGuide); drawGuides();
+    for (const [key, label, low, high, fallback] of [["exposure","Exposure",-10,10,0],["contrast","Contrast",0,4,1],["saturation","Saturation",0,4,1]]) {
+      const wrap = document.createElement("label"); wrap.textContent = label;
+      const input = document.createElement("input"); input.type = "range"; input.min = low; input.max = high; input.step = ".05"; input.value = activeClip.color?.[key] ?? fallback;
+      const value = document.createElement("span"); value.textContent = input.value;
+      input.oninput = () => { (activeClip.color ||= {})[key] = Number(input.value); value.textContent = input.value; syncState(); };
+      wrap.append(input,value); shotExtras.appendChild(wrap);
+    }
+
+    if (["V2V", "RV2V"].includes(activeClip.type)) {
+      const sourcePanel = document.createElement("fieldset");
+      const legend = document.createElement("legend"); legend.textContent = "Source video range";
+      sourcePanel.appendChild(legend); inspector.appendChild(sourcePanel);
+      const filename = document.createElement("input");
+      filename.placeholder = "Video filename in ComfyUI input";
+      filename.value = typeof activeClip.source === "string" ? activeClip.source : activeClip.source?.filename || "";
+      filename.onchange = () => { activeClip.source = { filename: filename.value.trim() }; syncState(); renderInspector(); };
+      sourcePanel.appendChild(filename);
+      const upload = document.createElement("input"); upload.type = "file"; upload.accept = "video/*";
+      upload.onchange = async () => {
+        const file = upload.files?.[0]; if (!file) return;
+        upload.disabled = true;
+        try {
+          const data = new FormData(); data.append("image", file); data.append("type", "input");
+          const response = await api.fetchApi("/minimax_director/media/upload", { method: "POST", body: data });
+          const result = await response.json();
+          if (!response.ok || !result.name) throw new Error(result.error || "Source upload failed");
+          const path = [result.subfolder, result.name].filter(Boolean).join("/");
+          activeClip.source = { filename: path }; activeClip.source_start = 0;
+          const infoResponse = await api.fetchApi(`/minimax_director/source/info?filename=${encodeURIComponent(path)}`);
+          const info = await infoResponse.json();
+          if (!infoResponse.ok) throw new Error(info.error || "Cannot inspect source video");
+          if (Number.isFinite(info.duration) && info.duration > 0) {
+            activeClip.source_end = info.duration; activeClip.duration = info.duration;
+          }
+          activeClip.validated = false; syncState(); renderTimeline();
+        } catch (error) { syncState(); alert(error.message); }
+        finally { upload.disabled = false; }
+      };
+      sourcePanel.appendChild(upload);
+      let sourcePlayer = null;
+      if (filename.value) {
+        const video = document.createElement("video"); video.controls = true; video.preload = "metadata";
+        sourcePlayer = video;
+        video.style.cssText = "display:block;max-width:100%;max-height:200px;margin:8px 0";
+        const parts = filename.value.replaceAll("\\", "/").split("/");
+        video.src = api.apiURL(`/view?${new URLSearchParams({ filename: parts.pop(), subfolder: parts.join("/"), type: "input" })}`);
+        video.onloadedmetadata = () => { video.currentTime = activeClip.source_start || 0; };
+        sourcePanel.appendChild(video);
+      }
+      for (const [key, label, fallback] of [["source_start", "Start (s)", 0], ["source_end", "End (s)", (activeClip.source_start || 0) + (activeClip.duration || 5)]]) {
+        const wrap = document.createElement("label"); wrap.textContent = `${label}: `;
+        const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "0.041666667";
+        input.value = activeClip[key] ?? fallback; input.style.width = "90px";
+        input.onchange = () => {
+          const start = key === "source_start" ? Number(input.value) : Number(activeClip.source_start || 0);
+          const end = key === "source_end" ? Number(input.value) : Number(activeClip.source_end ?? (Number(activeClip.source_start || 0) + Number(activeClip.duration || 5)));
+          if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
+            input.setCustomValidity("End must exceed start, and both must be finite non-negative seconds."); input.reportValidity(); return;
+          }
+          input.setCustomValidity(""); activeClip.source_start = start; activeClip.source_end = end;
+          activeClip.duration = end - start; activeClip.validated = false; syncState(); renderTimeline();
+        };
+        wrap.appendChild(input); sourcePanel.appendChild(wrap);
+      }
+      const split = document.createElement("button"); split.textContent = "Split into equal ranges";
+      split.onclick = () => {
+        const count = Number(prompt("Number of equal source ranges", "2"));
+        if (!Number.isInteger(count) || count < 2 || count > 100) return;
+        const start = Number(activeClip.source_start || 0);
+        const end = Number(activeClip.source_end ?? start + (activeClip.duration || 5));
+        if (!Number.isFinite(end) || end <= start) return;
+        const stamp = Date.now();
+        const shots = Array.from({ length: count }, (_, index) => ({
+          ...JSON.parse(JSON.stringify(activeClip)), id: `source_${stamp}_${index}`,
+          name: `${activeClip.name || "Source"} ${index + 1}`,
+          source_start: start + (end - start) * index / count,
+          source_end: start + (end - start) * (index + 1) / count,
+          duration: (end - start) / count, validated: false,
+        }));
+        timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...shots);
+        activeClipId = shots[0].id; syncState(); renderTimeline();
+      };
+      sourcePanel.appendChild(split);
+      const replaceSourceRanges = (cuts) => {
+        const start = Number(activeClip.source_start || 0);
+        const end = Number(activeClip.source_end ?? start+(activeClip.duration || 5));
+        cuts = [...new Set(cuts)].filter(value => Number.isFinite(value) && value > start && value < end).sort((a,b) => a-b);
+        if (!cuts.length) throw new Error("No split boundaries lie inside this source range.");
+        const bounds = [start, ...cuts, end];
+        const shots = bounds.slice(0,-1).map((value,index) => ({ ...JSON.parse(JSON.stringify(activeClip)),
+          id: `source_${crypto.randomUUID()}`, name: `${activeClip.name || "Source"} ${index+1}`, source_start: value,
+          source_end: bounds[index+1], duration: bounds[index+1]-value, validated: false, locked: false }));
+        timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...shots);
+        activeClipId = shots[0].id; syncState(); renderTimeline();
+      };
+      const splitAtCursor = document.createElement("button"); splitAtCursor.textContent = "Split at playhead";
+      splitAtCursor.onclick = () => { try { replaceSourceRanges([sourcePlayer?.currentTime || 0]); } catch (error) { alert(error.message); } }; sourcePanel.appendChild(splitAtCursor);
+      const smart = document.createElement("button"); smart.textContent = "Detect scene boundaries";
+      smart.onclick = async () => {
+        smart.disabled = true;
+        try {
+          const result = await requestJson("/minimax_director/smart_split", { filename: filename.value, threshold: 27 });
+          if (!result.ok) throw new Error(result.error || "Scene detection failed");
+          replaceSourceRanges(result.scenes.map(scene => scene.start));
+        } catch (error) { alert(error.message); } finally { smart.disabled = false; }
+      }; sourcePanel.appendChild(smart);
+      const merge = document.createElement("button"); merge.textContent = "Remove next boundary / merge";
+      merge.onclick = () => {
+        const index = timelineState.clips.indexOf(activeClip); const next = timelineState.clips[index+1];
+        const nextFile = typeof next?.source === "string" ? next.source : next?.source?.filename;
+        if (!next || nextFile !== filename.value || Math.abs(Number(activeClip.source_end)-Number(next.source_start)) > 1/24) { alert("The next shot must use the same source and a contiguous range."); return; }
+        activeClip.source_end = next.source_end; activeClip.duration = activeClip.source_end-(activeClip.source_start || 0);
+        activeClip.prompt = [activeClip.prompt, next.prompt].filter(Boolean).join("\n");
+        activeClip.ref_ids = [...new Set([...(activeClip.ref_ids || []), ...(next.ref_ids || [])])];
+        activeClip.validated = false; timelineState.clips.splice(index+1,1); syncState(); renderTimeline();
+      }; sourcePanel.appendChild(merge);
+      const pickFrame = document.createElement("button"); pickFrame.textContent = "Use source frame as reference";
+      pickFrame.onclick = async () => {
+        try {
+          const result = await requestJson("/minimax_director/media/frame", { filename: filename.value, time: sourcePlayer?.currentTime || 0 });
+          const row = { id: `upload_${crypto.randomUUID()}`, type: "image", filename: result.filename, name: "Source frame", role: "keyframe" };
+          (timelineState.references ||= []).push(row); (activeClip.ref_ids ||= []).push(row.id); refreshFileRefs(); syncState(); renderTimeline();
+        } catch (error) { alert(error.message); }
+      }; sourcePanel.appendChild(pickFrame);
+      if (activeClip.locked) for (const control of sourcePanel.querySelectorAll("input,button")) control.disabled = control !== pickFrame;
+    }
+
+    const loraPanel = document.createElement("details");
+    const loraHeading = document.createElement("summary");
+    loraHeading.textContent = "Shot LoRAs";
+    loraPanel.appendChild(loraHeading);
+    inspector.appendChild(loraPanel);
+    if (!Array.isArray(activeClip.loras)) activeClip.loras = [];
+    const loraRows = document.createElement("div");
+    loraPanel.appendChild(loraRows);
+    const drawLoras = () => {
+      loraRows.replaceChildren();
+      activeClip.loras.forEach((row, index) => {
+        const controls = document.createElement("div");
+        controls.style.cssText = "display:flex;gap:6px;margin:6px 0;align-items:center";
+        const enabled = document.createElement("input");
+        enabled.type = "checkbox";
+        enabled.checked = row.enabled !== false;
+        enabled.onchange = () => { row.enabled = enabled.checked; syncState(); };
+        const name = document.createElement("select");
+        name.style.cssText = "flex:1;min-width:0";
+        const current = document.createElement("option");
+        current.value = row.name || ""; current.textContent = row.name || "Choose a LoRA";
+        name.appendChild(current);
+        api.fetchApi("/minimax_director/loras").then(async response => {
+          const names = await response.json();
+          if (!response.ok || !Array.isArray(names)) throw new Error(names.error || "Cannot list LoRAs");
+          for (const value of names) if (value !== row.name) {
+            const option = document.createElement("option"); option.value = value; option.textContent = value; name.appendChild(option);
+          }
+        }).catch(error => { name.title = error.message; });
+        name.onchange = () => { row.name = name.value; syncState(); };
+        const info = document.createElement("button"); info.textContent = "Info";
+        info.onclick = async () => {
+          try {
+            const result = await requestJson(`/minimax_director/loras/info?name=${encodeURIComponent(row.name || "")}`);
+            const details = document.createElement("details"); details.open = true;
+            const summary = document.createElement("summary"); summary.textContent = result.name; details.appendChild(summary);
+            const metadata = document.createElement("pre"); metadata.style.whiteSpace = "pre-wrap"; metadata.textContent = JSON.stringify(result.metadata, null, 2); details.appendChild(metadata);
+            if (result.has_preview) { const preview = document.createElement("img"); preview.style.maxWidth = "200px"; preview.src = api.apiURL(`/minimax_director/loras/info?preview=1&name=${encodeURIComponent(row.name)}`); details.appendChild(preview); }
+            loraPanel.appendChild(details);
+          } catch (error) { alert(error.message); }
+        };
+        const strength = document.createElement("input");
+        strength.type = "number"; strength.min = "-10"; strength.max = "10"; strength.step = "0.05";
+        strength.value = row.strength ?? 1; strength.style.width = "65px";
+        strength.onchange = () => { row.strength = Number(strength.value); syncState(); };
+        const remove = document.createElement("button"); remove.textContent = "Remove";
+        remove.onclick = () => { activeClip.loras.splice(index, 1); syncState(); drawLoras(); };
+        controls.append(enabled, name, strength, info, remove); loraRows.appendChild(controls);
+      });
+    };
+    const addLora = document.createElement("button"); addLora.textContent = "Add LoRA";
+    addLora.onclick = () => {
+      if (activeClip.loras.length >= 8) return;
+      activeClip.loras.push({ name: "", strength: 1, enabled: true }); syncState(); drawLoras();
+    };
+    loraPanel.appendChild(addLora); drawLoras();
 
     // Card 1: Timing & Seam Continuity
     const cardTiming = document.createElement("div");
@@ -3699,10 +4351,12 @@ function mountDirectorUI(node) {
     const initSeed = activeClip.seed !== undefined ? activeClip.seed : 0;
     seedInput.value = String(initSeed);
     seedInput.onchange = () => {
-      let v = parseInt(seedInput.value, 10);
-      if (isNaN(v) || v < 0) v = 0;
-      activeClip.seed = v;
-      seedInput.value = String(v);
+      try {
+        if (!/^\d+$/.test(seedInput.value.trim())) throw new Error();
+        const value = BigInt(seedInput.value.trim());
+        if (value > 0xffffffffffffffffn) throw new Error();
+        activeClip.seed = value.toString(); activeClip.validated = false; seedInput.value = activeClip.seed; seedInput.setCustomValidity("");
+      } catch { seedInput.setCustomValidity("Enter a decimal integer from 0 to 18446744073709551615."); seedInput.reportValidity(); return; }
       syncState();
     };
     seedItem.appendChild(seedInput);
@@ -3788,13 +4442,13 @@ function mountDirectorUI(node) {
       const rtype = r.type || "image";
       const typeClass = rtype === "video" ? "type-vid" : (rtype === "audio" ? "type-aud" : (rtype === "refmod" ? "type-mod" : "type-img"));
       item.className = "mmx-local-ref-item" + (isChecked ? ` checked ${typeClass}` : "");
-      
+
       const icon = rtype === "image" ? "🖼️" : (rtype === "video" ? "📹" : (rtype === "audio" ? "🎵" : "🎛️"));
       const tag = rtype === "image" ? "[IMG]" : (rtype === "video" ? "[VID]" : (rtype === "audio" ? "[AUD]" : "[MOD]"));
-      const fnHint = r.filename ? ` <span style="font-size: 8px; opacity: 0.55; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;">(${r.filename})</span>` : "";
-      item.innerHTML = `<span>${icon}</span><span style="font-weight: 700; opacity: 0.7;">${tag}</span><span>${r.name}</span>${fnHint}`;
+      const fnHint = r.filename ? ` <span style="font-size: 8px; opacity: 0.55; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;">(${escapeHtml(r.filename)})</span>` : "";
+      item.innerHTML = `<span>${icon}</span><span style="font-weight: 700; opacity: 0.7;">${tag}</span><span>${escapeHtml(r.name)}</span>${fnHint}`;
       if (r.filename) item.title = `${r.name} (${r.filename})`;
-      
+
       item.onclick = () => {
         if (isChecked) {
           activeClip.ref_ids = activeClip.ref_ids.filter((id) => id !== r.id);
@@ -3807,30 +4461,9 @@ function mountDirectorUI(node) {
       refsList.appendChild(item);
     });
 
-    // Custom tag input
-    const addTagInput = document.createElement("input");
-    addTagInput.placeholder = "+ Add Ref Tag";
-    addTagInput.style.background = "#1e293b";
-    addTagInput.style.border = "1px dashed #475569";
-    addTagInput.style.borderRadius = "4px";
-    addTagInput.style.color = "#94a3b8";
-    addTagInput.style.fontSize = "10px";
-    addTagInput.style.padding = "3px 8px";
-    addTagInput.style.width = "120px";
-    addTagInput.onkeydown = (e) => {
-      if (e.key === "Enter" && addTagInput.value.trim()) {
-        const tag = addTagInput.value.trim();
-        if (!activeClip.ref_ids.includes(tag)) {
-          activeClip.ref_ids.push(tag);
-          if (!timelineState.available_refs.find((r) => r.id === tag)) {
-            timelineState.available_refs.push({ id: tag, name: tag, type: "image" });
-          }
-          addTagInput.value = "";
-          syncState();
-          renderTimeline();
-        }
-      }
-    };
+    const addTagInput = document.createElement("button");
+    addTagInput.textContent = "+ Upload reference";
+    addTagInput.onclick = () => referenceUpload.click();
     refsList.appendChild(addTagInput);
     refsPoolWrap.appendChild(refsList);
     inspector.appendChild(refsPoolWrap);
@@ -3846,7 +4479,7 @@ function mountDirectorUI(node) {
     promptTitle.style.fontSize = "10px";
     promptTitle.style.fontWeight = "700";
     promptTitle.style.color = "#818cf8";
-    promptTitle.textContent = `PROMPT FOR ${activeClip.name.toUpperCase()}:`;
+    promptTitle.textContent = `PROMPT FOR ${String(activeClip.name || activeClip.id || "Shot").toUpperCase()}:`;
     promptToolbar.appendChild(promptTitle);
 
     // Mode Selector: Raw Prompt vs Structured Prompt
@@ -3997,7 +4630,7 @@ function mountDirectorUI(node) {
 
       const quickTags = document.createElement("div");
       quickTags.className = "mmx-quick-tags";
-      
+
       const tags = [
         { label: "+ <Picture 1>", tag: "<Picture 1>" },
         { label: "+ <Picture 2>", tag: "<Picture 2>" },
@@ -4222,39 +4855,33 @@ N/A`;
     renderTimeline();
   };
 
-  // Handle automatic seed advancement after execution based on seed_mode
-  if (!node.__mmxExecutedListenerAttached) {
-    node.__mmxExecutedListenerAttached = true;
-    try {
-      api.addEventListener("executed", (event) => {
-        if (!event || !event.detail) return;
-        if (String(event.detail.node) === String(node.id)) {
-          let changed = false;
-          timelineState.clips.forEach((clip) => {
-            if (clip.validated) return; // Never alter seed on validated shots
-            const mode = clip.seed_mode || "fixed";
-            if (mode === "randomize") {
-              clip.seed = Math.floor(Math.random() * 10000000000);
-              changed = true;
-            } else if (mode === "increment") {
-              clip.seed = (Number(clip.seed || 0) + 1) % 0xFFFFFFFFFFFFFFFF;
-              changed = true;
-            } else if (mode === "decrement") {
-              const cur = Number(clip.seed || 0);
-              clip.seed = cur <= 0 ? 0xFFFFFFFFFFFFFFFF : cur - 1;
-              changed = true;
-            }
-          });
-          if (changed) {
-            syncState();
-            renderInspector();
-          }
-        }
-      });
-    } catch (e) {
-      console.warn("Could not attach MiniMax Director execution listener:", e);
+  // Backend updates only the shot actually completed; clip-by-clip and selection
+  // do not advance unrelated shot seeds.
+  node.__mmxShotHandler = event => {
+    const detail = event.detail;
+    if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
+    progressLabel.textContent = `${detail.phase} · ${detail.clip_id} · ${detail.index || ""}/${detail.total || ""}`;
+    if (detail.phase === "completed") {
+      const shot = timelineState.clips.find(value => value.id === detail.clip_id);
+      if (shot) {
+        shot.last_seed = detail.seed;
+        if (String(shot.seed ?? detail.authored_seed) === detail.authored_seed) shot.seed = detail.next_seed;
+        syncState(); renderInspector();
+      }
     }
+  };
+  if (!node.__mmxShotListener) {
+    node.__mmxShotListener = event => node.__mmxShotHandler?.(event);
+    api.addEventListener("minimax_director/shot", node.__mmxShotListener);
+    const removed = node.onRemoved;
+    node.onRemoved = function (...args) {
+      node.__mmxLocaleCleanup?.();
+      api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
+      node.__mmxShotHandler = null; node.__mmxShotListener = null;
+      return removed?.apply(this, args);
+    };
   }
+
 }
 
 // Dynamic RefPack widget visibility: hide unconnected label text boxes to avoid canvas clutter
@@ -4265,7 +4892,40 @@ app.registerExtension({
   name: "ComfyUI.MiniMaxH3MasterDirector",
   init: () => console.log("[DirectorUI] Extension initialized"),
 
+  beforeConfigureGraph(graphData) {
+    // Upgrade saved UI workflows before ComfyUI resolves node types.
+    for (const node of graphData?.nodes || []) {
+      if (node.type === "MiniMaxH3MasterDirector") node.type = "MiniMaxH3MasterNode";
+    }
+  },
+
   async beforeRegisterNodeDef(nodeType, nodeData) {
+    if (["MiniMaxH3VideoCombine", "MiniMaxH3ProjectVideo"].includes(nodeData.name)) {
+      const executed = nodeType.prototype.onExecuted;
+      nodeType.prototype.onExecuted = function (message) {
+        executed?.apply(this, arguments);
+        if (!Array.isArray(message?.video)) return;
+        if (!this.__mmxVideoElement) {
+          const element = document.createElement("div"); element.style.width = "100%";
+          this.__mmxVideoElement = element;
+          this.addDOMWidget("video_preview", "MMX_VIDEO_PREVIEW", element, { serialize: false });
+        }
+        this.__mmxVideoElement.replaceChildren();
+        for (const item of message.video) {
+          const video = document.createElement("video"); video.controls = true; video.preload = "metadata";
+          video.style.cssText = "width:100%;max-height:280px";
+          video.src = api.apiURL(`/view?${new URLSearchParams({ filename: item.filename, subfolder: item.subfolder || "", type: item.type || "output" })}`);
+          video.onerror = () => {
+            if (video.dataset.fallback) return;
+            video.dataset.fallback = "1";
+            video.src = api.apiURL(`/minimax_director/video/preview?${new URLSearchParams({ filename: item.filename, subfolder: item.subfolder || "", type: item.type || "output" })}`);
+          };
+          this.__mmxVideoElement.appendChild(video);
+        }
+        this.setDirtyCanvas(true,true);
+      };
+      return;
+    }
     if (nodeData.name === "MiniMaxH3RefPack") {
       const onNodeCreated = nodeType.prototype.onNodeCreated;
       nodeType.prototype.onNodeCreated = function () {

@@ -3,52 +3,15 @@
 from __future__ import annotations
 
 import logging
-import os
-import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
-from .config import (
-    FPS,
-    AUDIO_SAMPLE_RATE,
-    align_frame_count,
-    video_latent_t,
-    audio_latent_length,
-)
-from .task_modes import (
-    MODE_T2VA,
-    MODE_I2VA,
-    MODE_FL2VA,
-    MODE_L2VA,
-    MODE_REF2VA,
-    MODE_V2V,
-    MODE_RV2V,
-    MODE_INPAINT,
-    normalize_mode,
-)
-from .media_io import load_image, load_video, load_audio, load_embedded_video_audio
-from .refmod import (
-    process_refmod_rows,
-    build_refmod_tag_map,
-    translate_refmod_aliases,
-    get_cached_visual_item,
-    set_cached_visual_item,
-    refmod_fingerprint,
-)
-from .prompt_engine import (
-    build_keyframe_mode_prompt,
-    build_ref2va_prompt,
-)
-from .motion_context import ensure_motion_context_patches, CTX_FRAME_KEY
-from .continuity import (
-    slice_continuity_tail,
-    trim_continuity_prefix,
-    trim_continuity_audio_prefix,
-    match_color_temperature_and_grade,
-)
-from .cache_manager import ProjectCacheManager, compute_clip_fingerprint
-from .audio_post import concatenate_audio_clips
+from .config import FPS, align_frame_count
+from .task_modes import MODE_T2VA, MODE_I2VA, MODE_FL2VA, MODE_L2VA, MODE_INPAINT, normalize_mode
+from .refmod import get_cached_visual_item, set_cached_visual_item, refmod_fingerprint
+from .cache_manager import ProjectCacheManager
+from .sampling import native_outputs
 
 log = logging.getLogger("MiniMaxH3MasterDirector.executor")
 
@@ -108,7 +71,8 @@ class MasterDirectorExecutor:
 
     def __init__(self, project_id: str = "default"):
         self.cache_mgr = ProjectCacheManager(project_id)
-        ensure_motion_context_patches()
+        # Current native H3 supports interior guides and keyframe/reference coexistence.
+        # Do not replace ComfyUI global methods while executing a node.
 
     def build_conditioning(
         self,
@@ -139,7 +103,7 @@ class MasterDirectorExecutor:
             lf = last_frame
             fc = 5 if canon == MODE_INPAINT else frame_count
 
-            positive, latent = node_cls.execute(
+            positive, latent = native_outputs(node_cls.execute(
                 clip=clip,
                 vae=vae,
                 prompt=prompt,
@@ -148,19 +112,19 @@ class MasterDirectorExecutor:
                 length=fc,
                 first_frame=ff,
                 last_frame=lf,
-            )
+            ))
 
             # Inject dynamic intermediate image guides if present (MiniMaxH3AddGuide support)
-            if guide_frames and canon == MODE_FL2VA:
+            if guide_frames:
                 keyframes = list(positive[0][1].get("minimax_keyframes", []))
                 for g in guide_frames:
                     g_img = g.get("frame")
                     g_idx = g.get("frame_idx", 0)
-                    if g_img is not None:
-                        import node_helpers
-                        g_latent = vae.encode(g_img[:1])
-                        keyframes.append({"resolved_frame_index": g_idx, "latent": g_latent})
-                positive = [[emb, {**meta, "minimax_keyframes": keyframes}] for emb, meta in positive]
+                    if g_img is not None or g.get("audio") is not None:
+                        guide_cls = get_native_h3_node("MiniMaxH3AddGuide")
+                        positive = native_outputs(guide_cls.execute(
+                            positive=positive, latent=latent, frame_idx=g_idx,
+                            vae=vae, audio_vae=audio_vae, image=g_img, audio=g.get("audio")))[0]
 
             return positive, latent, prompt
 
@@ -176,8 +140,11 @@ class MasterDirectorExecutor:
             decoded_items = []
             for block in refmod_items:
                 if block.get("kind") == "audio":
+                    audio_latent = block.get("latent")
+                    if audio_latent is None:
+                        continue
                     decoded_items.append({"type": "audio"})
-                    native_blocks.append({"kind": "audio", "ref_audio_t": int(block.get("latent_t", 0)), "audio_latent": block.get("latent")})
+                    native_blocks.append({"kind": "audio", "ref_audio_t": int(audio_latent.shape[-1]), "audio_latent": audio_latent})
                     continue
                 latent = block.get("latent")
                 if latent is None:
@@ -190,7 +157,9 @@ class MasterDirectorExecutor:
                     mtime_ns = refmod_fingerprint(name)[0]
                 except Exception:
                     pass
-                cached_pixels = get_cached_visual_item(name, mtime_ns) if name and mtime_ns else None
+                from .cache_manager import fingerprint_value
+                cache_name = f"{name}:{fingerprint_value(latent)}:{id(vae)}"
+                cached_pixels = get_cached_visual_item(cache_name, mtime_ns) if name and mtime_ns else None
 
                 if cached_pixels is not None:
                     pixels = cached_pixels
@@ -199,10 +168,15 @@ class MasterDirectorExecutor:
                     if getattr(pixels, "ndim", 0) == 5 and pixels.shape[0] == 1:
                         pixels = pixels[0]
                     if name and mtime_ns:
-                        set_cached_visual_item(name, mtime_ns, pixels)
+                        set_cached_visual_item(cache_name, mtime_ns, pixels)
 
                 is_video = block.get("kind") == "video" or (getattr(latent, "ndim", 0) >= 5 and latent.shape[2] > 1)
-                decoded_items.append({"type": "image" if not is_video else "video", "data": pixels.cpu().clone()})
+                presentation = {"type": "image" if not is_video else "video", "data": pixels.cpu().clone()}
+                if is_video:
+                    indices = list(range(0, pixels.shape[0], int(FPS // 2)))
+                    presentation["data"] = pixels[indices].cpu().clone()
+                    presentation["timestamps"] = [i / FPS for i in indices]
+                decoded_items.append(presentation)
                 if is_video:
                     native_blocks.append({
                         "kind": block.get("kind", "video"),
@@ -229,7 +203,7 @@ class MasterDirectorExecutor:
                     return clip.encode_from_tokens_scheduled(tokens)
             ref_clip = RefClipWrapper()
 
-        positive, latent = node_cls.execute(
+        positive, latent = native_outputs(node_cls.execute(
             clip=ref_clip,
             prompt=prompt,
             width=width,
@@ -242,9 +216,22 @@ class MasterDirectorExecutor:
             ref_videos=ref_videos or {},
             ref_video_audios=ref_video_audios or {},
             ref_audios=ref_audios or {},
-        )
+        ))
 
         if native_blocks:
             positive = [[emb, {**meta, "minimax_refs": list(meta.get("minimax_refs", [])) + native_blocks}] for emb, meta in positive]
+
+        # Native guides can coexist with reference conditioning on current ComfyUI.
+        anchors = list(guide_frames or [])
+        if first_frame is not None:
+            anchors.append({"frame": first_frame, "frame_idx": 0})
+        if last_frame is not None:
+            anchors.append({"frame": last_frame, "frame_idx": -1})
+        for anchor in anchors:
+            guide_cls = get_native_h3_node("MiniMaxH3AddGuide")
+            positive = native_outputs(guide_cls.execute(
+                positive=positive, latent=latent, frame_idx=anchor.get("frame_idx", 0),
+                vae=vae, audio_vae=audio_vae, image=anchor.get("frame"),
+                audio=anchor.get("audio")))[0]
 
         return positive, latent, prompt

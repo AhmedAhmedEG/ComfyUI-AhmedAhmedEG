@@ -7,7 +7,7 @@ and pipeline settings, uncluttering the Master Director timeline node.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 log = logging.getLogger("MiniMaxH3MasterDirector.settings")
 
@@ -17,7 +17,7 @@ CATEGORY = "ComfyUI-AhmedAhmedEG"
 
 class MiniMaxH3DirectorSettings:
     """Unified configuration node for MiniMax H3 Master Director.
-    
+
     Consolidates canvas dimensions, sampling parameters, and pipeline options into
     a single reusable configuration pack.
     """
@@ -31,7 +31,7 @@ class MiniMaxH3DirectorSettings:
                 # Format & Canvas Settings
                 "width": ("INT", {"default": 1344, "min": 32, "max": 4096, "step": 32, "tooltip": "Output video width in pixels."}),
                 "height": ("INT", {"default": 768, "min": 32, "max": 4096, "step": 32, "tooltip": "Output video height in pixels."}),
-                "frame_rate": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 120.0, "step": 0.1, "tooltip": "Output video frame rate (FPS)."}),
+                "frame_rate": ("FLOAT", {"default": 24.0, "min": 24.0, "max": 24.0, "step": 1.0, "tooltip": "H3 generates synchronized audio/video at 24 FPS."}),
 
                 # Sampling Settings
                 "steps": ("INT", {"default": 25, "min": 1, "max": 200, "step": 1, "tooltip": "Sampling steps for DiT diffusion."}),
@@ -46,7 +46,7 @@ class MiniMaxH3DirectorSettings:
                 "execution_mode": (["All-in-One Generation", "Conditioning Guide Output"], {"default": "All-in-One Generation", "tooltip": "Choose between full in-node generation or emitting positive/latent for custom graphs."}),
                 "prompt_mode": (["structured", "simple"], {"default": "structured", "tooltip": "Structured prompts assemble IMD, soundscape, and music sections."}),
                 "run_mode": (["clip_by_clip", "full_batch"], {"default": "clip_by_clip", "tooltip": "Generate sequential shots individually or in one batch."}),
-                "continuity_mode": (["Motion Context (Chained)", "Independent (No Continuity)", "FL2VA Tail Handoff"], {"default": "Motion Context (Chained)", "tooltip": "How adjacent shots link motion and style continuity."}),
+                "continuity_mode": (["Motion Context (Chained)", "Latent Carry (Pinned)", "Independent (No Continuity)", "FL2VA Tail Handoff"], {"default": "Motion Context (Chained)", "tooltip": "How adjacent shots link motion and style continuity."}),
                 "context_length": (["22", "5", "39", "56"], {"default": "22", "tooltip": "Number of latent frames passed across shot seams."}),
                 "preview_mode": (["full", "unvalidated_only"], {"default": "full", "tooltip": "Preview output: 'full' for complete sequence, 'unvalidated_only' for new/unvalidated clips only."}),
             },

@@ -3,20 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 import torch
-import torch.nn.functional as F
 
-from .config import (
-    FPS,
-    AUDIO_LATENT_FPS,
-    CONTEXT_FRAME_CHOICES,
-    DEFAULT_CONTEXT_FRAMES,
-    DEFAULT_AUDIO_CONTEXT_FRAMES,
-    align_frame_count,
-    video_latent_t,
-)
+from .config import FPS, AUDIO_LATENT_FPS, DEFAULT_CONTEXT_FRAMES
 
 log = logging.getLogger("MiniMaxH3MasterDirector.continuity")
 
@@ -47,7 +38,8 @@ def extract_streams_from_av_latent(latent_dict: Dict[str, Any]) -> Tuple[torch.T
         if video_stream.ndim == 4:
             video_stream = video_stream.unsqueeze(0)
         t_v = video_stream.shape[2] if video_stream.ndim == 5 else 5
-        audio_stream = torch.zeros((1, 32, 2, max(1, round(t_v * 40.0 / 24.0))), device=video_stream.device, dtype=video_stream.dtype)
+        pixel_frames = 5 if t_v <= 2 else ((t_v - 2) // 5) * 17 + 5
+        audio_stream = torch.zeros((1, 32, 2, max(1, round(pixel_frames * AUDIO_LATENT_FPS / FPS))), device=video_stream.device, dtype=video_stream.dtype)
     else:
         video_stream = streams[0]
         audio_stream = streams[1]
@@ -68,26 +60,6 @@ def repack_av_latent(video_stream: torch.Tensor, audio_stream: torch.Tensor) -> 
         samples = tuple([video_stream, audio_stream])
 
     return {"samples": samples}
-
-
-def slice_continuity_tail(
-    prev_latent_dict: Dict[str, Any],
-    context_frames: int = DEFAULT_CONTEXT_FRAMES,
-    audio_context_frames: int = DEFAULT_AUDIO_CONTEXT_FRAMES,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Slice the trailing N context frames from previous video & audio latents for pinning."""
-    video, audio = extract_streams_from_av_latent(prev_latent_dict)
-
-    # Calculate required temporal latent slices
-    # Video: video_latent_t(context_frames)
-    t_v = video_latent_t(context_frames)
-    # Audio tokens at 40 Hz
-    t_a = round(context_frames / FPS * AUDIO_LATENT_FPS)
-
-    video_tail = video[:, :, -t_v:, :, :].clone()
-    audio_tail = audio[:, :, -t_a:].clone() if audio.ndim == 3 else audio[..., -t_a:].clone()
-
-    return video_tail, audio_tail
 
 
 def trim_continuity_prefix(

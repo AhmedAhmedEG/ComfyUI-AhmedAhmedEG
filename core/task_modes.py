@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set, Tuple
-from .config import (
-    MAX_REF_IMAGES,
-    MAX_REF_VIDEOS,
-    MAX_REF_AUDIOS,
-    MAX_TOTAL_REFS,
-    MIN_REF_DURATION,
-    MAX_REF_DURATION,
-    MAX_REF_TOTAL_DURATION,
-)
+from typing import Any, List, Tuple
+from .config import MAX_REF_IMAGES, MAX_REF_VIDEOS, MAX_REF_AUDIOS, MAX_TOTAL_REFS, MAX_REF_DURATION, MAX_REF_TOTAL_DURATION
 
 # Canonical mode names
 MODE_T2VA = "T2VA"
@@ -46,10 +38,13 @@ def normalize_mode(mode: str) -> str:
     m = str(mode or "").strip().upper()
     mapping = {
         "T2V": MODE_T2VA,
+        "TEXT": MODE_T2VA,
         "T2VA": MODE_T2VA,
         "I2V": MODE_I2VA,
+        "IMAGE": MODE_I2VA,
         "I2VA": MODE_I2VA,
         "FL2V": MODE_FL2VA,
+        "FIRST_LAST": MODE_FL2VA,
         "FL2VA": MODE_FL2VA,
         "L2V": MODE_L2VA,
         "L2VA": MODE_L2VA,
@@ -57,11 +52,16 @@ def normalize_mode(mode: str) -> str:
         "REF2V": MODE_REF2VA,
         "REF2VA": MODE_REF2VA,
         "V2V": MODE_V2V,
+        "VIDEO": MODE_V2V,
         "RV2V": MODE_RV2V,
         "INPAINT": MODE_INPAINT,
         "IMAGE INPAINT": MODE_INPAINT,
     }
-    return mapping.get(m, MODE_REF2VA)
+    if not m:
+        return MODE_REF2VA
+    if m not in mapping:
+        raise ValueError(f"Unsupported MiniMax H3 task mode: {mode!r}")
+    return mapping[m]
 
 
 def get_required_model_type(mode: str) -> str:
@@ -80,12 +80,12 @@ def validate_mode_assets(
     raise_on_error: bool = False,
 ) -> Tuple[bool, List[str]]:
     """Validate asset limits and constraints for the selected mode.
-    
+
     Returns (is_valid, list_of_error_messages).
     """
     canon = normalize_mode(mode)
     errors: List[str] = []
-    
+
     img_count = len(images or [])
     vid_count = len(videos or [])
     aud_count = len(audios or [])

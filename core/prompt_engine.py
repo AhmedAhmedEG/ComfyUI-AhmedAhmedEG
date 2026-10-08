@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
 
 from .config import align_frame_count, FPS
-from .refmod import translate_refmod_aliases
 
 # Official MiniMax task types for summary section
 TASK_TYPES = [
@@ -45,13 +43,6 @@ def clean_mentions(text: str) -> str:
     # Normalize bracketed tags
     res = BRACKET_REGEX.sub(lambda m: f"<{m.group(1).capitalize()} {m.group(2)}>", res)
     return res
-
-
-def format_timestamp(seconds: float) -> str:
-    """Format seconds into MM:SS.mmm (e.g. 00:04.500)."""
-    mins = int(seconds // 60)
-    secs = seconds % 60
-    return f"{mins:02d}:{secs:06.3f}"
 
 
 def format_alignment_header(mode: str, duration_sec: float, has_first_frame: bool = True, has_last_frame: bool = True) -> str:
@@ -154,60 +145,3 @@ def build_ref2va_prompt(
         f"overall_soundscape:\n{s_sound}\n\n"
         f"non_diegetic_music:\n{s_music}"
     ).strip()
-
-
-def prefill_ref2va_scaffold(
-    image_count: int,
-    video_count: int,
-    audio_count: int,
-    refmod_items: Optional[List[Dict[str, Any]]] = None,
-) -> Dict[str, str]:
-    """Generate initial template scaffolding for subject_definitions, summary, and retention."""
-    defs: List[str] = []
-    ret: List[str] = []
-    subjects: List[str] = []
-
-    # Images
-    for i in range(1, image_count + 1):
-        subj = f"<Subject {len(subjects) + 1}>"
-        subjects.append(subj)
-        defs.append(f"{subj} is the main subject in <Picture {i}>.")
-        defs.append(f"<Picture {i}> defines the visual identity and appearance of {subj}.")
-        ret.append(f"{subj}: fully_preserved - appearance and costume are maintained.")
-
-    # Videos
-    for i in range(1, video_count + 1):
-        subj = f"<Subject {len(subjects) + 1}>"
-        subjects.append(subj)
-        defs.append(f"{subj} is the action and motion sequence seen in <Video {i}>.")
-        defs.append(f"<Video {i}> provides the dynamic camera movement and motion rhythm.")
-        ret.append(f"{subj}: attribute_transfer - motion pacing is transferred.")
-
-    # Audios
-    for i in range(1, audio_count + 1):
-        defs.append(f"<Audio {i}> is the sound and voice reference.")
-        ret.append(f"<Audio {i}>: reference - timbre and ambient acoustics are followed.")
-
-    # RefMods
-    if refmod_items:
-        for item in refmod_items:
-            slot = item["slot"]
-            kind = item["kind"]
-            name = item["name"]
-            desc = item.get("description", "")
-            subj = f"<Subject {len(subjects) + 1}>"
-            subjects.append(subj)
-            defs.append(f"<RefMod {slot}> ({name}) defines {subj}: {desc or 'custom saved identity'}.")
-            ret.append(f"<RefMod {slot}>: fully_preserved - character attributes remain consistent.")
-
-    summary_task = "[reference generation" + (" + audio reference]" if audio_count > 0 else "]")
-    summary_line = f"{summary_task} Cinematic scene starring {', '.join(subjects[:2]) if subjects else 'the subjects'} with natural pacing."
-
-    return {
-        "subject_definitions": "\n".join(defs),
-        "summary": summary_line,
-        "retention_analysis": "\n".join(ret),
-        "detailed_description": "[Shot 1] The scene opens with smooth camera movement capturing the environment in cinematic detail.",
-        "overall_soundscape": "Natural environmental ambience and synchronized diegetic sounds.",
-        "non_diegetic_music": "N/A",
-    }

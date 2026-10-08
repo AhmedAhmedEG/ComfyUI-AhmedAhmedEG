@@ -3,6 +3,7 @@
 import os
 import sys
 import unittest
+from tests.cache_fixture import CacheIsolatedTestCase
 import json
 
 pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -22,13 +23,13 @@ from core.refmod import (
 from core.prompt_engine import (
     build_ref2va_prompt,
     build_keyframe_mode_prompt,
-    prefill_ref2va_scaffold,
 )
 from nodes.node_director import MiniMaxH3MasterDirector
 
 
-class TestRefModAndStructuredPrompt(unittest.TestCase):
+class TestRefModAndStructuredPrompt(CacheIsolatedTestCase):
     def setUp(self):
+        super().setUp()
         clear_refmod_visual_cache()
 
     def test_refmod_visual_cache(self):

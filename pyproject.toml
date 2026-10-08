@@ -1,16 +1,23 @@
 [project]
 name = "comfyui-minimax-h3-master-director"
-version = "1.0.0"
+version = "1.0.3"
 description = "Unified master director and sequence extender for ComfyUI MiniMax H3"
 authors = [{ name = "AI Master Director Team" }]
-license = { text = "Apache-2.0" }
+license = { text = "GPL-3.0" }
 dependencies = [
     "torch>=2.1.0",
     "numpy>=1.24.0",
     "Pillow>=9.5.0",
     "safetensors>=0.4.0",
     "av>=11.0.0",
+    "imageio-ffmpeg>=0.6.0",
 ]
+
+[project.optional-dependencies]
+scene-detection = ["scenedetect[opencv]>=0.6.2"]
+face-detection = ["ultralytics>=8.0"]
+prompt-forge = ["transformers>=4.57", "accelerate>=1.0"]
+prompt-forge-gguf = ["llama-cpp-python>=0.3"]
 
 [project.urls]
 Homepage = "https://github.com/AhmedAhmedEG/ComfyUI-AhmedAhmedEG"

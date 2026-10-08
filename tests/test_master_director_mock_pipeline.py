@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import unittest
+from tests.cache_fixture import CacheIsolatedTestCase
 from unittest.mock import MagicMock, patch
 pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if pkg_root not in sys.path:
@@ -28,20 +29,17 @@ from core.prompt_engine import (
     build_keyframe_mode_prompt,
     build_ref2va_prompt,
     clean_mentions,
-    prefill_ref2va_scaffold,
 )
 from core.refmod import build_refmod_tag_map, translate_refmod_aliases
 from core.cache_manager import ProjectCacheManager, compute_clip_fingerprint
 from core.continuity import (
-    slice_continuity_tail,
     trim_continuity_prefix,
     trim_continuity_audio_prefix,
     match_color_temperature_and_grade,
     repack_av_latent,
 )
 from core.audio_post import concatenate_audio_clips, apply_audio_fade
-from core.selflift import spatial_interpolate_video_latent
-from core.face_refine import generate_feathered_ellipse_mask, simple_face_detect_bbox
+from core.latent_utils import spatial_interpolate_video_latent
 from nodes.node_director import MiniMaxH3MasterDirector
 from nodes.node_selflift import MiniMaxH3DirectorSelfLift
 from nodes.node_refine import MiniMaxH3DirectorRefine
@@ -89,9 +87,10 @@ class MockModel:
         return m
 
 
-class TestMockPipeline(unittest.TestCase):
+class TestMockPipeline(CacheIsolatedTestCase):
 
     def setUp(self):
+        super().setUp()
         self.mock_vae = MockVAE()
         self.mock_audio_vae = MockVAE()
         self.mock_clip = MockCLIP()
@@ -141,7 +140,7 @@ class TestMockPipeline(unittest.TestCase):
                     seed=42,
                 )
 
-                images, audio, video, pos, lat, prompt_out, fps, fc, status = result
+                images, audio, video, pos, lat, prompt_out, fps, fc, status, project_state = result
                 self.assertEqual(pos, mock_positive)
                 self.assertEqual(lat, mock_latent)
                 self.assertEqual(fps, 24.0)
@@ -196,30 +195,16 @@ class TestMockPipeline(unittest.TestCase):
         self.assertEqual(count, 22)  # 1.0s at 24fps snaps to 22 frames
         self.assertEqual(duration, 22 / 24.0)
 
-    def test_continuity_tail_slicing_and_repack(self):
-        """Verify video and audio latent slicing for Motion Context."""
-        video_lat = torch.zeros(1, 16, 37, 24, 42)
-        audio_lat = torch.zeros(1, 64, 207)
-        latent_dict = repack_av_latent(video_lat, audio_lat)
-
-        video_tail, audio_tail = slice_continuity_tail(latent_dict, context_frames=22, audio_context_frames=24)
-        # For 22 frames, video latent t is 7
-        self.assertEqual(video_tail.shape[2], 7)
-        self.assertEqual(video_tail.shape[3:], (24, 42))
-        self.assertTrue(audio_tail.shape[-1] > 0)
-
-    def test_face_refine_mask_and_bbox(self):
-        """Verify ellipse mask generation and bounding box calculations."""
-        mask = generate_feathered_ellipse_mask(64, 64)
-        self.assertEqual(mask.shape, (1, 64, 64, 1))
-        # Center should be 1.0, edges should approach 0.0
-        self.assertAlmostEqual(mask[0, 32, 32, 0].item(), 1.0, places=1)
-        self.assertAlmostEqual(mask[0, 0, 0, 0].item(), 0.0, places=1)
-
-        test_frame = torch.zeros(100, 200, 3)
-        x1, y1, bw, bh = simple_face_detect_bbox(test_frame)
-        self.assertTrue(bw % 32 == 0)
-        self.assertTrue(bh % 32 == 0)
+    def test_continuity_tail_phase_and_repack(self):
+        from core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
+        video_lat = torch.zeros(1, 24, 37, 4, 4)
+        audio_lat = torch.zeros(1, 32, 2, 207)
+        latent = repack_av_latent(video_lat, audio_lat)
+        blocks, offsets, covered, end, gap = _video_tail_blocks(latent, 22, end_frame=100)
+        self.assertEqual(sum(block.shape[2] for block in blocks), 7)
+        self.assertEqual(covered, 22)
+        self.assertEqual(end + gap, 100)
+        self.assertGreaterEqual(gap, 0)
 
     def test_selflift_spatial_interpolation(self):
         """Verify 5D video latent spatial resize."""
@@ -238,31 +223,24 @@ class TestMockPipeline(unittest.TestCase):
             mock_get_native.return_value = mock_native
 
             # Pass completely invalid JSON strings and non-dict JSON
-            out = node.execute(
-                model=self.mock_model,
-                video_vae=self.mock_vae,
-                audio_vae=self.mock_audio_vae,
-                clip=self.mock_clip,
-                mode=MODE_REF2VA,
-                execution_mode="Conditioning Guide Output",
-                timeline_data="NOT A VALID JSON STRING",
-                builder_state="[1, 2, 3]",  # A list instead of a dict
-            )
-            self.assertIsNotNone(out)
-            self.assertIn("Emitted conditioning for 1 clip(s)", out[8])
+            with self.assertRaisesRegex(ValueError, "invalid JSON"):
+                node.execute(model=self.mock_model, video_vae=self.mock_vae,
+                    audio_vae=self.mock_audio_vae, clip=self.mock_clip,
+                    mode=MODE_REF2VA, execution_mode="Conditioning Guide Output",
+                    timeline_data="NOT A VALID JSON STRING", builder_state="[1, 2, 3]")
 
     def test_project_manager_hash_and_cache_integrity(self):
         """Verify project serialization stays under 100KB and separates cache keys correctly."""
-        cm = ProjectCacheManager(project_id="test_proj", base_dir="output/test_minimax_cache")
+        cm = ProjectCacheManager(project_id="test_proj", base_dir=self.cache_root)
         clip_data_a = {"prompt": "Sunset over the mountains", "seed": 42, "width": 1344, "height": 768, "duration": 5.0}
         clip_data_b = {"prompt": "Sunset over the mountains", "seed": 43, "width": 1344, "height": 768, "duration": 5.0}
-        
+
         fp_a = compute_clip_fingerprint(clip_data_a["prompt"], clip_data_a["duration"], clip_data_a["width"], clip_data_a["height"], clip_data_a["seed"])
         fp_b = compute_clip_fingerprint(clip_data_b["prompt"], clip_data_b["duration"], clip_data_b["width"], clip_data_b["height"], clip_data_b["seed"])
-        
+
         # Changing seed must produce a completely different cache key
         self.assertNotEqual(fp_a, fp_b)
-        
+
         # Test project serialization format
         proj_str = cm.serialize_project(
             project_id="test_proj",
@@ -276,7 +254,7 @@ class TestMockPipeline(unittest.TestCase):
 
     def test_refine_pass_and_spatial_tiling(self):
         """Verify second-pass refinement and spatial tiled sampling calculations."""
-        from core.refine import apply_refine_pass, spatial_tiled_sample
+        from core.refine import apply_refine_pass
 
         video = torch.ones((1, 16, 7, 24, 42), dtype=torch.float32)
         audio = torch.zeros((1, 32, 2, 12), dtype=torch.float32)
@@ -298,9 +276,9 @@ class TestMockPipeline(unittest.TestCase):
         self.assertEqual(res_v.shape, (1, 16, 7, 48, 84))
 
         # 2. Tiled sampling logic
-        with patch("comfy.sample.sample") as mock_sample:
-            mock_sample.side_effect = lambda m, l, st, c, s, sc, p, n, sd, **kw: l
-            tiled_res = spatial_tiled_sample(
+        with patch("core.advanced_sampling.sample_stage") as mock_sample:
+            mock_sample.side_effect = lambda m, l, st, c, s, sc, p, n, sd, *args, **kw: l
+            tiled_res = apply_refine_pass(
                 model=self.mock_model,
                 latent_dict=latent_dict,
                 steps=3,
@@ -311,28 +289,11 @@ class TestMockPipeline(unittest.TestCase):
                 negative=[],
                 seed=0,
                 denoise=0.45,
-                tile_count=2,
+                enable_tiling=True, tile_count=2,
                 tile_overlap=64,
             )
             self.assertEqual(tiled_res["samples"][0].shape, video.shape)
 
-    def test_face_refinement_execution(self):
-        """Verify face refinement pass and ultralytics detector detection fallback."""
-        from core.face_refine import apply_face_refinement, detect_face_bbox_ultralytics
-
-        frames = torch.ones((5, 128, 128, 3), dtype=torch.float32)
-        # Without model/vae (unsharp fallback pass)
-        stitched, orig = apply_face_refinement(frames, strength=0.35)
-        self.assertEqual(stitched.shape, frames.shape)
-        self.assertEqual(orig.shape, frames.shape)
-
-        # With mock model and vae
-        with patch("comfy.sample.sample") as mock_sample:
-            mock_sample.side_effect = lambda *args, **kwargs: args[1] if len(args) > 1 else kwargs.get("latent_dict")
-            stitched_model, _ = apply_face_refinement(
-                frames, model=self.mock_model, vae=self.mock_vae, clip=self.mock_clip, strength=0.35
-            )
-            self.assertEqual(stitched_model.shape, frames.shape)
 
     def test_per_clip_seed_and_tail(self):
         """Verify per-clip custom seed and tail_seconds are properly respected."""
@@ -365,7 +326,7 @@ class TestMockPipeline(unittest.TestCase):
         })
 
         with patch("core.executor.get_native_h3_node") as mock_get_native, \
-             patch("comfy.sample.sample") as mock_sample:
+             patch("nodes.node_director.sample_latent") as mock_sample:
             mock_native = MagicMock()
             mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
             mock_get_native.return_value = mock_native
@@ -392,7 +353,7 @@ class TestMockPipeline(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp_dir:
             cm = ProjectCacheManager(project_id="test_val_cache", base_dir=tmp_dir)
-            
+
             # Pre-store cached frames for c1
             clip_prompt = "Cached first clip"
             c1_fp = compute_clip_fingerprint(clip_prompt, 5.0, 1344, 768, 777, model_name="h3")
@@ -434,7 +395,7 @@ class TestMockPipeline(unittest.TestCase):
 
             with patch("core.cache_manager.get_cache_root_dir", return_value=tmp_dir), \
                  patch("core.executor.get_native_h3_node") as mock_get_native, \
-                 patch("comfy.sample.sample") as mock_sample:
+                 patch("nodes.node_director.sample_latent") as mock_sample:
                 mock_native = MagicMock()
                 mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
                 mock_get_native.return_value = mock_native
@@ -445,6 +406,15 @@ class TestMockPipeline(unittest.TestCase):
                     sampled_seeds.append(s)
                     return {"samples": (torch.zeros((1, 16, 5, 16, 16)), torch.zeros((1, 32, 2, 4)))}
                 mock_sample.side_effect = record_sample
+
+                # Populate with the real Director fingerprint, which now includes
+                # model identity, sampling settings, references, and modifiers.
+                warm = json.loads(timeline_data)
+                warm["clips"] = [{**warm["clips"][0], "validated": False}]
+                self.director.execute(model=self.mock_model, video_vae=self.mock_vae,
+                    audio_vae=self.mock_audio_vae, clip=self.mock_clip,
+                    timeline_data=json.dumps(warm), config={"project_id": "test_val_cache"})
+                sampled_seeds.clear()
 
                 res = self.director.execute(
                     model=self.mock_model,
@@ -485,7 +455,7 @@ class TestMockPipeline(unittest.TestCase):
         })
 
         with patch("core.executor.get_native_h3_node") as mock_get_native, \
-             patch("comfy.sample.sample") as mock_sample:
+             patch("nodes.node_director.sample_latent") as mock_sample:
             mock_native = MagicMock()
             mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
             mock_get_native.return_value = mock_native
@@ -565,7 +535,7 @@ class TestMockPipeline(unittest.TestCase):
         })
 
         with patch("core.executor.get_native_h3_node") as mock_get_native, \
-             patch("comfy.sample.sample") as mock_sample:
+             patch("nodes.node_director.sample_latent") as mock_sample:
             mock_native = MagicMock()
             mock_native.execute.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros((1, 16, 7, 24, 42)), torch.zeros((1, 64, 37)))})
             mock_get_native.return_value = mock_native
@@ -578,6 +548,7 @@ class TestMockPipeline(unittest.TestCase):
                 audio_vae=self.mock_audio_vae,
                 clip=self.mock_clip,
                 timeline_data=tl_chained,
+                continuity_mode="FL2VA Tail Handoff",
             )
             final_frames = res[0]
             # 5 frames from c1 + (5 - 1) frames from c2 = 9 frames
@@ -638,13 +609,16 @@ class TestMockPipeline(unittest.TestCase):
             self.assertIn("ref_audio_1", call_kwargs["ref_audios"])
 
     def test_master_node_alias(self):
-        """Verify MiniMaxH3MasterNode is registered and functions as an alias to MiniMaxH3MasterDirector."""
+        """The Master has one public name, with no duplicate menu registration."""
         from nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
         self.assertIn("MiniMaxH3MasterNode", NODE_CLASS_MAPPINGS)
         self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3MasterNode"], "MiniMax H3 Master Node")
-        self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3MasterDirector"], "MiniMax H3 Master Node")
+        self.assertNotIn("MiniMaxH3MasterDirector", NODE_CLASS_MAPPINGS)
+        self.assertIs(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"], MiniMaxH3MasterDirector)
+        self.assertEqual(len(NODE_CLASS_MAPPINGS), 30)
+        self.assertEqual(len(set(NODE_CLASS_MAPPINGS.values())), 30)
+        self.assertEqual(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"].CATEGORY,"MiniMax H3/Start here")
 
 
 if __name__ == "__main__":
     unittest.main()
-

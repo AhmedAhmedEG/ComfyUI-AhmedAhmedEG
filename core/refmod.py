@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
 import torch
@@ -17,7 +16,7 @@ except ImportError:
     safe_open = None
     load_file = None
 
-REFMOD_ALIAS_REGEX = re.compile(r"<\s*refmod\s*_?\s*(\d+)(?:\s*:[^>]+)?\s*>", re.I)
+REFMOD_ALIAS_REGEX = re.compile(r"<\s*refmod\s*_?\s*(\d+)(?:\s*:\s*([^>]+))?\s*>", re.I)
 META_KEYS = ("refmod_meta", "audio_refmod_meta")
 SKIP_DIRS = {"graph_presets", ".git", "__pycache__"}
 MOD_KINDS = {"image", "video", "audio"}
@@ -195,17 +194,10 @@ def load_refmods(name: str) -> List[Tuple[torch.Tensor, Dict[str, Any]]]:
     return results
 
 
-def load_refmod(name: str) -> Tuple[torch.Tensor, Dict[str, Any]]:
-    """Load a single RefMod latent tensor and its metadata."""
-    refs = load_refmods(name)
-    if len(refs) != 1:
-        raise ValueError(f"RefMod '{name}' is a bundle with {len(refs)} items; load all members instead.")
-    return refs[0]
-
-
 def process_refmod_rows(
     rows: List[Dict[str, Any]],
     max_slots: int = 8,
+    strict: bool = False,
 ) -> List[Dict[str, Any]]:
     """Process user RefMod rows, validating slots and computing scaled latents."""
     if not isinstance(rows, list):
@@ -240,10 +232,12 @@ def process_refmod_rows(
 
         try:
             refs = load_refmods(name)
-        except Exception:
+        except Exception as exc:
+            if strict:
+                raise ValueError(f"Could not load enabled RefMod {name!r}: {exc}") from exc
             continue
 
-        for latent, meta in refs:
+        for member_index, (latent, meta) in enumerate(refs):
             kind = meta.get("kind", "image")
             scaled_latent = latent * strength
 
@@ -255,6 +249,8 @@ def process_refmod_rows(
                 "description": str(row.get("description", meta.get("description", ""))).strip(),
                 "latent": scaled_latent,
                 "meta": meta,
+                "id": f"refmod_{slot}_{member_index}", "member_index": member_index,
+                "member_name": str(meta.get("name") or meta.get("description") or member_index + 1).strip(),
             })
 
     return sorted(loaded, key=lambda x: x["slot"])
@@ -281,9 +277,13 @@ def build_refmod_tag_map(
         label = {"image": "Picture", "video": "Video", "audio": "Audio"}.get(kind, "Picture")
         canonical_tag = f"<{label} {counts[kind]}>"
         slot = item.get("slot", idx + 1)
-        tag_map[slot] = canonical_tag
+        tag_map[slot] = " ".join(filter(None, [tag_map.get(slot), canonical_tag]))
+        member_name = str(item.get("member_name", item.get("member_index", 0) + 1)).strip().lower()
+        tag_map[f"{slot}:{member_name}"] = canonical_tag
+        tag_map[f"{slot}:{item.get('member_index', 0) + 1}"] = canonical_tag
         if "name" in item and item["name"]:
-            tag_map[str(item["name"]).strip().lower()] = canonical_tag
+            name = str(item["name"]).strip().lower()
+            tag_map[name] = " ".join(filter(None, [tag_map.get(name), canonical_tag]))
     return tag_map
 
 
@@ -294,6 +294,9 @@ def translate_refmod_aliases(text: str, tag_map: Dict[Any, str]) -> str:
 
     def _replace(match: re.Match) -> str:
         slot = int(match.group(1))
+        member = match.group(2)
+        if member and f"{slot}:{member.strip().lower()}" in tag_map:
+            return tag_map[f"{slot}:{member.strip().lower()}"]
         if slot in tag_map:
             return tag_map[slot]
         return match.group(0)
@@ -322,7 +325,9 @@ def get_cached_visual_item(name: str, mtime_ns: int) -> Optional[Any]:
 
 def set_cached_visual_item(name: str, mtime_ns: int, item: Any) -> None:
     """Store visual item in memory cache."""
-    _REFMOD_VISUAL_CACHE[name] = (mtime_ns, item)
+    if name not in _REFMOD_VISUAL_CACHE and len(_REFMOD_VISUAL_CACHE) >= 8:
+        _REFMOD_VISUAL_CACHE.pop(next(iter(_REFMOD_VISUAL_CACHE)))
+    _REFMOD_VISUAL_CACHE[name] = (mtime_ns, item.cpu() if hasattr(item, "cpu") else item)
 
 
 def clear_refmod_visual_cache() -> None:

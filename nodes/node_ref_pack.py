@@ -25,7 +25,7 @@ class MiniMaxH3RefPack:
             "required": {},
             "optional": {
                 "ref_pack_optional": (MMX_REF_PACK, {"tooltip": "Optional previous RefPack to daisy-chain for unlimited references."}),
-                
+
                 # Image references
                 "image_1": ("IMAGE", {"tooltip": "Reference image 1 (e.g. character, style, face, start frame)."}),
                 "image_2": ("IMAGE", {"tooltip": "Reference image 2."}),

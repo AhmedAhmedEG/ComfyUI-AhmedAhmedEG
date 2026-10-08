@@ -3,6 +3,7 @@
 import os
 import sys
 import unittest
+from tests.cache_fixture import CacheIsolatedTestCase
 # Ensure package root is in sys.path
 pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if pkg_root not in sys.path:
@@ -31,7 +32,6 @@ from core.prompt_engine import (
     clean_mentions,
     build_keyframe_mode_prompt,
     build_ref2va_prompt,
-    prefill_ref2va_scaffold,
 )
 from core.refmod import build_refmod_tag_map, translate_refmod_aliases
 from core.cache_manager import (
@@ -48,7 +48,7 @@ from core.audio_post import (
 )
 
 
-class TestMiniMaxH3MasterDirector(unittest.TestCase):
+class TestMiniMaxH3MasterDirector(CacheIsolatedTestCase):
 
     def test_frame_alignment_and_latents(self):
         """Verify 17k + 5 frame snapping and latent temporal dimensions."""
@@ -168,7 +168,7 @@ class TestMiniMaxH3MasterDirector(unittest.TestCase):
         """Verify GPU tensor image scaling modes (Fit, Fill & crop, Fit & pad, Target)."""
         from core.media_io import scale_tensor_image
         img = torch.ones((1, 100, 200, 3), dtype=torch.float32)
-        
+
         # Target stretch
         res_target = scale_tensor_image(img, "Target", 128, 64)
         self.assertEqual(res_target.shape, (1, 64, 128, 3))
@@ -247,4 +247,3 @@ class TestMiniMaxH3MasterDirector(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from tests.cache_fixture import CacheIsolatedTestCase
 from unittest.mock import MagicMock, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -10,14 +11,11 @@ if ROOT not in sys.path:
 from tests.mock_torch import setup_mock_torch_if_needed
 torch = setup_mock_torch_if_needed()
 from core.executor import decode_audio_latent, MasterDirectorExecutor
-from core.face_refine import apply_face_refinement
-from core.selflift import sample_selflift_progressive
-from core.refine import spatial_tiled_sample
 from core.cache_manager import ProjectCacheManager
 from nodes.node_director import MiniMaxH3MasterDirector
 
 
-class TestDeepValidation(unittest.TestCase):
+class TestDeepValidation(CacheIsolatedTestCase):
     def test_decode_audio_latent_shapes(self):
         """Verify decode_audio_latent properly orients channels regardless of incoming dimension order."""
         audio_vae = MagicMock()
@@ -109,7 +107,7 @@ class TestDeepValidation(unittest.TestCase):
             ]
         }"""
 
-        with patch("comfy.sample.sample") as mock_sample, \
+        with patch("nodes.node_director.sample_latent") as mock_sample, \
              patch("core.executor.get_native_h3_node") as mock_get_node:
             mock_sample.return_value = {"samples": (torch.zeros((1, 24, 5, 48, 84)), torch.zeros((1, 32, 2, 40)))}
             mock_native = MagicMock()
@@ -122,6 +120,7 @@ class TestDeepValidation(unittest.TestCase):
                 audio_vae=mock_audio_vae,
                 clip=mock_clip,
                 timeline_data=timeline_data,
+                continuity_mode="FL2VA Tail Handoff",
             )
 
             self.assertEqual(mock_native.execute.call_count, 2)
@@ -130,24 +129,6 @@ class TestDeepValidation(unittest.TestCase):
             self.assertIn("ref_image_1", c2_call_kwargs["ref_images"])
             self.assertIsNotNone(c2_call_kwargs["ref_images"]["ref_image_1"])
 
-    def test_face_refine_dimension_safeguard(self):
-        """Verify apply_face_refinement resizes refined_crops if VAE decoder alters dimensions."""
-        frames = torch.zeros((4, 256, 256, 3))
-        mock_vae = MagicMock()
-        mock_vae.encode.return_value = {"samples": torch.zeros((1, 24, 4, 8, 8))}
-        mock_vae.decode.return_value = torch.zeros((4, 120, 120, 3))
-        mock_model = MagicMock()
-
-        with patch("comfy.sample.sample") as mock_sample:
-            mock_sample.return_value = {"samples": (torch.zeros((1, 24, 4, 8, 8)), torch.zeros((1, 32, 2, 20)))}
-            stitched, orig = apply_face_refinement(
-                decoded_frames=frames,
-                model=mock_model,
-                vae=mock_vae,
-                strength=0.5,
-                crop_size=128,
-            )
-            self.assertEqual(stitched.shape, (4, 256, 256, 3))
 
     def test_concatenate_multichannel_audio(self):
         """Verify concatenate_audio_clips standardizes mono, stereo, and 6-channel audio to stereo."""
@@ -163,15 +144,6 @@ class TestDeepValidation(unittest.TestCase):
         self.assertEqual(result["waveform"].shape[1], 2)  # Strictly stereo [1, 2, total_samples]
 
 
-    def test_face_refine_boundary_clamping(self):
-        """Verify face refinement handles small or odd-dimension frames at edges without index error."""
-        frames = torch.zeros((2, 120, 150, 3))
-        stitched, orig = apply_face_refinement(
-            decoded_frames=frames,
-            crop_size=512,
-            strength=0.35,
-        )
-        self.assertEqual(stitched.shape, (2, 120, 150, 3))
 
     def test_refpack_daisy_chain_multi_packs(self):
         """Verify daisy-chaining multiple RefPacks accumulates references with unique IDs and pack indices."""
@@ -197,4 +169,3 @@ class TestDeepValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

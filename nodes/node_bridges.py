@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-import torch
 
 CATEGORY = "ComfyUI-AhmedAhmedEG"
 
@@ -35,6 +33,7 @@ class MiniMaxH3ReferenceBridge:
                 pack[f"ref_image_{i}"] = img
                 refs.append({
                     "id": f"ref_img_{i}",
+                    "slot_id": f"ref_image_{i}",
                     "name": f"Picture {i}",
                     "type": "image",
                     "data": img,

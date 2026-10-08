@@ -1,6 +1,7 @@
 """Unit tests for MiniMaxH3RefPack, clip-driven modes, and internal continuity."""
 
 import unittest
+from tests.cache_fixture import CacheIsolatedTestCase
 import json
 
 import os
@@ -18,8 +19,9 @@ from nodes.node_bridges import MiniMaxH3ReferenceBridge
 from nodes.node_director import MiniMaxH3MasterDirector
 
 
-class TestRefPackAndClipModes(unittest.TestCase):
+class TestRefPackAndClipModes(CacheIsolatedTestCase):
     def setUp(self):
+        super().setUp()
         self.ref_pack_node = MiniMaxH3RefPack()
         self.bridge_node = MiniMaxH3ReferenceBridge()
         self.director_node = MiniMaxH3MasterDirector()
@@ -146,7 +148,7 @@ class TestRefPackAndClipModes(unittest.TestCase):
                 timeline_data=timeline_data,
             )
 
-        dummy_img, dummy_aud, video_info, pos, lat, prompt, fps, total_frames, status_str = res
+        dummy_img, dummy_aud, video_info, pos, lat, prompt, fps, total_frames, status_str, project_state = res
         self.assertIn("Emitted conditioning for 3 clip(s)", status_str)
         self.assertEqual(fps, 24.0)
 
@@ -235,7 +237,7 @@ class TestRefPackAndClipModes(unittest.TestCase):
                 timeline_data=timeline_data,
             )
 
-        dummy_img, dummy_aud, video_info, pos, lat, prompt_out, fps, total_frames, status_str = res
+        dummy_img, dummy_aud, video_info, pos, lat, prompt_out, fps, total_frames, status_str, project_state = res
         self.assertIn("Emitted conditioning for 1 clip(s)", status_str)
         # Verify tag translation translated <Cyberpunk Hero> to <Picture 1> or appropriate tag
         self.assertIn("<Picture 1>", prompt_out)
@@ -243,4 +245,3 @@ class TestRefPackAndClipModes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

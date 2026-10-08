@@ -47,7 +47,7 @@ PROJECT_FORMAT_VERSION = 5
 
 def align_frame_count(n: int, mode: str = "up") -> int:
     """Align frame count to MiniMax H3's required 17k + 5 grid.
-    
+
     mode: 'up' (default), 'down', or 'nearest'
     If n <= 5, returns 5.
     """
@@ -96,11 +96,11 @@ def calculate_dimensions_for_aspect_and_mp(aspect: str, megapixels: float) -> Tu
     }
     ratio_w, ratio_h = aspect_map.get(aspect, (16, 9))
     target_pixels = megapixels * 1_000_000.0
-    
+
     aspect_val = ratio_w / ratio_h
     raw_h = math.sqrt(target_pixels / aspect_val)
     raw_w = raw_h * aspect_val
-    
+
     w = snap_to_multiple(raw_w, CANVAS_MULTIPLE)
     h = snap_to_multiple(raw_h, CANVAS_MULTIPLE)
     return w, h

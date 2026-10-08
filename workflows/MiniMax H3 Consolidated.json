@@ -1,0 +1,542 @@
+{
+  "last_node_id": 7,
+  "last_link_id": 9,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MiniMaxH3ModelLoader",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3ModelLoader"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "widgets_values": [
+        "SELECT_FL2VA_CHECKPOINT",
+        "default"
+      ],
+      "title": "Select FL2VA checkpoint"
+    },
+    {
+      "id": 2,
+      "type": "MiniMaxH3ModelLoader",
+      "pos": [
+        0,
+        230
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3ModelLoader"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "widgets_values": [
+        "SELECT_REF2VA_CHECKPOINT",
+        "default"
+      ],
+      "title": "Select REF2VA checkpoint"
+    },
+    {
+      "id": 3,
+      "type": "MiniMaxH3EncoderLoader",
+      "pos": [
+        0,
+        460
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3EncoderLoader"
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "widgets_values": [
+        "SELECT_MINIMAX_TEXT_ENCODER",
+        "SELECT_VIDEO_VAE",
+        "SELECT_AUDIO_VAE",
+        "default"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "MiniMaxH3DirectorSettings",
+      "pos": [
+        370,
+        0
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3DirectorSettings"
+      },
+      "inputs": [
+        {
+          "name": "settings_optional",
+          "type": "MMX_DIRECTOR_CONFIG",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "config",
+          "type": "MMX_DIRECTOR_CONFIG",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "widgets_values": [
+        1344,
+        768,
+        24,
+        25,
+        1,
+        "euler",
+        "simple",
+        12,
+        3,
+        0,
+        "All-in-One Generation",
+        "simple",
+        "full_batch",
+        "Motion Context (Chained)",
+        "22",
+        "full"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "MiniMaxH3MasterNode",
+      "pos": [
+        740,
+        0
+      ],
+      "size": [
+        1200,
+        900
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MasterNode"
+      },
+      "inputs": [
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 1
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 2
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        },
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "name": "config",
+          "type": "MMX_DIRECTOR_CONFIG",
+          "link": 4
+        },
+        {
+          "name": "ref_pack",
+          "type": "MMX_REF_PACK",
+          "link": null
+        },
+        {
+          "name": "fl2va_model",
+          "type": "MODEL",
+          "link": 5
+        },
+        {
+          "name": "ref2va_model",
+          "type": "MODEL",
+          "link": 6
+        },
+        {
+          "name": "selflift",
+          "type": "MMX_DIR_SELFLIFT",
+          "link": null
+        },
+        {
+          "name": "refine",
+          "type": "MMX_DIR_REFINE",
+          "link": null
+        },
+        {
+          "name": "face_refine",
+          "type": "MMX_DIR_FACE_REFINE",
+          "link": null
+        },
+        {
+          "name": "semantic_bridge",
+          "type": "MMX_DIR_SEMANTIC_BRIDGE",
+          "link": null
+        },
+        {
+          "name": "i2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": null
+        },
+        {
+          "name": "r2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": null
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": null
+        },
+        {
+          "name": "prompt_pack",
+          "type": "PROMPT_PACK",
+          "link": null
+        },
+        {
+          "name": "model_pack",
+          "type": "MMX_MODEL_PACK",
+          "link": null
+        },
+        {
+          "name": "continuation",
+          "type": "MMX_CONTINUATION",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            8
+          ]
+        },
+        {
+          "name": "video",
+          "type": "VHS_VIDEOINFO",
+          "links": []
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": []
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": []
+        },
+        {
+          "name": "resolved_prompt",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": []
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "project_state",
+          "type": "STRING",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "widgets_values": [
+        "{\"version\": 2, \"project_id\": \"consolidated_example\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 5, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
+        "{}"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "MiniMaxH3VideoCombine",
+      "pos": [
+        2000,
+        0
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3VideoCombine"
+      },
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 8
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "filename",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        24,
+        "H.264",
+        "mp4",
+        "pyav",
+        "8-bit",
+        21,
+        "Standard",
+        false,
+        true,
+        "minimax/example",
+        true,
+        false,
+        false,
+        "Auto",
+        "192k",
+        false,
+        false
+      ]
+    },
+    {
+      "id": 7,
+      "type": "MiniMaxH3ProjectVideo",
+      "pos": [
+        2000,
+        380
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 2,
+      "properties": {
+        "Node name for S&R": "MiniMaxH3ProjectVideo"
+      },
+      "inputs": [
+        {
+          "name": "timeline",
+          "type": "STRING",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": []
+        },
+        {
+          "name": "shot_files_json",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        "consolidated_example",
+        "final",
+        "all",
+        24,
+        "minimax/cached_project",
+        true
+      ],
+      "title": "Cached disk export (enable when needed)"
+    }
+  ],
+  "links": [
+    [
+      1,
+      3,
+      1,
+      5,
+      0,
+      "VAE"
+    ],
+    [
+      2,
+      3,
+      2,
+      5,
+      1,
+      "VAE"
+    ],
+    [
+      3,
+      3,
+      0,
+      5,
+      2,
+      "CLIP"
+    ],
+    [
+      4,
+      4,
+      0,
+      5,
+      4,
+      "MMX_DIRECTOR_CONFIG"
+    ],
+    [
+      5,
+      1,
+      0,
+      5,
+      6,
+      "MODEL"
+    ],
+    [
+      6,
+      2,
+      0,
+      5,
+      7,
+      "MODEL"
+    ],
+    [
+      7,
+      5,
+      0,
+      6,
+      0,
+      "IMAGE"
+    ],
+    [
+      8,
+      5,
+      1,
+      6,
+      1,
+      "AUDIO"
+    ],
+    [
+      9,
+      5,
+      9,
+      7,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6,
+      "offset": [
+        20,
+        20
+      ]
+    }
+  },
+  "version": 0.4
+}

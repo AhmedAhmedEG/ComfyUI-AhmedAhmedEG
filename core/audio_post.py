@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-import numpy as np
 import torch
+
+
+def fit_audio_duration(audio, frame_count, fps=24.0):
+    """Keep decoded PCM exactly as long as the corresponding video frames."""
+    wf = audio["waveform"]
+    length = max(1, round(frame_count / fps * int(audio["sample_rate"])))
+    wf = wf[..., :length]
+    if wf.shape[-1] < length:
+        padding = torch.zeros((*wf.shape[:-1], length - wf.shape[-1]), device=wf.device, dtype=wf.dtype)
+        wf = torch.cat([wf, padding], dim=-1)
+    return {**audio, "waveform": wf}
 
 
 def apply_audio_fade(
@@ -18,7 +28,7 @@ def apply_audio_fade(
     """Apply gentle cosine fade-in and fade-out ramps to eliminate pops and clicks at seams."""
     out = waveform.clone()
     channels, num_samples = out.shape[-2], out.shape[-1]
-    
+
     # Fade in
     fade_in_len = min(num_samples // 2, int(round((fade_in_ms / 1000.0) * sample_rate)))
     if fade_in_len > 0:
@@ -57,6 +67,7 @@ def concatenate_audio_clips(
     crossfade_ms: float = 20.0,
     enable_gain_match: bool = True,
     enable_declick: bool = True,
+    seam_fade_ms: float = 15.0,
 ) -> Dict[str, Any]:
     """Assemble multiple audio clips into one seamless, continuous PCM track."""
     valid_clips = [c for c in audio_clips if c and "waveform" in c and c["waveform"].numel() > 0]
@@ -69,6 +80,7 @@ def concatenate_audio_clips(
 
     for i, clip in enumerate(valid_clips):
         wf = clip["waveform"]
+        wf = wf.detach().cpu().float() if hasattr(wf, "detach") else wf.cpu().float()
         sr = int(clip.get("sample_rate", target_sample_rate))
 
         # Flatten batch dimension if present
@@ -101,7 +113,8 @@ def concatenate_audio_clips(
 
         # De-click boundary ramps
         if enable_declick:
-            wf = apply_audio_fade(wf, target_sample_rate, fade_in_ms=crossfade_ms, fade_out_ms=crossfade_ms)
+            fade_ms = crossfade_ms if crossfade_ms > 0 else seam_fade_ms
+            wf = apply_audio_fade(wf, target_sample_rate, fade_in_ms=fade_ms, fade_out_ms=fade_ms)
 
         processed_waveforms.append(wf)
 
@@ -116,7 +129,7 @@ def concatenate_audio_clips(
 
     channels = processed_waveforms[0].shape[0]
     assembled = torch.zeros((channels, max(1, total_len)), dtype=torch.float32)
-    
+
     current_idx = 0
     for i, w in enumerate(processed_waveforms):
         w_len = w.shape[-1]

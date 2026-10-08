@@ -182,6 +182,10 @@ class MockTorchModule:
         return MockTensor(np.concatenate(arrays, axis=dim))
 
     @staticmethod
+    def stack(tensors, dim=0):
+        return MockTensor(np.stack(tensors, axis=dim))
+
+    @staticmethod
     def linspace(start, end, steps, device=None):
         return MockTensor(np.linspace(start, end, steps, dtype=np.float32))
 
@@ -278,6 +282,17 @@ def setup_mock_torch_if_needed():
         sys.modules["comfy.sample"] = comfy_mock.sample
         sys.modules["comfy.samplers"] = comfy_mock.samplers
         sys.modules["comfy.nested_tensor"] = comfy_mock.nested_tensor
+        import types
+        extras = types.ModuleType("comfy_extras")
+        h3 = types.ModuleType("comfy_extras.nodes_minimax_h3")
+        class SigmaShift:
+            @classmethod
+            def execute(cls, model, shift_video, shift_audio):
+                return (model,)
+        h3.MiniMaxH3SigmaShift = SigmaShift
+        extras.nodes_minimax_h3 = h3
+        sys.modules["comfy_extras"] = extras
+        sys.modules["comfy_extras.nodes_minimax_h3"] = h3
     try:
         import torch
         return torch

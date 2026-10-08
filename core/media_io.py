@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import os
-import math
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -34,17 +33,19 @@ def resolve_input_path(relative_or_absolute_path: str, input_directory: Optional
     path = str(relative_or_absolute_path or "").strip()
     if not path:
         raise ValueError("Media path must be non-empty.")
-    
-    if os.path.isabs(path) and os.path.isfile(path):
-        return os.path.realpath(path)
 
     if input_directory:
         root = os.path.realpath(input_directory)
         candidate = os.path.realpath(os.path.join(root, path))
-        if os.path.commonpath((root, candidate)) != root:
+        try:
+            contained = os.path.normcase(os.path.commonpath((root, candidate))) == os.path.normcase(root)
+        except ValueError:
+            contained = False
+        if not contained:
             raise ValueError(f"Media path escapes the ComfyUI input directory: {path}")
         if os.path.isfile(candidate):
             return candidate
+        raise FileNotFoundError(f"Media file not found: {path}")
 
     if os.path.isfile(path):
         return os.path.realpath(path)
@@ -84,6 +85,13 @@ def scale_tensor_image(
         # Direct stretch to target canvas
         resized = F.interpolate(tensor, size=(target_h, target_w), mode="bilinear", align_corners=False)
         return resized.permute(0, 2, 3, 1).contiguous()
+
+    if mode == "Divisible crop":
+        crop_h, crop_w = max(32, h//32*32), max(32, w//32*32)
+        if h < 32 or w < 32:
+            return scale_tensor_image(image, "Fit and pad", crop_w, crop_h)
+        y, x = (h-crop_h)//2, (w-crop_w)//2
+        return image[:, y:y+crop_h, x:x+crop_w].contiguous()
 
     if mode == "Fit":
         # Fit entirely within target canvas, snapping to divisible grid
@@ -137,7 +145,7 @@ def load_image(
 
 def decode_audio_frame(frame) -> np.ndarray:
     """Safely decode one PyAV audio frame into float32 array shaped (channels, samples).
-    
+
     Handles planar formats (fltp) and packed interleaved formats (s16) to avoid
     the classic stereo length doubling bug.
     """
@@ -204,16 +212,6 @@ def load_audio(
         container.close()
 
 
-def load_embedded_video_audio(
-    path: str,
-    input_directory: Optional[str] = None,
-    trim_start: float = 0.0,
-    trim_end: Optional[float] = None,
-) -> Dict[str, Any]:
-    """Decode embedded audio stream from a video container with exact trim alignment."""
-    return load_audio(path, input_directory=input_directory, trim_start=trim_start, trim_end=trim_end)
-
-
 def load_video(
     path: str,
     input_directory: Optional[str] = None,
@@ -225,7 +223,7 @@ def load_video(
     target_height: int = 768,
 ) -> torch.Tensor:
     """Decode a video to an IMAGE tensor [T, H, W, 3] at fixed target_fps.
-    
+
     Uses presentation timestamp (PTS) search (nearest PTS match) so videos
     recorded at 30, 60, or variable fps are perfectly resampled without slow-mo.
     """
@@ -293,21 +291,3 @@ def load_video(
         return resampled_batch
     finally:
         container.close()
-
-
-def resample_image_batch_fps(
-    frames: torch.Tensor,
-    source_fps: float,
-    target_fps: float = FPS,
-) -> torch.Tensor:
-    """Resample an in-memory IMAGE batch [T, H, W, 3] from source_fps to target_fps preserving duration."""
-    if abs(source_fps - target_fps) < 1e-3 or frames.shape[0] <= 1:
-        return frames
-
-    total_frames = int(frames.shape[0])
-    duration = total_frames / float(source_fps)
-    target_count = max(1, round(duration * float(target_fps)))
-
-    # Nearest neighbor temporal resampling indices
-    indices = torch.linspace(0, total_frames - 1, steps=target_count).round().long().clamp(0, total_frames - 1)
-    return frames[indices]

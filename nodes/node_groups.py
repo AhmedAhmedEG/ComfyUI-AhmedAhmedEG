@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
-import torch
+from typing import Any, Dict, List
 
 MMX_DIR_GROUP = "MMX_DIR_GROUP"
 CATEGORY = "ComfyUI-AhmedAhmedEG"

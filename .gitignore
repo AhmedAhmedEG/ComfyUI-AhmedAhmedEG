@@ -9,7 +9,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -19,9 +18,12 @@ wheels/
 .installed.cfg
 *.egg
 output/
+.upstream/
+.validation/
 *.mmxproj.tmp
 .vscode/
 .idea/
-workflows/
-*.json
-
+.publish/
+.env
+.env.*
+node_modules/

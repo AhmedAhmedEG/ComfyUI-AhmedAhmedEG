@@ -365,4 +365,8 @@ class MiniMaxH3Cache:
         except ImportError:
             wrapper_type = "outer_sample"
         patched.add_wrapper(wrapper_type, H3SamplingScope(cache))
+        provenance = getattr(model, "_mmx_provenance", None)
+        if isinstance(provenance, dict):
+            patched._mmx_provenance = {**provenance, "residual_cache": {"threshold": reuse_threshold,
+                "start": start_percent, "end": end_percent, "max_steps": max_steps, "device": device}}
         return (patched,)

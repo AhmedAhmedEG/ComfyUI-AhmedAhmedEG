@@ -10,6 +10,11 @@ class MiniMaxH3DirectorRefine:
 
     @classmethod
     def INPUT_TYPES(cls):
+        import comfy.samplers
+        try:
+            from ..core.vendor.aimixer.director.h3_latent_upscale import list_h3_latent_upscale_models
+        except ImportError:
+            from core.vendor.aimixer.director.h3_latent_upscale import list_h3_latent_upscale_models
         return {
             "required": {
                 "enabled": ("BOOLEAN", {"default": True, "tooltip": "Toggle 2nd-pass refinement"}),
@@ -21,9 +26,18 @@ class MiniMaxH3DirectorRefine:
                 "enable_tiling": ("BOOLEAN", {"default": False, "tooltip": "Enable spatial tiled sampling to conserve VRAM on high resolutions"}),
                 "tile_count": ("INT", {"default": 2, "min": 1, "max": 8, "step": 1}),
                 "tile_overlap": ("INT", {"default": 128, "min": 16, "max": 512, "step": 16, "tooltip": "Tile overlap in pixels"}),
+                "passes": ("INT", {"default": 1, "min": 1, "max": 20}),
+                "sampler": (comfy.samplers.KSampler.SAMPLERS,),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
+                "latent_upscale_model": (["interpolate", *list_h3_latent_upscale_models()],),
+                "enable_latent_chunking": ("BOOLEAN", {"default": False}),
+                "backend": (["global", "sampler"], {"default": "global"}),
+                "memory_budget_mb": ("INT", {"default": 0, "min": 0, "max": 131072}),
+                "upscale_precision": (["auto", "bf16", "fp16", "fp32"],),
             },
             "optional": {
                 "refine_model": ("MODEL", {"tooltip": "Optional alternative UNET model for the second pass (e.g. non-turbo model)."}),
+                "sigmas": ("SIGMAS",),
             },
         }
 
@@ -44,6 +58,9 @@ class MiniMaxH3DirectorRefine:
         tile_overlap: int = 128,
         enabled: bool = True,
         refine_model=None,
+        passes=1, sampler="euler", scheduler="simple", latent_upscale_model="interpolate",
+        enable_latent_chunking=False, sigmas=None,
+        backend="global", memory_budget_mb=0, upscale_precision="auto",
     ):
         return ({
             "enabled": bool(enabled),
@@ -56,4 +73,9 @@ class MiniMaxH3DirectorRefine:
             "tile_count": int(tile_count),
             "tile_overlap": int(tile_overlap),
             "refine_model": refine_model,
+            "passes": int(passes), "sampler": sampler, "scheduler": scheduler,
+            "latent_upscale_model": None if latent_upscale_model == "interpolate" else latent_upscale_model,
+            "enable_latent_chunking": bool(enable_latent_chunking), "sigmas": sigmas,
+            "backend": backend, "memory_budget_mb": int(memory_budget_mb),
+            "upscale_precision": upscale_precision,
         },)
