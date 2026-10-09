@@ -1881,6 +1881,152 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 .mmx-time-tick.major::after { height: 10px; }
 .mmx-time-tick span { padding-left: 4px; }
+
+/* Editor finish: one node surface, readable controls, restrained violet accents. */
+.mmx-director-root {
+  --mmx-accent: #a396ff;
+  --mmx-line: color-mix(in srgb, var(--input-text, #ddd) 12%, transparent);
+  --mmx-soft: color-mix(in srgb, var(--input-text, #ddd) 4%, transparent);
+  font-size: 13px;
+  gap: 12px;
+  padding: 4px 8px 8px;
+  accent-color: #9381f8;
+  scrollbar-width: thin;
+  scrollbar-color: #666176 transparent;
+}
+.mmx-director-root .mmx-toolbar {
+  gap: 10px;
+  padding-bottom: 10px;
+  border-color: var(--mmx-line);
+}
+.mmx-director-root .mmx-toolbar-left,
+.mmx-director-root .mmx-toolbar-right { gap: 8px; }
+.mmx-director-root .mmx-toolbar-left { align-items: center; }
+.mmx-director-root button,
+.mmx-director-root select,
+.mmx-director-root input:not([type=checkbox]):not([type=range]):not([type=file]) {
+  font-size: 12px !important;
+  min-height: 28px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.mmx-director-root select,
+.mmx-director-root input:not([type=checkbox]):not([type=range]):not([type=file]) {
+  border: 1px solid var(--mmx-line) !important;
+  color: var(--input-text, #e5e5e5) !important;
+  background: var(--comfy-input-bg, #303030);
+  padding: 4px 8px !important;
+}
+.mmx-director-root .mmx-action-btn {
+  background: var(--mmx-soft);
+  border: 1px solid var(--mmx-line);
+  padding: 5px 10px;
+  gap: 6px;
+  color: var(--input-text, #ddd);
+  transition: background .15s, border-color .15s;
+}
+.mmx-director-root .mmx-action-btn:hover { background: rgba(147,129,248,.12); border-color: #7666b5; }
+.mmx-director-root .mmx-action-btn.danger { color: #f4a0a7; background: rgba(240,100,115,.06); border-color: rgba(240,100,115,.22); }
+.mmx-director-root .mmx-pill-group,
+.mmx-director-root .mmx-prompt-mode-tabs {
+  padding: 3px;
+  border: 1px solid var(--mmx-line);
+  background: var(--mmx-soft);
+  border-radius: 8px;
+  gap: 3px;
+}
+.mmx-director-root .mmx-pill-btn,
+.mmx-director-root .mmx-prompt-mode-tab { padding: 5px 13px; border-radius: 5px; }
+.mmx-director-root .mmx-pill-btn.active,
+.mmx-director-root .mmx-prompt-mode-tab.active {
+  background: #7967d8;
+  color: #fff;
+  box-shadow: none;
+}
+.mmx-director-root .mmx-multitrack-panel {
+  background: var(--mmx-soft);
+  border-radius: 8px;
+  padding: 8px 0;
+  gap: 4px;
+  flex-shrink: 0;
+  max-height: 249px;
+}
+.mmx-director-root .mmx-track-header-cell {
+  background: var(--comfy-menu-bg, #282828);
+  border-right-color: var(--mmx-line);
+  color: var(--descrip-text, #b3b0be);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .025em;
+}
+.mmx-director-root .mmx-track-lane-cell {
+  background-image: repeating-linear-gradient(to right, var(--mmx-line) 0 1px, transparent 1px var(--mmx-grid-step, 80px));
+  background-position: 6px 0;
+}
+.mmx-director-root .mmx-subtrack-block {
+  border-radius: 6px;
+  border-color: var(--mmx-line);
+  background: var(--comfy-menu-bg, #282828);
+  box-shadow: none;
+}
+.mmx-director-root .mmx-subtrack-block.active {
+  background: color-mix(in srgb, #9381f8 6%, var(--comfy-menu-bg, #282828)) !important;
+  border-color: #625b7b !important;
+  box-shadow: none;
+}
+.mmx-director-root .mmx-shot-block.active { border-color: var(--mmx-accent) !important; box-shadow: inset 3px 0 0 #9381f8; }
+.mmx-director-root .mmx-subtrack-block.validated { border-color: #55a987 !important; }
+.mmx-director-root .mmx-shot-block { padding: 7px 10px; height: 58px; }
+.mmx-director-root .mmx-clip-title { font-size: 12px; font-weight: 650; }
+.mmx-director-root .mmx-shot-prompt-preview { font-size: 11px; line-height: 1.4; color: var(--descrip-text, #b2adbd); }
+.mmx-director-root .mmx-subtrack-empty {
+  border: none;
+  font-size: 11px;
+  color: var(--descrip-text, #9e9aa8);
+  font-style: normal;
+}
+.mmx-director-root .mmx-add-clip-card { height: 58px; border-radius: 6px; color: var(--descrip-text, #b9b4c5); border-color: #605972; }
+.mmx-director-root .mmx-timecode-display { color: var(--mmx-accent); padding: 5px 8px; background: var(--mmx-soft); border-color: var(--mmx-line); border-radius: 5px; }
+.mmx-director-root .mmx-inspector { gap: 12px; border-color: var(--mmx-line); padding-top: 12px; }
+.mmx-director-root .mmx-inspector-header { padding-bottom: 10px; border-color: var(--mmx-line); }
+.mmx-director-root .mmx-inspector-title { gap: 10px; }
+.mmx-director-root .mmx-inspector-card-title,
+.mmx-director-root .mmx-local-refs-title { color: var(--descrip-text, #b4afc3); font-size: 11px; letter-spacing: .045em; font-weight: 600; }
+.mmx-director-root .mmx-inspector-card { gap: 9px; }
+.mmx-director-root .mmx-ctrl-item label { color: var(--descrip-text, #b9b6c1); font-size: 12px; }
+.mmx-director-root .mmx-local-refs-pool { padding: 10px 12px; background: var(--mmx-soft); border: 0; border-radius: 6px; }
+.mmx-director-root .mmx-quick-tag-btn { min-height: 24px; padding: 3px 8px; color: var(--mmx-accent); font-size: 11px !important; background: rgba(147,129,248,.07); border-color: rgba(147,129,248,.18); }
+.mmx-director-root textarea {
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px;
+  background: var(--comfy-input-bg, #242424);
+  color: var(--input-text, #e5e5e5);
+  border: 1px solid var(--mmx-line);
+  border-radius: 8px;
+}
+.mmx-director-root input:focus-visible,
+.mmx-director-root textarea:focus-visible,
+.mmx-director-root select:focus-visible,
+.mmx-director-root button:focus-visible,
+.mmx-director-root summary:focus-visible { outline: 2px solid var(--mmx-accent); outline-offset: 2px; }
+.mmx-director-root .mmx-validate-toggle { box-shadow: none; font-size: 11px; border-radius: 6px; padding: 5px 9px; }
+.mmx-director-root .mmx-validate-toggle.unvalidated { background: var(--mmx-soft); border-color: var(--mmx-line); color: var(--descrip-text, #bdb7c7); }
+.mmx-director-root .mmx-smart-preview video { border-radius: 8px; }
+.mmx-director-root .mmx-preview-empty { background: var(--mmx-soft); border-radius: 8px; }
+.mmx-director-root details > summary { cursor: pointer; color: var(--descrip-text, #c0b9cd); padding: 3px 0; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .mmx-director-root * { transition: none !important; } }
+
+.mmx-director-root .mmx-shot-sections { display: flex; gap: 6px 18px; flex-wrap: wrap; align-items: start; flex-shrink: 0; }
+.mmx-director-root .mmx-shot-sections > details { min-width: 0; }
+.mmx-director-root .mmx-shot-sections > details[open] { flex-basis: 100%; }
+.mmx-director-root .mmx-shot-sections > details > summary { padding: 4px 0; }
+.mmx-director-root .mmx-inspector { gap: 9px; }
+.mmx-director-root .mmx-prompt-inspector { min-height: 160px; }
+.mmx-director-root .mmx-track-lane-cell .mmx-clip-dup-btn { min-height: 22px; padding: 1px 5px; }
+.mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block, .mmx-director-root .mmx-aud-block { height: 34px; }
 `;
 
 function injectCSS() {
@@ -2707,38 +2853,6 @@ function mountDirectorUI(node) {
     renderInspector();
   };
 
-  const dupToolbarBtn = document.createElement("button");
-  dupToolbarBtn.className = "mmx-action-btn";
-  dupToolbarBtn.innerHTML = "📋 Duplicate Shot";
-  dupToolbarBtn.title = "Duplicate the currently active shot with all its settings and references";
-  dupToolbarBtn.onclick = () => {
-    const clip = timelineState.clips.find((c) => c.id === activeClipId) || timelineState.clips[0];
-    duplicateClip(clip);
-  };
-  toolbarLeft.appendChild(dupToolbarBtn);
-
-  const delToolbarBtn = document.createElement("button");
-  delToolbarBtn.className = "mmx-action-btn danger";
-  delToolbarBtn.innerHTML = "🗑️ Delete Shot";
-  delToolbarBtn.title = "Delete the currently active shot from the timeline";
-  delToolbarBtn.onclick = () => {
-    if (timelineState.clips.length <= 1) {
-      alert("Cannot delete the only shot on the timeline.");
-      return;
-    }
-    const clip = timelineState.clips.find((c) => c.id === activeClipId) || timelineState.clips[0];
-    if (confirm(`Delete "${clip.name}" from the timeline?`)) {
-      const idx = timelineState.clips.indexOf(clip);
-      if (idx !== -1) {
-        timelineState.clips.splice(idx, 1);
-        activeClipId = timelineState.clips[Math.max(0, idx - 1)]?.id || timelineState.clips[0]?.id || null;
-        syncState();
-        renderTimeline();
-      }
-    }
-  };
-  toolbarLeft.appendChild(delToolbarBtn);
-
   const clearBtn = document.createElement("button");
   clearBtn.className = "mmx-action-btn";
   clearBtn.innerHTML = "🗑️ Reset";
@@ -2762,7 +2876,7 @@ function mountDirectorUI(node) {
       renderTimeline();
     }
   };
-  toolbarLeft.appendChild(clearBtn);
+  projectTools.appendChild(clearBtn);
 
   // Preview Output Mode Selector
   const previewModeWrap = document.createElement("div");
@@ -2770,7 +2884,8 @@ function mountDirectorUI(node) {
   previewModeWrap.style.alignItems = "center";
   previewModeWrap.style.gap = "4px";
   previewModeWrap.style.marginLeft = "8px";
-  previewModeWrap.title = "Preview Output: Choose whether downstream renders the full sequence or only new/unvalidated clips.";
+  previewModeWrap.className = "mmx-output-selector";
+  previewModeWrap.title = "Export Output: Choose whether downstream renders the full sequence or only new/unvalidated clips.";
 
   const previewModeLabel = document.createElement("span");
   previewModeLabel.style.fontSize = "11px";
@@ -2966,6 +3081,7 @@ function mountDirectorUI(node) {
     const totalDuration = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
     const effectiveTotal = Math.max(totalDuration, 1.0);
     const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (w / effectiveTotal);
+    multitrackPanel.style.setProperty("--mmx-grid-step", `${pxPerSec}px`);
 
     const stepSec = pxPerSec > 80 ? 0.5 : (pxPerSec > 40 ? 1.0 : 2.0);
     const ticks = document.createDocumentFragment();
@@ -3785,9 +3901,12 @@ function mountDirectorUI(node) {
     audioMode.onchange = () => { activeClip.audio_mode = audioMode.value; syncState(); };
     audioLabel.appendChild(audioMode); inspector.appendChild(audioLabel);
 
+    const shotSections = document.createElement("div");
+    shotSections.className = "mmx-shot-sections";
+    inspector.appendChild(shotSections);
     const referencePanel = document.createElement("details");
     const referenceHeading = document.createElement("summary"); referenceHeading.textContent = "Upload and edit references";
-    referencePanel.appendChild(referenceHeading); inspector.appendChild(referencePanel);
+    referencePanel.appendChild(referenceHeading); shotSections.appendChild(referencePanel);
     const uploadReferences = async (files, replace = null) => {
       for (const file of files) {
         const data = new FormData(); data.append("image", file); data.append("type", "input");
@@ -3957,7 +4076,7 @@ function mountDirectorUI(node) {
     }
 
     const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Shot models, guides and grading";
-    shotExtras.appendChild(extrasTitle); inspector.appendChild(shotExtras);
+    shotExtras.appendChild(extrasTitle); shotSections.appendChild(shotExtras);
     const modelOverride = document.createElement("input"); modelOverride.placeholder = "Named model override";
     modelOverride.value = activeClip.model_override || "";
     modelOverride.onchange = () => { activeClip.model_override = modelOverride.value.trim(); syncState(); };
@@ -4114,7 +4233,7 @@ function mountDirectorUI(node) {
     const loraHeading = document.createElement("summary");
     loraHeading.textContent = "Shot LoRAs";
     loraPanel.appendChild(loraHeading);
-    inspector.appendChild(loraPanel);
+    shotSections.appendChild(loraPanel);
     if (!Array.isArray(activeClip.loras)) activeClip.loras = [];
     const loraRows = document.createElement("div");
     loraPanel.appendChild(loraRows);
@@ -4200,7 +4319,7 @@ function mountDirectorUI(node) {
     durNum.max = "60.0";
     durNum.step = "0.1";
     durNum.value = String(activeClip.duration || 5.0);
-    durNum.style.width = "46px";
+    durNum.style.width = "56px";
     durNum.style.background = "var(--comfy-input-bg, #333333)";
     durNum.style.border = "1px solid var(--border-color, #4a4a4a)";
     durNum.style.borderRadius = "4px";
@@ -4317,7 +4436,7 @@ function mountDirectorUI(node) {
     tailNum.max = "240";
     tailNum.step = "1";
     tailNum.value = String(currentFrames);
-    tailNum.style.width = "42px";
+    tailNum.style.width = "56px";
     tailNum.style.background = "var(--comfy-input-bg, #333333)";
     tailNum.style.border = "1px solid var(--border-color, #4a4a4a)";
     tailNum.style.borderRadius = "4px";
@@ -4485,6 +4604,7 @@ function mountDirectorUI(node) {
     if (!Array.isArray(activeClip.ref_ids)) activeClip.ref_ids = [];
 
     const allRefs = timelineState.available_refs || [];
+    refsPoolWrap.hidden = allRefs.length === 0;
     allRefs.forEach((r) => {
       const isChecked = activeClip.ref_ids.includes(r.id);
       const item = document.createElement("button");

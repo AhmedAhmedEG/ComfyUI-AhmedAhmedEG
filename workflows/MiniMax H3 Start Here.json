@@ -678,7 +678,7 @@
       ]
     },
     "minimax_h3": {
-      "version": "1.0.6",
+      "version": "1.0.7",
       "requires_restart_after_update": true
     }
   },

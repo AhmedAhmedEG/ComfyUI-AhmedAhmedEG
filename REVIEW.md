@@ -1,5 +1,17 @@
 # Consolidation review — 2026-10-09
 
+## 1.0.7 visual polish
+
+Larger controls, theme-aware surfaces, restrained violet selection, aligned
+number fields and a timing grid improve the Master editor. Duplicate toolbar
+shot actions are removed in favor of the inspector actions; Reset lives in
+Project tools. Advanced shot sections share one row and the empty reference
+pool is hidden while uploads remain available in the reference panel.
+
+The standard starter editor fits its default prompt without inspector scrolling
+at the existing node size. The actual editor DOM was visually checked, editor
+and preview checks pass, and the guide screenshot is refreshed.
+
 ## Practical guide rewrite
 
 The HTML guide follows a single six-step recipe using the actual starter values
