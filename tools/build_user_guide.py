@@ -1,5 +1,6 @@
 """Build the offline HTML user guide and check public-node coverage."""
 import ast
+import base64
 import json
 from pathlib import Path
 
@@ -22,9 +23,12 @@ def build():
     for marker, value in [("__GUIDE_DATA__", data), ("__WORKFLOW_DATA__", workflow), ("__NODE_CATALOG__", catalog)]:
         assert html.count(marker) == 1
         html = html.replace(marker, json.dumps(value, ensure_ascii=False).replace("</", "<\\/"))
+    assert html.count("__EDITOR_SCREENSHOT__") == 1
+    screenshot = base64.b64encode((ROOT / "docs/master-editor.png").read_bytes()).decode("ascii")
+    html = html.replace("__EDITOR_SCREENSHOT__", "data:image/png;base64," + screenshot)
     output = ROOT / "docs/MiniMax-H3-User-Guide.html"
     output.write_text(html, encoding="utf-8", newline="\n")
-    print(f"Built animated walkthrough with {len(features)} feature entries covering {len(catalog)} public nodes: {output}")
+    print(f"Built practical guide with {len(features)} task topics covering {len(catalog)} public nodes: {output}")
 
 
 if __name__ == "__main__":

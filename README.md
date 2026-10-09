@@ -22,10 +22,11 @@ There is one public **MiniMax H3 Master Node** name. The package has 22 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
 nodes. The two core nodes are in `ComfyUI-AhmedAhmedEG/Start here`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
-[Open the animated HTML walkthrough](docs/MiniMax-H3-User-Guide.html) to follow
-the connections, try shot controls, bind a sample reference, explore continuity,
-and see where enhancements run. A searchable toolbox covers every public node;
-the starter workflow is downloadable inside the offline guide.
+[Open the practical HTML guide](docs/MiniMax-H3-User-Guide.html): follow one
+starter recipe, add a reference, build a second shot, review Latest clip and save
+the result. Inline diagrams explain the connections and preview transfer scope.
+Optional features are grouped by task with searchable instructions for all 22
+tools. The current starter can be downloaded directly from the offline guide.
 Rebuild with `python tools/build_user_guide.py`.
 Saved UI workflows using the former Master Director type migrate on import.
 API prompts should use `MiniMaxH3MasterNode` as their `class_type`.

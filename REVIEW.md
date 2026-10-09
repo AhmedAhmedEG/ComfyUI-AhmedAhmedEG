@@ -1,5 +1,15 @@
 # Consolidation review — 2026-10-09
 
+## Practical guide rewrite
+
+The HTML guide follows a single six-step recipe using the actual starter values
+and control names. Each diagram sits beside its instruction; no global scrolling
+simulation or presentation remains. Seventeen on-demand task topics cover all
+22 public tools, with model-family, continuity and latest/full preview examples.
+The current Master editor screenshot is embedded in the standalone offline HTML.
+Guide interaction checks pass; desktop and 390-pixel mobile layout were visually
+checked with no horizontal overflow.
+
 ## 1.0.6 editor and smart preview
 
 The timeline ruler now uses DOM text and ticks instead of a stretched canvas
