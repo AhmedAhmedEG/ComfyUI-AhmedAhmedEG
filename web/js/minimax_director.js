@@ -2036,7 +2036,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-clip-dup-btn { display: none; }
 .mmx-director-root .mmx-clip-del-btn { flex: 0 0 22px; height: 22px; padding: 0; margin-left: auto; font: 18px/1 system-ui; }
 .mmx-director-root .mmx-clip-handle-right { width: 10px; border-left: 1px solid #ffffff18; background: #ffffff08; }
-.mmx-director-root .mmx-dragging { cursor: grabbing; opacity: .75; z-index: 4; box-shadow: 0 4px 14px #0006; pointer-events: none; }
+.mmx-director-root .mmx-dragging { cursor: grabbing; opacity: .75; z-index: 4; box-shadow: 0 4px 14px #0006; }
 .mmx-director-root .mmx-drop-before { border-left: 3px solid #b4a5ff; }
 .mmx-director-root .mmx-drop-after { border-right: 3px solid #b4a5ff; }
 .mmx-director-root .mmx-inspector-header { flex-wrap: wrap; }
@@ -3390,6 +3390,7 @@ function mountDirectorUI(node) {
 
   // Render Multi-Track Timeline & Clips
   const renderTimeline = () => {
+    cancelTimelineDrag?.();
     refreshFileRefs();
     shotsLane.innerHTML = "";
     imagesLane.innerHTML = "";

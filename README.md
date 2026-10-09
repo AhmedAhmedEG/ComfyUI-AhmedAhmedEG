@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.0.8** consolidates the MiniMax/video production features of
+Version **1.0.9** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -52,7 +52,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.0.8 reports 22 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.0.9 reports 22 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.

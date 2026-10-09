@@ -182,3 +182,9 @@ former blanket JSON/workflow ignore rules have been removed.
 ## Timeline interaction repair (1.0.8)
 
 Shot bodies now drag to reorder the complete shot and its reference lanes, with an insertion marker and graph-zoom-aware motion. The right edge resizes duration. Every shot has Delete, including the last shot; intentionally empty timelines persist and execution reports Add Shot instead of creating a fallback. Move earlier/later buttons preserve keyboard access. Locked source clips stay in place, and affected successors lose approval after ordering changes. Verified in a browser and the editor regression harness; 103 Python tests pass.
+
+## Beginner documentation and drag recovery (1.0.9)
+
+Getting Started now explains nodes, sockets, cables, model files, all nine starter boxes and common generation terms. All 22 node pages include a plain-language explanation and first-use example. Real screenshots were captured from the installed ComfyUI frontend running the supplied starter in an isolated read-only preview, including readable model, VAE and settings close-ups. No generation or remote workflow changes were made.
+
+Shot dragging now captures the pointer and handles movement/release before canvas listeners, cancels on leaving the editor, losing capture or losing window focus, and clears transforms during rerenders. Actual ComfyUI browser checks confirmed reordering and outside-node cancellation; regression tests cover outside movement and blur without lost clips.

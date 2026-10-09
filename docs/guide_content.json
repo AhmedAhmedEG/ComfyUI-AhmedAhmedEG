@@ -1,5 +1,5 @@
 {
-  "version": "1.0.8",
+  "version": "1.0.9",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -52,7 +52,11 @@
         "Number of frames in the returned assembled IMAGE batch.",
         "JSON run report with generated/reused shot details.",
         "Updated authoring timeline JSON, including shot seed state."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This is where you direct the video. A shot is one short clip. You give each shot a written description, a length and, optionally, pictures or other media to follow. The Master runs the AI and joins the completed shots.",
+        "first_use": "Make a two-second text-to-video shot first. Write what happens, how the camera moves and what you hear. Leave optional enhancement connections empty. Click Run, then open Preview → Latest clip."
+      }
     },
     "MiniMaxH3DirectorSettings": {
       "summary": "Builds the canvas, sampling and execution configuration consumed by the Master.",
@@ -86,7 +90,11 @@
       },
       "output_descriptions": [
         "Configuration consumed by the Master config input."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This is the control panel for how the video is generated. It sends settings to the Master; it does not make a video by itself. Width and height set the picture size. Steps set how many sampling iterations the AI takes. Seed is the starting random number.",
+        "first_use": "Connect config to the Master’s config input. Use the starter values for your first run. Change only one setting at a time. Keep seed fixed while comparing results so a new random starting point does not hide the effect of your change."
+      }
     },
     "MiniMaxH3DirectorSelfLift": {
       "summary": "Configures a low-resolution sampling stage followed by a full-resolution finish.",
@@ -117,7 +125,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "SelfLift stage configuration."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This optional setting makes the AI begin with a smaller picture and finish at the chosen picture size. A smaller first stage can reduce the work done early in generation. It can also change fine details, so compare it with ordinary generation.",
+        "first_use": "Connect selflift to the Master’s selflift input. Generate a baseline without it first. Then enable this node and compare the same prompt and seed. This node supplies instructions, not finished frames."
+      }
     },
     "MiniMaxH3DirectorRefine": {
       "summary": "Configures latent refinement or enlargement after the first sampling pass.",
@@ -152,7 +164,11 @@
       },
       "output_descriptions": [
         "Latent refine/upscale stage configuration."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This optional setting tells the Master to do an extra refinement pass after the initial generation. It works on latent data: the AI’s compressed working representation before it becomes visible pictures.",
+        "first_use": "Connect refine to the Master’s refine input. Start with one pass and modest denoise. Denoise controls how much the extra pass may change the existing result. Larger values can change the content as well as the details."
+      }
     },
     "MiniMaxH3DirectorFaceRefine": {
       "summary": "Configures detection, tracking and refinement of one face in decoded video.",
@@ -182,7 +198,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Tracked face-refinement configuration."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This optional stage finds and follows one face, refines that region, then blends it back into the frames. It is useful when a person’s face looks weak while the rest of the shot is acceptable.",
+        "first_use": "Connect face_refine to the Master’s face_refine input. Install the detector required by the selected backend. Test on a short shot with a clearly visible face before adjusting tracking or blend controls. It does not refine every face at once."
+      }
     },
     "MiniMaxH3DirectorSemanticBridge": {
       "summary": "Builds a configuration for adapting the text-conditioning tokens with a student network.",
@@ -210,7 +230,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Conditioning rewrite configuration."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This advanced option changes the representation of your prompt before the video model uses it. It needs a compatible student-network file. It is not a prompt-writing assistant and does not automatically improve every prompt.",
+        "first_use": "Skip this for your first workflow. If you have a compatible student model, select it and connect semantic_bridge to the matching Master input. Compare with the same prompt and seed before keeping it enabled."
+      }
     },
     "MiniMaxH3Cache": {
       "summary": "Patches an H3 model to reuse approximate block-stack residuals during sampling.",
@@ -241,7 +265,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Cloned H3 model with the residual-reuse hooks installed."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This is an optional sampling shortcut. It patches the video model so some computations can reuse approximate results. This is different from saving a completed shot: it may change generated quality.",
+        "first_use": "Place it between a diffusion-model loader and the matching Master model input: loader MODEL → Cache model → Master. First get the unpatched workflow working. Enable it only after comparing quality and speed on your own machine."
+      }
     },
     "MiniMaxH3DirectorGroupImageToVideo": {
       "summary": "Packs one text/keyframe shot for the Master from graph inputs.",
@@ -270,7 +298,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "One text/keyframe shot definition."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This is an alternative to editing a shot inside the Master. It packages one shot’s prompt, duration and opening/closing pictures as graph inputs. You use it when another part of your graph supplies those values.",
+        "first_use": "For normal manual work, use the Master’s shot editor instead. To use this node, enter a prompt, optionally connect image frames, and connect its group output to the Master’s i2v_groups input. External groups replace the shots shown in the editor for generation."
+      }
     },
     "MiniMaxH3DirectorGroupReferenceToVideo": {
       "summary": "Packs one REF2VA shot with graph-supplied images, video frames and audio.",
@@ -301,7 +333,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "One reference-family shot definition."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This packages one reference-guided shot outside the Master editor. Reference media show the AI what a subject, scene, style or motion should resemble. A reference is guidance, not a guarantee of an identical copy.",
+        "first_use": "Enter a prompt, connect your reference media and connect the group to the Master’s r2v_groups input. This uses the REF2VA diffusion model. For a first manual reference shot, uploading and assigning media inside the Master is easier."
+      }
     },
     "MiniMaxH3DirectorGroupsCombine": {
       "summary": "Flattens connected shot groups into a single ordered group list.",
@@ -330,7 +366,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Ordered, flattened group list."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This joins lists of shot instructions into one ordered list. It joins instructions before generation, not finished video files.",
+        "first_use": "Connect two group outputs to this node, then connect the combined group list to the matching Master group input. The order of connected groups determines the shot order. Use the ordinary shot editor if you do not need graph-driven shots."
+      }
     },
     "MiniMaxH3RefPack": {
       "summary": "Pools graph-supplied references for local selection on individual Master shots.",
@@ -361,7 +401,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Reference pool with asset identifiers and pack count."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This collects images, video frames, audio and reference bundles from graph connections into a shared shelf. The Master can choose items from that shelf for each shot.",
+        "first_use": "Connect media to the pool, then connect ref_pack to the Master’s ref_pack input. In the Master, click Sync Refs and assign the desired items to a shot. Adding media to the pool alone does not mean every shot will use it."
+      }
     },
     "MiniMaxH3TailFromLatent": {
       "summary": "Decodes a sampled H3 joint audiovisual latent and returns its ending frames and audio.",
@@ -395,7 +439,11 @@
         "Final decoded frame as a one-frame batch.",
         "Actual tail frame count.",
         "Actual tail duration at 24 fps."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This takes an already sampled compressed video/audio result, decodes it, and returns the ending pictures and sound. Those ending frames can guide a continuation.",
+        "first_use": "This is an advanced graph tool. Connect a completed H3 latent plus its video/audio decoders. Use the returned tail when building a continuation workflow. For ordinary consecutive shots, use the Master’s chained continuity controls instead."
+      }
     },
     "MiniMaxH3VideoCombine": {
       "summary": "Encodes an IMAGE frame batch and optional audio with advanced codec controls.",
@@ -429,7 +477,11 @@
       "output_descriptions": [
         "Processed frame batch when pass_frames is enabled; otherwise an empty batch.",
         "Encoded file path as a STRING."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This turns a batch of individual pictures and optional sound into a video file. It provides more codec and quality controls than the basic saving path.",
+        "first_use": "Connect Master images to images and Master audio to audio. Match frame_rate to the Master’s fps, choose a filename prefix, and run. For your first video, keep the starter’s stock Create Video → Save Video path instead."
+      }
     },
     "MiniMaxH3ModelOverridePack": {
       "summary": "Registers named model overrides for individual shots.",
@@ -459,7 +511,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Named mapping of model overrides."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This gives model connections names that individual shots can select. It is useful if some shots need a different compatible model from the default connected to the Master.",
+        "first_use": "Keep the normal model connections for your first workflow. To use overrides, connect the models to this pack, name them, connect model_pack to the Master, then select an override in the shot’s model controls. Naming a model does not download or load a missing file."
+      }
     },
     "MiniMaxH3Checkpoint": {
       "summary": "Loads a complete saved take from a project’s server-side cache.",
@@ -493,7 +549,11 @@
         "Saved decoded frames.",
         "Saved decoded audio.",
         "Saved sampled joint latent."
-      ]
+      ],
+      "beginner": {
+        "meaning": "A take is one generated version of a shot. This loads a complete take saved in this pack’s server-side cache, including the compressed generation result needed by continuation workflows. It is not a diffusion-model loader.",
+        "first_use": "Choose the project ID, clip ID and take ID of a completed saved take. These IDs identify cache entries; they are not the friendly shot name. Use the outputs in a continuation graph. Importing a workflow JSON alone does not bring those cache files with it."
+      }
     },
     "MiniMaxH3AdvanceCheckpoint": {
       "summary": "Chooses explicitly between a current and a staged continuation checkpoint.",
@@ -521,7 +581,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "current or staged, selected by the advance boolean."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This chooses between the current take and a staged next take. It lets an advanced graph switch to the next saved result when you decide it is ready.",
+        "first_use": "Connect current and next checkpoint objects. Leave advance off to keep current; switch it on to select next. Both upstream inputs may still execute: this switch is a selector, not a way to stop the unselected branch from running."
+      }
     },
     "MiniMaxH3PromptForge": {
       "summary": "Asks a local or server-accessible language model for a structured prompt draft.",
@@ -557,7 +621,11 @@
       "output_descriptions": [
         "Structured draft with source-context identity.",
         "Human-readable draft JSON for review."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This asks a language model to write a structured shot draft from your instructions. A draft is a proposal you review before it changes the timeline. It does not generate the video.",
+        "first_use": "Connect a loaded local prompt model, or configure a supported language-model server. Write a short instruction such as “three shots of a robot entering a greenhouse.” Review the returned draft before applying it. Keep language-model memory use in mind alongside video generation."
+      }
     },
     "MiniMaxH3ApplyPromptDraft": {
       "summary": "Applies an accepted prompt draft to a timeline snapshot.",
@@ -587,7 +655,11 @@
       "control_descriptions": {},
       "output_descriptions": [
         "Original or updated timeline JSON."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This turns an accepted prompt draft into timeline data that the Master can use. Applying a draft changes shot instructions, not already generated video frames.",
+        "first_use": "Connect the original timeline and reviewed draft. Enable acceptance when you are ready, then send the timeline JSON output to the Master’s timeline_data input. Do not connect it to prompt_text: that input expects plain prompt lines, not a timeline document."
+      }
     },
     "MiniMaxH3LocalPromptModel": {
       "summary": "Loads an installed local text or vision model for Prompt Forge.",
@@ -621,7 +693,11 @@
       },
       "output_descriptions": [
         "Loaded local prompt/vision provider pipeline."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This loads a separate language model for writing prompts. A vision-capable model can also inspect pictures when properly configured. It is separate from the MiniMax video diffusion model and text encoder.",
+        "first_use": "Install a supported model file or model directory under models/LLM on the ComfyUI server. Select it here and connect the output to Prompt Forge. This node does not download models for you. Skip it if you prefer writing your own prompts."
+      }
     },
     "MiniMaxH3ProjectVideo": {
       "summary": "Exports cached project shots one at a time and assembles a native VIDEO file.",
@@ -657,7 +733,11 @@
       "output_descriptions": [
         "Native VIDEO backed by the assembled file.",
         "JSON list of encoded individual shot files."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This exports completed cached shots from a project and joins them into a video file. It reads saved shots one at a time, which can be useful for a long project.",
+        "first_use": "Choose the same project ID used by the Master and the export stream you want. Run after the relevant shots have finished. This node writes the file itself; a second Save Video is only needed if you deliberately want another copy."
+      }
     },
     "MiniMaxH3OutputProcessing": {
       "summary": "Changes decoded playback timing, adds a watermark and optionally creates a loop.",
@@ -691,7 +771,11 @@
         "Processed frames.",
         "Processed/fitted audio, or no audio if none was supplied.",
         "Playback FPS to pass to the encoder."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This changes finished frames and sound after generation: playback speed, a logo or text watermark, or a loop transition. It does not change the prompt or rerun the video AI.",
+        "first_use": "Connect Master images and audio, choose one change first, then send the processed outputs to Create Video → Save Video. Check the resulting duration and sound when changing speed. Overlapping the ends for a loop shortens the result."
+      }
     },
     "MiniMaxH3PixelUpscale": {
       "summary": "Resizes decoded frames with bicubic, learned image upscaling or optional NVIDIA RTX effects.",
@@ -726,7 +810,11 @@
       },
       "output_descriptions": [
         "Upscaled RGB frame batch."
-      ]
+      ],
+      "beginner": {
+        "meaning": "This enlarges finished pictures after they have been decoded. Bicubic is a conventional resize; learned upscaling uses an image-upscale model; RTX effects need the supported NVIDIA software and hardware.",
+        "first_use": "Connect Master images. Start with bicubic and a modest scale to verify the graph. Send the resized frames to Create Video and keep the Master’s audio connected separately. This node returns pictures, not sound or a finished video file."
+      }
     }
   },
   "control_descriptions": {

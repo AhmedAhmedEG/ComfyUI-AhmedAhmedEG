@@ -24,7 +24,7 @@ for(const relative of manifest){
  }
  if(relative.startsWith('nodes/')){
   assert(d.querySelector('h1'));
-  for(const id of ['connections','how-it-works','how-to-use-it','outputs','limits-and-troubleshooting'])assert(d.getElementById(id),relative+' needs '+id);
+  for(const id of ['in-plain-language','connections','how-it-works','how-to-use-it','outputs','limits-and-troubleshooting'])assert(d.getElementById(id),relative+' needs '+id);
   assert.equal(d.querySelectorAll('nav a[aria-current=page]').length,1);
   assert(d.querySelector('table tbody tr'));
  }
@@ -40,6 +40,9 @@ for(const relative of manifest){
  if(relative==='getting-started.html'){
   assert(d.querySelector('a[download]'));assert.match(d.body.textContent,/FL2VA/);assert.match(d.body.textContent,/REF2VA/);
   assert.match(d.body.textContent,/Latest clip/);assert.match(d.body.textContent,/56 frames/);
+  assert(d.getElementById('before-you-touch-a-setting'));
+  assert(d.getElementById('words-you-will-meet'));
+  for(const image of ['starter-workflow.png','starter-models.png','starter-vaes.png','starter-settings.png'])assert(d.querySelector(`img[src="${image}"]`));
  }
  dom.window.close();
 }
