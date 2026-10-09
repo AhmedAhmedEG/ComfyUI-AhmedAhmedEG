@@ -1,4 +1,4 @@
-"""Unit tests for MiniMaxH3DirectorSettings, MiniMaxH3SamplingSettings, and streamlined Master Director."""
+"""Unit tests for MiniMaxH3DirectorSettings, and streamlined Master Director."""
 
 import unittest
 from tests.cache_fixture import CacheIsolatedTestCase
@@ -13,7 +13,7 @@ if pkg_root not in sys.path:
 from tests.mock_torch import setup_mock_torch_if_needed
 torch = setup_mock_torch_if_needed()
 
-from nodes.node_settings import MiniMaxH3DirectorSettings, MiniMaxH3SamplingSettings
+from nodes.node_settings import MiniMaxH3DirectorSettings
 from nodes.node_director import MiniMaxH3MasterDirector
 
 
@@ -21,7 +21,7 @@ class TestDirectorSettings(CacheIsolatedTestCase):
     def setUp(self):
         super().setUp()
         self.settings_node = MiniMaxH3DirectorSettings()
-        self.sampling_node = MiniMaxH3SamplingSettings()
+        self.sampling_node = self.settings_node
         self.director_node = MiniMaxH3MasterDirector()
 
     def test_director_settings_defaults(self):
@@ -45,7 +45,7 @@ class TestDirectorSettings(CacheIsolatedTestCase):
 
     def test_sampling_settings_and_chaining(self):
         # Create sampling config
-        samp_cfg, = self.sampling_node.build_sampling_config(
+        samp_cfg, = self.sampling_node.build_config(
             steps=30,
             cfg=1.5,
             sampler="euler",

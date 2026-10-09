@@ -1,5 +1,35 @@
 # Consolidation review — 2026-10-09
 
+## 1.0.5 public-node audit
+
+Removed eight redundant public types: diffusion/encoder loaders and VIDEO
+adapter (stock equivalents); Sampling Settings (subset of Director Settings);
+Reference Bridge (covered by the chainable reference pool); two guide wrappers
+whose MINIMAX_H3_DIRECTOR_GUIDE input has no producer in this pack. Prompt Bridge is replaced by a direct STRING prompt_text input. Their files,
+classes, imports, mappings and guide entries are removed. There are 22 public
+nodes, one Master. Existing saved graphs using removed types need replacement
+nodes; the fresh starter avoids them entirely.
+
+Retained enhancement configs, continuity/take checkpoints, prompt drafting,
+RefMod pools, per-shot models, external shot groups, tail extraction and project
+export because their typed graph integrations and timeline behavior have no
+stock equivalent. Retained advanced video export for H.265/VP9, bitrate/audio
+options, metadata, crop-to-audio and still extraction; basic output now uses
+stock Create Video / Save Video. Playback/watermark/loop processing and Pixel/
+RTX refinement operate on frame batches and provide additional pipeline features.
+
+Both examples include native FL2VA and REF2VA loaders, CLIP and two VAEs. Master
+provenance follows directly connected native loaders using hidden PROMPT data;
+unknown modifier paths use live-object identities instead of guessed provenance.
+Editor DOM positioning uses the socket offset consistently, and workflow group
+bounds include full node heights. Nodes occupy separate columns with gaps.
+
+Validation: 102 regression tests, 14 CPU/media tests, editor and guide checks
+pass. The nine-node starter validates against the remote server’s native
+schemas with no graph-health warnings. The editor DOM was visually checked
+for containment and themed controls; full canvas startup in the isolated
+preview was unavailable. No GPU generation was run for this refactor.
+
 ## 1.0.4 workflow import repair
 
 The Settings workflow omitted ComfyUI's extra `control_after_generate` widget
@@ -86,9 +116,10 @@ media/prompt helpers, the unloaded duplicate stylesheet, and the outdated workfl
 The current tracked-face and shared-trajectory implementations are retained.
 Tests of removed paths were replaced by native phase, tracked-face and actual
 editor source-splitting checks. Regression caches now use temporary directories
-and clean themselves up. The package contains 30 distinct public nodes, one Master
+and clean themselves up. The package originally contained 30 distinct public nodes, one Master
 name, the current workflow, notices, tests and a reproducible release builder.
 
 Source-reference clones, scratch scripts and stale release ZIPs are development
 artifacts, excluded from Git and the package. The workflow is now tracked; the
 former blanket JSON/workflow ignore rules have been removed.
+

@@ -15,7 +15,7 @@ from tests.mock_torch import setup_mock_torch_if_needed
 torch = setup_mock_torch_if_needed()
 
 from nodes.node_ref_pack import MiniMaxH3RefPack
-from nodes.node_bridges import MiniMaxH3ReferenceBridge
+from nodes.node_ref_pack import MiniMaxH3RefPack
 from nodes.node_director import MiniMaxH3MasterDirector
 
 
@@ -23,7 +23,7 @@ class TestRefPackAndClipModes(CacheIsolatedTestCase):
     def setUp(self):
         super().setUp()
         self.ref_pack_node = MiniMaxH3RefPack()
-        self.bridge_node = MiniMaxH3ReferenceBridge()
+        self.bridge_node = MiniMaxH3RefPack()
         self.director_node = MiniMaxH3MasterDirector()
 
     def test_ref_pack_creation_and_chaining(self):
@@ -55,10 +55,10 @@ class TestRefPackAndClipModes(CacheIsolatedTestCase):
 
     def test_reference_bridge_mmx_format(self):
         img = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
-        pack, = self.bridge_node.build_pack(ref_1=img)
+        pack, = self.bridge_node.pack(image_1=img)
         self.assertIn("refs", pack)
         self.assertEqual(len(pack["refs"]), 1)
-        self.assertEqual(pack["refs"][0]["id"], "ref_img_1")
+        self.assertEqual(pack["refs"][0]["id"], "image_1")
 
     def test_director_conditioning_guide_multi_clip(self):
         # Create RefPack with 2 images

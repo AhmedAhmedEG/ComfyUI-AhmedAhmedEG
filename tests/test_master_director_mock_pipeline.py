@@ -44,7 +44,7 @@ from nodes.node_director import MiniMaxH3MasterDirector
 from nodes.node_selflift import MiniMaxH3DirectorSelfLift
 from nodes.node_refine import MiniMaxH3DirectorRefine
 from nodes.node_face_refine import MiniMaxH3DirectorFaceRefine
-from nodes.node_bridges import MiniMaxH3ReferenceBridge, MiniMaxH3PromptBridge
+from nodes.node_ref_pack import MiniMaxH3RefPack
 from nodes.node_tail_extract import MiniMaxH3TailFromLatent
 
 
@@ -168,19 +168,13 @@ class TestMockPipeline(CacheIsolatedTestCase):
         self.assertTrue(fc_cfg["enabled"])
         self.assertEqual(fc_cfg["crop_size"], 512)
 
-    def test_bridges_and_tail_extract(self):
-        """Verify Reference Bridge, Prompt Bridge, and Tail extraction."""
-        ref_bridge = MiniMaxH3ReferenceBridge()
+    def test_reference_pool_and_tail_extract(self):
+        """Verify reference pooling and AV tail extraction."""
+        ref_bridge = MiniMaxH3RefPack()
         img1 = torch.zeros(1, 64, 64, 3)
         img2 = torch.zeros(1, 64, 64, 3)
-        pack, = ref_bridge.build_pack(image_1=img1, image_2=img2)
-        self.assertIn("ref_image_1", pack)
-        self.assertIn("ref_image_2", pack)
-        self.assertNotIn("ref_image_3", pack)
-
-        prompt_bridge = MiniMaxH3PromptBridge()
-        p_pack, = prompt_bridge.build_pack("Shot 1 scene\nShot 2 scene\n\nShot 3 scene")
-        self.assertEqual(len(p_pack["prompts"]), 3)
+        pack, = ref_bridge.pack(image_1=img1, image_2=img2)
+        self.assertEqual([ref["id"] for ref in pack["refs"]], ["image_1", "image_2"])
 
         tail_node = MiniMaxH3TailFromLatent()
         mock_samples = {
@@ -615,8 +609,8 @@ class TestMockPipeline(CacheIsolatedTestCase):
         self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3MasterNode"], "MiniMax H3 Master Node")
         self.assertNotIn("MiniMaxH3MasterDirector", NODE_CLASS_MAPPINGS)
         self.assertIs(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"], MiniMaxH3MasterDirector)
-        self.assertEqual(len(NODE_CLASS_MAPPINGS), 30)
-        self.assertEqual(len(set(NODE_CLASS_MAPPINGS.values())), 30)
+        self.assertEqual(len(NODE_CLASS_MAPPINGS), 22)
+        self.assertEqual(len(set(NODE_CLASS_MAPPINGS.values())), 22)
         self.assertEqual(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"].CATEGORY,"ComfyUI-AhmedAhmedEG/Start here")
 
 

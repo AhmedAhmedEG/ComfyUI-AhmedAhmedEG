@@ -2,17 +2,64 @@
 import hashlib
 import os
 from pathlib import Path
+from functools import lru_cache
 
 
 def file_provenance(path):
+    stat = os.stat(path)
+    return dict(_file_provenance(os.path.realpath(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+
+
+@lru_cache(maxsize=64)
+def _file_provenance(path, size, mtime_ns, ctime_ns):
     with open(path, "rb") as source:
         digest = hashlib.file_digest(source, "sha256").hexdigest()
-    return {"sha256": digest, "size": os.path.getsize(path)}
+    return {"sha256": digest, "size": size}
 
 
 def record_provenance(value, path, **options):
     value._mmx_provenance = {"checkpoint": file_provenance(path), "options": options}
     return value
+
+
+def record_graph_provenance(prompt, unique_id, **values):
+    """Track directly connected stock loaders without replacing native nodes.
+
+    Unrecognized upstream nodes keep their live-object cache identity; guessing
+    a checkpoint through an arbitrary modifier would permit stale saved takes.
+    """
+    if not isinstance(prompt, dict):
+        return
+    current = prompt.get(str(unique_id), {})
+    inputs = current.get("inputs", {})
+    loaders = {"UNETLoader": ("unet_name", "diffusion_models"),
+               "CLIPLoader": ("clip_name", "text_encoders"),
+               "VAELoader": ("vae_name", "vae")}
+    for socket, value in values.items():
+        link = inputs.get(socket)
+        if value is None or not isinstance(link, (list, tuple)) or len(link) != 2:
+            continue
+        upstream = prompt.get(str(link[0]), {})
+        kind = upstream.get("class_type")
+        if kind not in loaders or link[1] != 0:
+            continue
+        filename_key, category = loaders[kind]
+        settings = upstream.get("inputs", {})
+        filename = settings.get(filename_key)
+        if not isinstance(filename, str):
+            continue
+        import folder_paths
+        path = folder_paths.get_full_path_or_raise(category, filename)
+        options = {key: settings[key] for key in ("weight_dtype", "type", "device") if key in settings}
+        if any(not isinstance(option, str) for option in options.values()):
+            continue  # linked loader options need live-session identity
+        loader_identity = (os.path.realpath(path), tuple(sorted(options.items())))
+        # Stock loaders can reuse a live model when a file is overwritten in
+        # place. Keep that object's original weight identity until it reloads.
+        if getattr(value, "_mmx_provenance_loader", None) == loader_identity:
+            continue
+        record_provenance(value, path, **options)
+        value._mmx_provenance_loader = loader_identity
 
 
 def runtime_provenance():

@@ -13,7 +13,7 @@ from core.cache_manager import ProjectCacheManager, fingerprint_value
 from core.media_io import resolve_input_path
 from core.audio_post import fit_audio_duration
 from nodes.node_director import MiniMaxH3MasterDirector
-from nodes.node_bridges import MiniMaxH3ReferenceBridge
+from nodes.node_ref_pack import MiniMaxH3RefPack
 from nodes.node_groups import MiniMaxH3DirectorGroupImageToVideo
 from core.config import align_frame_count, video_latent_t, audio_latent_length
 
@@ -142,10 +142,10 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(len(self.sampling_calls), 1)
 
     def test_reference_contents_invalidate_cache(self):
-        clips = [{"id": "one", "type": "REF2VA", "duration": 1, "validated": True, "ref_ids": ["ref_img_1"]}]
-        self.execute(clips, ref_pack=MiniMaxH3ReferenceBridge().build_pack(ref_1=torch.zeros((1, 32, 32, 3)))[0])
+        clips = [{"id": "one", "type": "REF2VA", "duration": 1, "validated": True, "ref_ids": ["image_1"]}]
+        self.execute(clips, ref_pack=MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 32, 32, 3)))[0])
         self.sampling_calls.clear()
-        self.execute(clips, ref_pack=MiniMaxH3ReferenceBridge().build_pack(ref_1=torch.ones((1, 32, 32, 3)))[0])
+        self.execute(clips, ref_pack=MiniMaxH3RefPack().pack(image_1=torch.ones((1, 32, 32, 3)))[0])
         self.assertEqual(len(self.sampling_calls), 1)
 
     def test_upstream_change_invalidates_chained_cache(self):
@@ -174,13 +174,13 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(len(self.sampling_calls), 1)
         self.assertEqual(result[7], 39)
 
-    def test_prompt_pack_and_groups_are_consumed(self):
+    def test_native_text_and_groups_are_consumed(self):
         group, = MiniMaxH3DirectorGroupImageToVideo().pack(prompt="group prompt", duration_sec=1.)
-        result = self.execute(i2v_groups=group, prompt_pack={"prompts": ["bridge prompt"]})
+        result = self.execute(i2v_groups=group, prompt_text="\nbridge prompt\n\n")
         self.assertEqual(result[5], "bridge prompt")
 
     def test_fallback_reference_aliases_are_deduplicated(self):
-        pack, = MiniMaxH3ReferenceBridge().build_pack(ref_1=torch.zeros((1, 32, 32, 3)))
+        pack, = MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 32, 32, 3)))
         self.execute(ref_pack=pack, timeline_data="{}", execution_mode="Conditioning Guide Output")
         self.assertEqual(len(self.native_calls[0][1]["ref_images"]), 1)
 
@@ -225,9 +225,9 @@ class RuntimeContracts(unittest.TestCase):
             self.execute([{ "id": "one", "type": "Image Inpaint", "duration": 1}])
 
     def test_upstream_image_inpaint_workflow_returns_one_generated_still(self):
-        pack, = MiniMaxH3ReferenceBridge().build_pack(ref_1=torch.zeros((1, 32, 32, 3)))
+        pack, = MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 32, 32, 3)))
         result = self.execute([{ "id": "one", "type": "Image Inpaint", "duration": 8,
-            "ref_ids": ["ref_img_1"]}], ref_pack=pack)
+            "ref_ids": ["image_1"]}], ref_pack=pack)
         self.assertEqual(self.native_calls[0][1]["length"], 5)
         self.assertIsNotNone(self.native_calls[0][1]["first_frame"])
         self.assertEqual(result[7], 1)

@@ -2,8 +2,6 @@
 
 from .node_director import (
     MiniMaxH3MasterDirector,
-    MiniMaxH3DirectorGuide,
-    MiniMaxH3DirectorPlannerConditioning,
 )
 from .node_selflift import MiniMaxH3DirectorSelfLift
 from .node_refine import MiniMaxH3DirectorRefine
@@ -17,18 +15,14 @@ from .node_groups import (
 )
 from .node_settings import (
     MiniMaxH3DirectorSettings,
-    MiniMaxH3SamplingSettings,
 )
-from .node_bridges import MiniMaxH3ReferenceBridge, MiniMaxH3PromptBridge
 from .node_tail_extract import MiniMaxH3TailFromLatent
 from .node_video_combine import MiniMaxH3VideoCombine
-from .node_video_output import MiniMaxH3VideoOutput
 from .node_project import MiniMaxH3ModelOverridePack, MiniMaxH3Checkpoint, MiniMaxH3AdvanceCheckpoint
 from .node_forge import MiniMaxH3PromptForge, MiniMaxH3ApplyPromptDraft, MiniMaxH3LocalPromptModel
 from .node_project_video import MiniMaxH3ProjectVideo
 from .node_output_processing import MiniMaxH3OutputProcessing
 from .node_pixel_upscale import MiniMaxH3PixelUpscale
-from .node_loaders import MiniMaxH3ModelLoader, MiniMaxH3EncoderLoader
 from .node_ref_pack import MiniMaxH3RefPack
 
 # Single public Master Node name; implementation class stays internal.
@@ -37,12 +31,9 @@ MiniMaxH3MasterNode = MiniMaxH3MasterDirector
 NODE_CLASS_MAPPINGS = {
     # Flagship Master Node (named MiniMax H3 Master Node)
     "MiniMaxH3MasterNode": MiniMaxH3MasterNode,
-    "MiniMaxH3DirectorGuide": MiniMaxH3DirectorGuide,
-    "MiniMaxH3DirectorPlannerConditioning": MiniMaxH3DirectorPlannerConditioning,
 
     # Dedicated Settings & Configuration
     "MiniMaxH3DirectorSettings": MiniMaxH3DirectorSettings,
-    "MiniMaxH3SamplingSettings": MiniMaxH3SamplingSettings,
 
     # Core modules (SelfLift, Refine, FaceRefine, Semantic Bridge, Cache)
     "MiniMaxH3DirectorSelfLift": MiniMaxH3DirectorSelfLift,
@@ -58,11 +49,8 @@ NODE_CLASS_MAPPINGS = {
 
     # Bridges & Utilities
     "MiniMaxH3RefPack": MiniMaxH3RefPack,
-    "MiniMaxH3ReferenceBridge": MiniMaxH3ReferenceBridge,
-    "MiniMaxH3PromptBridge": MiniMaxH3PromptBridge,
     "MiniMaxH3TailFromLatent": MiniMaxH3TailFromLatent,
     "MiniMaxH3VideoCombine": MiniMaxH3VideoCombine,
-    "MiniMaxH3VideoOutput": MiniMaxH3VideoOutput,
     "MiniMaxH3ModelOverridePack": MiniMaxH3ModelOverridePack,
     "MiniMaxH3Checkpoint": MiniMaxH3Checkpoint,
     "MiniMaxH3AdvanceCheckpoint": MiniMaxH3AdvanceCheckpoint,
@@ -72,17 +60,12 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ProjectVideo": MiniMaxH3ProjectVideo,
     "MiniMaxH3OutputProcessing": MiniMaxH3OutputProcessing,
     "MiniMaxH3PixelUpscale": MiniMaxH3PixelUpscale,
-    "MiniMaxH3ModelLoader": MiniMaxH3ModelLoader,
-    "MiniMaxH3EncoderLoader": MiniMaxH3EncoderLoader,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3MasterNode": "MiniMax H3 Master Node",
-    "MiniMaxH3DirectorGuide": "MiniMax H3 Director Guide",
-    "MiniMaxH3DirectorPlannerConditioning": "MiniMax H3 Director Planner Conditioning",
 
     "MiniMaxH3DirectorSettings": "MiniMax H3 Director Settings",
-    "MiniMaxH3SamplingSettings": "MiniMax H3 Sampling Settings",
 
     "MiniMaxH3DirectorSelfLift": "MiniMax H3 Director SelfLift",
     "MiniMaxH3DirectorRefine": "MiniMax H3 Director Refine",
@@ -95,11 +78,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3DirectorGroupsCombine": "MiniMax H3 Director Groups Combine",
 
     "MiniMaxH3RefPack": "MiniMax H3 Reference Pack (Pool)",
-    "MiniMaxH3ReferenceBridge": "MiniMax H3 Reference Pack Bridge",
-    "MiniMaxH3PromptBridge": "MiniMax H3 Prompt Pack Bridge",
     "MiniMaxH3TailFromLatent": "MiniMax H3 Tail From Latent",
     "MiniMaxH3VideoCombine": "MiniMax H3 Video Combine & Audio Muxer",
-    "MiniMaxH3VideoOutput": "MiniMax H3 Native Video Output",
     "MiniMaxH3ModelOverridePack": "MiniMax H3 Shot Model Pack",
     "MiniMaxH3Checkpoint": "MiniMax H3 Load Take Checkpoint",
     "MiniMaxH3AdvanceCheckpoint": "MiniMax H3 Advance Staged Take",
@@ -109,18 +89,44 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ProjectVideo": "MiniMax H3 Project / Shot Video Export",
     "MiniMaxH3OutputProcessing": "MiniMax H3 Playback / Watermark / Loop",
     "MiniMaxH3PixelUpscale": "MiniMax H3 Pixel / RTX Upscale and Refine",
-    "MiniMaxH3ModelLoader": "MiniMax H3 Model Loader",
-    "MiniMaxH3EncoderLoader": "MiniMax H3 Encoder Loader",
 }
 
 # Keep everyday controls together; manual graph plumbing is explicitly advanced.
 _MENU_GROUPS = {
-    "Start here": ["MiniMaxH3MasterNode", "MiniMaxH3ModelLoader", "MiniMaxH3EncoderLoader", "MiniMaxH3DirectorSettings", "MiniMaxH3VideoCombine"],
-    "Enhancements": ["MiniMaxH3DirectorSelfLift", "MiniMaxH3DirectorRefine", "MiniMaxH3DirectorFaceRefine", "MiniMaxH3DirectorSemanticBridge", "MiniMaxH3Cache", "MiniMaxH3PixelUpscale"],
-    "Output": ["MiniMaxH3VideoOutput", "MiniMaxH3ProjectVideo", "MiniMaxH3OutputProcessing"],
-    "References and prompts": ["MiniMaxH3RefPack", "MiniMaxH3PromptForge", "MiniMaxH3ApplyPromptDraft", "MiniMaxH3LocalPromptModel"],
-    "Checkpoints": ["MiniMaxH3Checkpoint", "MiniMaxH3AdvanceCheckpoint"],
-    "Advanced graph tools": ["MiniMaxH3DirectorGuide", "MiniMaxH3DirectorPlannerConditioning", "MiniMaxH3SamplingSettings", "MiniMaxH3DirectorGroupImageToVideo", "MiniMaxH3DirectorGroupReferenceToVideo", "MiniMaxH3DirectorGroupsCombine", "MiniMaxH3ReferenceBridge", "MiniMaxH3PromptBridge", "MiniMaxH3TailFromLatent", "MiniMaxH3ModelOverridePack"],
+    "Start here": [
+        "MiniMaxH3MasterNode",
+        "MiniMaxH3DirectorSettings"
+    ],
+    "Enhancements": [
+        "MiniMaxH3DirectorSelfLift",
+        "MiniMaxH3DirectorRefine",
+        "MiniMaxH3DirectorFaceRefine",
+        "MiniMaxH3DirectorSemanticBridge",
+        "MiniMaxH3Cache",
+        "MiniMaxH3PixelUpscale"
+    ],
+    "Output": [
+        "MiniMaxH3VideoCombine",
+        "MiniMaxH3ProjectVideo",
+        "MiniMaxH3OutputProcessing"
+    ],
+    "References and prompts": [
+        "MiniMaxH3RefPack",
+        "MiniMaxH3PromptForge",
+        "MiniMaxH3ApplyPromptDraft",
+        "MiniMaxH3LocalPromptModel"
+    ],
+    "Checkpoints": [
+        "MiniMaxH3Checkpoint",
+        "MiniMaxH3AdvanceCheckpoint"
+    ],
+    "Advanced graph tools": [
+        "MiniMaxH3DirectorGroupImageToVideo",
+        "MiniMaxH3DirectorGroupReferenceToVideo",
+        "MiniMaxH3DirectorGroupsCombine",
+        "MiniMaxH3TailFromLatent",
+        "MiniMaxH3ModelOverridePack"
+    ]
 }
 for _group, _names in _MENU_GROUPS.items():
     for _name in _names:

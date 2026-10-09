@@ -49,6 +49,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.extension.nodeCreated(node);
   await new Promise(resolve=>setTimeout(resolve,40));
   assert(w.document.querySelector('.mmx-director-root'),'Editor mounts');
+  const editorRoot=w.document.querySelector('.mmx-director-root');
+  assert.equal(editorRoot.querySelector('.mmx-language-select').parentElement.className,'mmx-toolbar-right');
+  const editorWidget=node.widgets.find(widget=>widget.name==='master_director_ui');
+  editorWidget.draw(null,{inputs:Array(18).fill({}),outputs:[]},1200,0,600);
+  assert.equal(editorWidget.last_y,370,'Editor starts below all socket rows');
+  assert.equal(editorRoot.style.height,editorRoot.style.maxHeight,'Editor stays inside its allocated node area');
   assert.strictEqual(JSON.parse(timeline.value).clips[0].seed,'18446744073709551615');
   assert.deepStrictEqual(JSON.parse(timeline.value).clips[0].ref_ids,['uploaded']);
   const language=w.document.querySelector('select[title="UI language"]');

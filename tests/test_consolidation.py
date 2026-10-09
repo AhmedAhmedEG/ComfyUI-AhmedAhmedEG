@@ -12,6 +12,40 @@ torch = setup_mock_torch_if_needed()
 
 
 class Consolidation(unittest.TestCase):
+    def test_stock_loader_graph_preserves_cache_identity_across_reload(self):
+        from core.provenance import record_graph_provenance
+        from core.cache_manager import fingerprint_value
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import sys
+        with tempfile.TemporaryDirectory() as directory:
+            weights = Path(directory) / "model.safetensors"
+            weights.write_bytes(b"native checkpoint")
+            prompt = {"5": {"inputs": {"ref2va_model": ["2", 0]}},
+                      "2": {"class_type": "UNETLoader", "inputs": {"unet_name": "ref.safetensors", "weight_dtype": "default"}}}
+            paths = SimpleNamespace(get_full_path_or_raise=lambda category, name: str(weights))
+            left, right = SimpleNamespace(), SimpleNamespace()
+            with patch.dict(sys.modules, {"folder_paths": paths}):
+                record_graph_provenance(prompt, 5, ref2va_model=left)
+                record_graph_provenance(prompt, "5", ref2va_model=right)
+                self.assertEqual(fingerprint_value(left), fingerprint_value(right))
+                weights.write_bytes(b"changed checkpoint")
+                old_fingerprint = fingerprint_value(right)
+                record_graph_provenance(prompt, "5", ref2va_model=right)
+                self.assertEqual(fingerprint_value(right), old_fingerprint)
+                right = SimpleNamespace()  # actual stock-loader reload
+                record_graph_provenance(prompt, "5", ref2va_model=right)
+                self.assertNotEqual(fingerprint_value(left), fingerprint_value(right))
+
+    def test_provenance_does_not_guess_through_third_party_nodes(self):
+        from core.provenance import record_graph_provenance
+        from types import SimpleNamespace
+        value = SimpleNamespace()
+        prompt = {"5": {"inputs": {"model": ["2", 0]}},
+                  "2": {"class_type": "SomeModelModifier", "inputs": {"unet_name": "guess.safetensors"}}}
+        record_graph_provenance(prompt, 5, model=value)
+        self.assertFalse(hasattr(value, "_mmx_provenance"))
+
     def test_forge_rejects_asset_and_validation_injection(self):
         from core.forge import parse_draft
         for field in ("source", "validated", "locked", "model_override", "ref_ids"):

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "title": "MiniMax H3 Animated Walkthrough",
   "date": "2026-10-09",
   "sourceCommit": "2e1aa1e6f76bff932c4221f7fc2a27f38c218766",
@@ -9,12 +9,10 @@
       "chapter": "01 · Start",
       "title": "Make your first video",
       "lead": "Start with the Master Node. Add other tools when you need them.",
-      "body": "<ul class=\"points\"><li>Load the starter workflow and select your model files.</li><li>Add a shot in the Master timeline; enter a prompt and duration.</li><li>Queue the workflow, review the take, then save with Video Combine.</li></ul><button data-action=\"download-workflow\" class=\"primary\">Download starter workflow</button>",
-      "detail": "<p>Models, uploaded media, optional providers and output files live on your <strong>ComfyUI server</strong>. This guide runs offline and does not generate video. Covers version 1.0.4; remote GPU generation was not verified.</p>",
+      "body": "<ul class=\"points\"><li>Load the starter workflow and select your model files.</li><li>Add a shot in the Master timeline; enter a prompt and duration.</li><li>Queue the workflow, review the take, then save with stock Create Video → Save Video.</li></ul><button data-action=\"download-workflow\" class=\"primary\">Download starter workflow</button>",
+      "detail": "<p>Models, uploaded media, optional providers and output files live on your <strong>ComfyUI server</strong>. This guide runs offline and does not generate video. Covers version 1.0.5; remote GPU generation was not verified.</p>",
       "nodes": [
         "MiniMaxH3MasterNode",
-        "MiniMaxH3ModelLoader",
-        "MiniMaxH3EncoderLoader",
         "MiniMaxH3DirectorSettings",
         "MiniMaxH3VideoCombine"
       ],
@@ -23,9 +21,9 @@
     {
       "id": "workflow",
       "chapter": "01 · Start",
-      "title": "Connect the five everyday tools",
+      "title": "Connect standard ComfyUI loaders",
       "lead": "Drop the downloaded JSON into ComfyUI.",
-      "body": "<ul class=\"points\"><li><strong>Model Loader → Master:</strong> connect FL2VA to fl2va_model in the starter; the consolidated example adds REF2VA to ref2va_model.</li><li><strong>Encoder Loader → Master:</strong> connect clip, video_vae and audio_vae. <strong>Director Settings → config.</strong></li><li><strong>Master images + audio → Video Combine.</strong> Queue the graph to generate and encode.</li></ul>",
+      "body": "<ul class=\"points\"><li>Two <strong>Load Diffusion Model</strong> nodes feed fl2va_model and ref2va_model.</li><li><strong>Load CLIP</strong> uses type minimax. Two <strong>Load VAE</strong> nodes supply video and audio.</li><li>Director Settings feeds config. Master images, audio and fps feed <strong>Create Video → Save Video</strong>.</li></ul>",
       "detail": "<p>Install the package under ComfyUI/custom_nodes, install requirements using ComfyUI’s Python, and restart. ComfyUI must include native H3 generation, AddGuide, SigmaShift and current VIDEO APIs.</p>",
       "nodes": [],
       "visual": "wiring"
@@ -35,12 +33,9 @@
       "chapter": "01 · Start",
       "title": "Choose the model family",
       "lead": "Use weights compatible with native MiniMax H3.",
-      "body": "<ul class=\"points\"><li><strong>FL2VA:</strong> text-only, opening/closing images and Image Inpaint.</li><li><strong>REF2VA:</strong> image/video/audio references and V2V/RV2V source edits.</li><li>Select the Qwen MiniMax text encoder, video VAE and audio VAE; replace every SELECT… placeholder.</li></ul>",
-      "detail": "<p>Use the package’s loaders to preserve model provenance for saved-take reuse. Optional learned upscalers, semantic adapters, face detectors and prompt models are separate assets.</p>",
-      "nodes": [
-        "MiniMaxH3ModelLoader",
-        "MiniMaxH3EncoderLoader"
-      ],
+      "body": "<ul class=\"points\"><li><strong>FL2VA:</strong> text-only, opening/closing images and Image Inpaint.</li><li><strong>REF2VA:</strong> image/video/audio references and V2V/RV2V source edits.</li><li>Select the Qwen MiniMax text encoder, video VAE and audio VAE; choose matching files if your model paths differ.</li></ul>",
+      "detail": "<p>Use standard ComfyUI loaders. The Master records their checkpoint provenance internally for saved-shot reuse.</p>",
+      "nodes": [],
       "visual": null
     },
     {
@@ -301,10 +296,8 @@
       "title": "Use the correct Master output",
       "lead": "Normal video export uses images + audio.",
       "body": "<ul class=\"points\"><li><strong>images/audio:</strong> assembled selected sequence. <strong>fps/frame_count:</strong> delivered timing.</li><li><strong>positive/latent/resolved_prompt:</strong> final shot only. <strong>status:</strong> execution report.</li><li><strong>project_state:</strong> timeline JSON. <strong>video:</strong> VHS_VIDEOINFO metadata, not playable VIDEO.</li></ul>",
-      "detail": "<p>For a genuine VIDEO socket, use Native Video Output. Final latent precedes decoded grading and FaceRefine; it is not a concatenation of all finished shots.</p>",
-      "nodes": [
-        "MiniMaxH3VideoOutput"
-      ],
+      "detail": "<p>For a genuine VIDEO socket, connect images, audio and fps to stock Create Video. Final latent precedes decoded grading and FaceRefine; it is not a concatenation of all finished shots.</p>",
+      "nodes": [],
       "visual": null
     },
     {
@@ -368,17 +361,16 @@
     {
       "id": "groups",
       "chapter": "07 · Custom graphs",
-      "title": "Build references & shot groups in a graph",
+      "title": "Connect external shot prompts",
       "lead": "Use these when you need inputs outside the timeline editor.",
-      "body": "<ul class=\"points\"><li>Image-to-Video Group / Reference-to-Video Group build shot groups; Groups Combine flattens up to 10 ordered inputs.</li><li>Reference Pack and Reference Bridge supply media pools; Prompt Bridge supplies newline-separated prompts by shot index.</li><li>Group inputs override timeline shots. Keep prompt order aligned with group order.</li></ul>",
+      "body": "<p>Connect a standard STRING output to Master <strong>prompt_text</strong>. Use one prompt per line; blank lines are ignored. No adapter node is needed.</p>",
       "detail": "<p>Image-family groups precede reference-family groups when both are supplied directly. RefPack can hold graph multimedia inputs and local selections; the bridge adapts IMAGE inputs into reference entries.</p>",
       "nodes": [
         "MiniMaxH3DirectorGroupImageToVideo",
         "MiniMaxH3DirectorGroupReferenceToVideo",
         "MiniMaxH3DirectorGroupsCombine",
         "MiniMaxH3RefPack",
-        "MiniMaxH3ReferenceBridge",
-        "MiniMaxH3PromptBridge"
+        "MiniMaxH3MasterNode"
       ],
       "visual": null
     },
@@ -387,12 +379,10 @@
       "chapter": "07 · Custom graphs",
       "title": "Advanced conditioning & sampling",
       "lead": "Use only for a custom sampling graph.",
-      "body": "<ul class=\"points\"><li>Director Guide / Planner Conditioning produce conditioning paths for manual graph use.</li><li>Conditioning Guide Output returns final conditioning and an empty latent instead of executing a multishot movie.</li><li>Sampling Settings supplies advanced controls; Tail From Latent extracts/decode a manual continuation tail.</li></ul>",
+      "body": "<ul class=\"points\"><li>Use the Master’s Conditioning Guide Output to produce conditioning for manual sampling.</li><li>Director Settings provides sampling controls. Tail From Latent extracts manual continuation tails.</li><li>Native MiniMax H3 conditioning nodes are available in ComfyUI for standalone manual graphs.</li></ul>",
       "detail": "<p>Use Load Take Checkpoint for durable continuation. Custom guide dictionaries are advanced inputs, not a normal Master media output. Match socket types and avoid graph cycles.</p>",
       "nodes": [
-        "MiniMaxH3DirectorGuide",
-        "MiniMaxH3DirectorPlannerConditioning",
-        "MiniMaxH3SamplingSettings",
+        "MiniMaxH3DirectorSettings",
         "MiniMaxH3TailFromLatent"
       ],
       "visual": null

@@ -87,7 +87,7 @@ class MiniMaxH3MasterDirector:
                 "i2v_groups": ("MMX_DIR_GROUP", {"tooltip": "Optional external Image to Video groups."}),
                 "r2v_groups": ("MMX_DIR_GROUP", {"tooltip": "Optional external Reference to Video groups."}),
                 "sigmas": ("SIGMAS", {"forceInput": True, "tooltip": "External sigma schedule override."}),
-                "prompt_pack": ("PROMPT_PACK", {"tooltip": "External prompt pack bridge."}),
+                "prompt_text": ("STRING", {"forceInput": True, "tooltip": "Newline-separated shot prompts from any text node. Blank lines are ignored."}),
                 "model_pack": ("MMX_MODEL_PACK", {"tooltip": "Named models for per-shot overrides."}),
                 "continuation": ("MMX_CONTINUATION", {"tooltip": "Explicitly selected take/checkpoint to continue."}),
                 "timeline_data": ("STRING", {"default": "{\"version\":1,\"clips\":[]}", "multiline": False}),
@@ -95,6 +95,7 @@ class MiniMaxH3MasterDirector:
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
+                "prompt": "PROMPT",
             },
         }
 
@@ -163,7 +164,7 @@ class MiniMaxH3MasterDirector:
         i2v_groups=None,
         r2v_groups=None,
         sigmas=None,
-        prompt_pack=None,
+        prompt_text=None,
         model_pack=None,
         continuation=None,
         timeline_data="{}",
@@ -171,6 +172,13 @@ class MiniMaxH3MasterDirector:
         unique_id="default_director",
         **kwargs,
     ):
+        try:
+            from ..core.provenance import record_graph_provenance
+        except ImportError:
+            from core.provenance import record_graph_provenance
+        record_graph_provenance(kwargs.get("prompt"), unique_id,
+            model=model, fl2va_model=fl2va_model, ref2va_model=ref2va_model,
+            clip=clip, video_vae=video_vae, audio_vae=audio_vae)
         # Extract execution mode first to determine if diffusion models are required
         cfg_dict = config if config and isinstance(config, dict) else {}
         exec_mode = str(
@@ -307,8 +315,8 @@ class MiniMaxH3MasterDirector:
                 clips.append({"id": f"group_{len(clips) + 1}", "type": group.get("kind", "REF2VA"),
                     "duration": group.get("duration_sec", duration), "prompt": group.get("prompt", ""),
                     "group": group, "continuity": False})
-        if prompt_pack is not None:
-            prompts = prompt_pack.get("prompts", []) if isinstance(prompt_pack, dict) else []
+        if prompt_text is not None:
+            prompts = [line.strip() for line in str(prompt_text).splitlines() if line.strip()]
             if not isinstance(prompts, list):
                 raise ValueError("Prompt pack must contain a prompts list.")
             if clips:
@@ -1064,76 +1072,3 @@ class MiniMaxH3MasterDirector:
             status_str,
             json.dumps(timeline, ensure_ascii=False),
         )
-
-
-class MiniMaxH3DirectorGuide:
-    """DaSiWa Director Guide node: converts a guide dictionary or Master Director conditioning into positive conditioning and latent."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "guide": ("MINIMAX_H3_DIRECTOR_GUIDE", {"tooltip": "Guide emitted by MiniMax H3 Director."}),
-                "clip": ("CLIP", {"tooltip": "CLIP model (Qwen3-VL)."}),
-                "vae": ("VAE", {"tooltip": "Video VAE."}),
-            },
-            "optional": {
-                "audio_vae": ("VAE", {"tooltip": "Audio VAE (required for REF2VA)."}),
-            },
-        }
-
-    RETURN_TYPES = ("CONDITIONING", "LATENT")
-    RETURN_NAMES = ("positive", "latent")
-    FUNCTION = "build"
-    CATEGORY = CATEGORY
-
-    def build(self, guide, clip, vae, audio_vae=None):
-        executor = MasterDirectorExecutor()
-        if isinstance(guide, dict) and "positive" in guide and "latent" in guide:
-            return (guide["positive"], guide["latent"])
-
-        mode = guide.get("mode", "FL2VA") if isinstance(guide, dict) else "FL2VA"
-        prompt = guide.get("prompt", "") if isinstance(guide, dict) else ""
-        w = int(guide.get("width", 1344)) if isinstance(guide, dict) else 1344
-        h = int(guide.get("height", 768)) if isinstance(guide, dict) else 768
-        dur = float(guide.get("duration", 5.0)) if isinstance(guide, dict) else 5.0
-
-        pos, lat, _ = executor.build_conditioning(
-            mode=mode,
-            prompt=prompt,
-            width=w,
-            height=h,
-            duration=dur,
-            clip=clip,
-            vae=vae,
-            audio_vae=audio_vae,
-        )
-        return (pos, lat)
-
-
-class MiniMaxH3DirectorPlannerConditioning:
-    """Official MiniMax H3 conditioning plus task_mode string for planning UIs."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "guide": ("MINIMAX_H3_DIRECTOR_GUIDE", {"tooltip": "Guide emitted by MiniMax H3 Director."}),
-                "clip": ("CLIP", {"tooltip": "CLIP model (Qwen3-VL)."}),
-                "vae": ("VAE", {"tooltip": "Video VAE."}),
-            },
-            "optional": {
-                "audio_vae": ("VAE", {"tooltip": "Audio VAE (required for REF2VA)."}),
-            },
-        }
-
-    RETURN_TYPES = ("CONDITIONING", "LATENT", "STRING")
-    RETURN_NAMES = ("positive", "latent", "task_mode")
-    FUNCTION = "build"
-    CATEGORY = CATEGORY
-
-    def build(self, guide, clip, vae, audio_vae=None):
-        guide_node = MiniMaxH3DirectorGuide()
-        pos, lat = guide_node.build(guide, clip, vae, audio_vae=audio_vae)
-        mode = guide.get("mode", "FL2VA") if isinstance(guide, dict) else "FL2VA"
-        return (pos, lat, mode)

@@ -15,6 +15,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-director-root {
+  color-scheme: dark;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -31,6 +32,23 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   border-radius: 8px;
   padding: 8px;
   user-select: none;
+}
+
+.mmx-director-root select,
+.mmx-director-root button,
+.mmx-director-root input {
+  font-family: inherit;
+}
+
+.mmx-language-select {
+  width: 100px;
+  height: 24px;
+  padding: 2px 6px;
+  font-size: 11px;
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 4px;
 }
 
 /* Toolbar */
@@ -1888,7 +1906,7 @@ function mountDirectorUI(node) {
     domWidget.element.style.marginTop = "0px";
     domWidget.element.style.marginBottom = "0px";
     domWidget.element.style.height = `${availH}px`;
-    domWidget.element.style.maxHeight = "none";
+    domWidget.element.style.maxHeight = `${availH}px`;
     domWidget.element.style.flex = "1";
 
     if (domWidget.computeSize) {
@@ -2793,6 +2811,7 @@ function mountDirectorUI(node) {
   });
   zoomWrap.appendChild(zoomSlider);
   toolbarRight.appendChild(zoomWrap);
+  toolbarRight.appendChild(root.querySelector(".mmx-language-select"));
 
   toolbar.appendChild(toolbarRight);
   root.appendChild(toolbar);
@@ -4744,10 +4763,10 @@ N/A`;
   });
 
   if (domWidget) {
-    // Intercept draw to force topY = 34 so there is never an empty gap below title bar
+    // Keep the editor below the sockets, using the same offset in every hook.
     const origDomDraw = domWidget.draw;
     domWidget.draw = function (ctx, n, widget_width, y, widget_height) {
-      const topY = 2;
+      const topY = getTopWidgetsHeight(n || node);
       this.last_y = topY;
       if (origDomDraw) origDomDraw.call(this, ctx, n, widget_width, topY, widget_height);
     };

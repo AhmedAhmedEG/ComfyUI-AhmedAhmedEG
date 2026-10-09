@@ -11,12 +11,24 @@ setup_mock_torch_if_needed()
 from nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
 ROOT = Path(__file__).absolute().parent.parent
+STOCK_SCHEMAS = json.loads((ROOT / "tests/native_node_schemas.json").read_text(encoding="utf-8"))
+
+
+def node_class(name):
+    if name in NODE_CLASS_MAPPINGS:
+        return NODE_CLASS_MAPPINGS[name]
+    schema = STOCK_SCHEMAS[name]
+    return SimpleNamespace(INPUT_TYPES=lambda: schema["input"])
 
 
 def widget_specs(node_class):
     for group in ("required", "optional"):
         for name, spec in node_class.INPUT_TYPES().get(group, {}).items():
             kind, options = spec[0], spec[1] if len(spec) > 1 else {}
+            if kind == "COMBO":
+                kind = options["options"]
+            elif kind == "COMFY_DYNAMICCOMBO_V3":
+                kind = [entry["key"] for entry in options["options"]]
             if options.get("forceInput"):
                 continue
             if isinstance(kind, list) or kind in ("STRING", "INT", "FLOAT", "BOOLEAN"):
@@ -39,7 +51,7 @@ class WorkflowContracts(unittest.TestCase):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 by_id = {n["id"]: n for n in data["nodes"]}
                 for node in data["nodes"]:
-                    cls = NODE_CLASS_MAPPINGS[node["type"]]
+                    cls = node_class(node["type"])
                     specs = list(widget_specs(cls))
                     values = node["widgets_values"]
                     self.assertEqual(len(specs), len(values), node["type"])
@@ -65,12 +77,26 @@ class WorkflowContracts(unittest.TestCase):
         self.assertEqual(len(set(NODE_DISPLAY_NAME_MAPPINGS.values())), len(NODE_CLASS_MAPPINGS))
         self.assertNotIn("MiniMaxH3MasterDirector", NODE_CLASS_MAPPINGS)
 
-    def test_starter_has_only_the_five_everyday_nodes(self):
+    def test_starter_uses_stock_loaders_and_both_model_families(self):
         data = json.loads((ROOT / "workflows/MiniMax H3 Start Here.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(data["nodes"]), 5)
+        self.assertEqual(len(data["nodes"]), 9)
         self.assertEqual({n["type"] for n in data["nodes"]}, {
-            "MiniMaxH3ModelLoader", "MiniMaxH3EncoderLoader", "MiniMaxH3DirectorSettings",
-            "MiniMaxH3MasterNode", "MiniMaxH3VideoCombine"})
+            "UNETLoader", "CLIPLoader", "VAELoader", "MiniMaxH3DirectorSettings",
+            "MiniMaxH3MasterNode", "CreateVideo", "SaveVideo"})
+        master = next(n for n in data["nodes"] if n["type"] == "MiniMaxH3MasterNode")
+        self.assertTrue(all(i["link"] for i in master["inputs"] if i["name"] in ("fl2va_model", "ref2va_model")))
+    def test_example_layouts_fit_groups_and_do_not_overlap(self):
+        for path in (ROOT / "workflows").glob("*.json"):
+            self._check_layout(json.loads(path.read_text(encoding="utf-8")))
+
+    def _check_layout(self, data):
+        for group in data["groups"]:
+            gx, gy, gw, gh = group["bounding"]
+            for node in data["nodes"]:
+                x, y = node["pos"]
+                if gx <= x <= gx + gw and gy <= y <= gy + gh:
+                    self.assertLessEqual(x + node["size"][0], gx + gw)
+                    self.assertLessEqual(y + node["size"][1], gy + gh)
         for left in data["nodes"]:
             for right in data["nodes"]:
                 if left["id"] >= right["id"]:

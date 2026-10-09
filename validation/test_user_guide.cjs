@@ -16,13 +16,16 @@ async function test(){
   assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
   assert.equal(d.querySelectorAll('.step').length,6);
   assert.equal(d.querySelectorAll('.feature').length,37);
-  assert.equal(d.querySelectorAll('#node-list a').length,30);
+  assert.equal(d.querySelectorAll('#node-list a').length,22);
   assert.equal(d.querySelectorAll('.slide,#next,#previous').length,0);
   await phase('shot');assert.match($('lab-title').textContent,/Make a shot/);
   $('demo-duration').value=2;$('demo-duration').dispatchEvent(new w.Event('input'));assert.match($('demo-timing').textContent,/56 frames/);
   $('demo-prompt').value='A dog <runs> & jumps';$('demo-prompt').dispatchEvent(new w.Event('input'));
   $('simulate').click();assert.ok($('simulate').disabled);
-  await new Promise(resolve=>setTimeout(resolve,300));
+  const completionDeadline=Date.now()+2000;
+  while($('simulate').disabled && Date.now()<completionDeadline) {
+    await new Promise(resolve=>setTimeout(resolve,10));
+  }
   assert.equal($('preview').hidden,false);assert.equal($('simulate').disabled,false);
   await phase('refs');d.querySelector('[data-mode="I2VA"]').click();$('toggle-ref').click();assert.match($('lab-panel').textContent,/Opening frame bound/);
   await phase('shot');assert.equal($('demo-prompt').value,'A dog <runs> & jumps');assert.equal($('demo-mode').value,'I2VA');assert.equal($('demo-duration').value,'2');
@@ -40,6 +43,6 @@ async function test(){
   $('feature-refine').hidden=true;w.dispatchEvent(new w.Event('beforeprint'));assert.ok([...d.querySelectorAll('details')].every(e=>e.open&&!e.hidden));w.dispatchEvent(new w.Event('afterprint'));assert.equal($('feature-refine').hidden,true);
   assert.equal(d.querySelectorAll('script[src],link[rel=stylesheet],img[src]').length,0);
   assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
-  dom.window.close();process.stdout.write('Animated guide passed: six stages, 37 features, 30 nodes, demo state/timing, reference binding, continuity, enhancement routing, search, download and print.\n');
+  dom.window.close();process.stdout.write('Animated guide passed: six stages, 37 features, 22 nodes, demo state/timing, reference binding, continuity, enhancement routing, search, download and print.\n');
 }
 test().catch(e=>{process.stderr.write(e.stack+'\n');process.exitCode=1});

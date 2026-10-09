@@ -58,6 +58,7 @@ export function installLocale(root) {
   const observer = new MutationObserver(translate);
   observer.observe(root, {childList:true,subtree:true,characterData:true});
   const select = document.createElement("select"); select.title = "UI language";
+  select.className = "mmx-language-select";
   for (const [value,label] of [["en","English"],["zh","中文"],["ar","العربية"]]) {
     const option = document.createElement("option"); option.value = value; option.textContent = label; select.appendChild(option);
   }
