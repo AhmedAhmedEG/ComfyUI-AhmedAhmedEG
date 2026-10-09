@@ -76,6 +76,15 @@ class SmartPreview(unittest.TestCase):
         self.state["clips"] = [{"id": "pending"}]
         self.assertFalse(self.plan()["found"])
 
+    def test_full_preview_includes_locked_source_and_trims_its_handoff(self):
+        self.state["clips"] = [{"id": "locked", "locked": True, "source": {"filename": "input.mp4"}}, {"id": "two"}]
+        source = {"frames": torch.zeros((12, 32, 64, 3)), "audio": None}
+        plan = self.plan("full")
+        self.assertEqual(plan["clip_ids"], ["locked", "two"])
+        with patch("core.source_media.source_range", return_value=source):
+            with av.open(self.encode(plan)) as video:
+                self.assertEqual(len(list(video.decode(video=0))), 21)
+
     def test_invalid_scope_and_paths_are_rejected(self):
         with self.assertRaises(ValueError): self.plan("anything")
         with self.assertRaises(ValueError): preview_path("../outside", "a"*64, self.temp.name)

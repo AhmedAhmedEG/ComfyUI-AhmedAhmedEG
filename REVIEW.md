@@ -16,7 +16,7 @@ Preview files fit within 960 × 540; final exports are unaffected. No sampling o
 VAE decode is added. A missing cache reports that no clip is available instead
 of silently falling back to a complete video.
 
-Validation: 102 regression tests, 19 real CPU/media tests, editor, preview and
+Validation: 102 regression tests, 20 real CPU/media tests, editor, preview and
 guide checks. Tiny encoded media verifies that Latest loads only the newest shot,
 Full respects seam trimming, and old preview revisions survive rerenders. Player
 checks cover stable URLs, autoplay, saving and late-response cleanup. GPU
@@ -144,5 +144,3 @@ name, the current workflow, notices, tests and a reproducible release builder.
 Source-reference clones, scratch scripts and stale release ZIPs are development
 artifacts, excluded from Git and the package. The workflow is now tracked; the
 former blanket JSON/workflow ignore rules have been removed.
-
-

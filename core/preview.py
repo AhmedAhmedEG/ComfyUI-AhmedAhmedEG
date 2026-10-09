@@ -24,7 +24,7 @@ def create_preview_plan(state, scope="latest", base_dir=None):
         if not meta.get("has_frames"):
             if scope == "full" and shot.get("locked") and shot.get("source"):
                 rows.append({"clip_id": cid, "name": shot.get("name", cid), "source": shot,
-                             "updated_at": 0, "trim_prefix": 0})
+                             "updated_at": 0, "trim_prefix": 0, "index": index})
             continue
         generation = meta.get("generation")
         rows.append({"clip_id": cid, "name": shot.get("name", cid),
