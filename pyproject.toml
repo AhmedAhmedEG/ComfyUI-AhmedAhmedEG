@@ -25,5 +25,5 @@ Repository = "https://github.com/AhmedAhmedEG/ComfyUI-AhmedAhmedEG"
 
 [tool.comfy]
 PublisherId = "minimax_h3"
-DisplayName = "MiniMax H3 Master Director"
+DisplayName = "ComfyUI-AhmedAhmedEG"
 Icon = ""

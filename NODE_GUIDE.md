@@ -7,7 +7,7 @@ encoding adapters are Python modules, not nodes you must connect.
 
 ## Start here — five types
 
-Find these under **MiniMax H3 Master Director → Start here**. The consolidated example connects
+Find these under **ComfyUI-AhmedAhmedEG → Start here**. The consolidated example connects
 them for you; select your model files and edit the timeline.
 
 | Node | What you use it for |
