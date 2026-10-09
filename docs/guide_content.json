@@ -1,0 +1,431 @@
+{
+  "version": "1.0.4",
+  "title": "MiniMax H3 Animated Walkthrough",
+  "date": "2026-10-09",
+  "sourceCommit": "2e1aa1e6f76bff932c4221f7fc2a27f38c218766",
+  "features": [
+    {
+      "id": "welcome",
+      "chapter": "01 · Start",
+      "title": "Make your first video",
+      "lead": "Start with the Master Node. Add other tools when you need them.",
+      "body": "<ul class=\"points\"><li>Load the starter workflow and select your model files.</li><li>Add a shot in the Master timeline; enter a prompt and duration.</li><li>Queue the workflow, review the take, then save with Video Combine.</li></ul><button data-action=\"download-workflow\" class=\"primary\">Download starter workflow</button>",
+      "detail": "<p>Models, uploaded media, optional providers and output files live on your <strong>ComfyUI server</strong>. This guide runs offline and does not generate video. Covers version 1.0.4; remote GPU generation was not verified.</p>",
+      "nodes": [
+        "MiniMaxH3MasterNode",
+        "MiniMaxH3ModelLoader",
+        "MiniMaxH3EncoderLoader",
+        "MiniMaxH3DirectorSettings",
+        "MiniMaxH3VideoCombine"
+      ],
+      "visual": null
+    },
+    {
+      "id": "workflow",
+      "chapter": "01 · Start",
+      "title": "Connect the five everyday tools",
+      "lead": "Drop the downloaded JSON into ComfyUI.",
+      "body": "<ul class=\"points\"><li><strong>Model Loader → Master:</strong> connect FL2VA to fl2va_model in the starter; the consolidated example adds REF2VA to ref2va_model.</li><li><strong>Encoder Loader → Master:</strong> connect clip, video_vae and audio_vae. <strong>Director Settings → config.</strong></li><li><strong>Master images + audio → Video Combine.</strong> Queue the graph to generate and encode.</li></ul>",
+      "detail": "<p>Install the package under ComfyUI/custom_nodes, install requirements using ComfyUI’s Python, and restart. ComfyUI must include native H3 generation, AddGuide, SigmaShift and current VIDEO APIs.</p>",
+      "nodes": [],
+      "visual": "wiring"
+    },
+    {
+      "id": "weights",
+      "chapter": "01 · Start",
+      "title": "Choose the model family",
+      "lead": "Use weights compatible with native MiniMax H3.",
+      "body": "<ul class=\"points\"><li><strong>FL2VA:</strong> text-only, opening/closing images and Image Inpaint.</li><li><strong>REF2VA:</strong> image/video/audio references and V2V/RV2V source edits.</li><li>Select the Qwen MiniMax text encoder, video VAE and audio VAE; replace every SELECT… placeholder.</li></ul>",
+      "detail": "<p>Use the package’s loaders to preserve model provenance for saved-take reuse. Optional learned upscalers, semantic adapters, face detectors and prompt models are separate assets.</p>",
+      "nodes": [
+        "MiniMaxH3ModelLoader",
+        "MiniMaxH3EncoderLoader"
+      ],
+      "visual": null
+    },
+    {
+      "id": "first-shot",
+      "chapter": "01 · Start",
+      "title": "Generate your first shot",
+      "lead": "Use one independent text-only shot before adding enhancements.",
+      "body": "<ul class=\"points\"><li>Set <strong>T2VA</strong>; enter a concrete action, scene and camera description.</li><li>Choose a short duration, a canvas divisible by 32, and a fixed seed. Use independent / clip-by-clip generation.</li><li>Queue, inspect the preview and status, then change one setting and rerun. Approve a take you want to keep.</li></ul>",
+      "detail": "<p>A take is one generated version of a shot. A latent is the compressed representation used during sampling; IMAGE frames are decoded pictures. Save the video through Video Combine.</p>",
+      "nodes": [
+        "MiniMaxH3MasterNode"
+      ],
+      "visual": null
+    },
+    {
+      "id": "modes",
+      "chapter": "01 · Start",
+      "title": "Which mode should I use?",
+      "lead": "Choose by the inputs you have.",
+      "body": "<ul class=\"points\"><li><strong>T2VA:</strong> text. <strong>I2VA:</strong> opening image. <strong>FL2VA:</strong> opening + closing images. <strong>L2VA:</strong> closing image only.</li><li><strong>REF2VA:</strong> image, video or audio references. <strong>V2V/RV2V:</strong> edit a source-video range.</li><li><strong>Image Inpaint:</strong> generates one still using an image and a native five-frame pass.</li></ul>",
+      "detail": "<p>Endpoint images constrain the start/end. Reference media guides content without being an exact frame-by-frame copy. Image Inpaint has no general brush-mask workflow here.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "timing",
+      "chapter": "02 · Shots & references",
+      "title": "Duration & resolution",
+      "lead": "Generation uses 24 fps and a fixed frame grid.",
+      "body": "<ul class=\"points\"><li>Valid generated lengths: <strong>5, 22, 39, 56, 73, 90, 107, 124… frames</strong>. Requests round upward.</li><li>Width and height must be divisible by <strong>32</strong>. Manual chooses dimensions; Auto uses aspect + megapixels; Original snaps source dimensions to the grid.</li><li>Source edits are trimmed back to their actual source range. Playback FPS is an export setting.</li></ul><div class=\"calculator\"><label for=\"duration-demo\">Requested duration <strong id=\"duration-label\">5 seconds</strong></label><input id=\"duration-demo\" type=\"range\" min=\"0.2\" max=\"20\" step=\"0.1\" value=\"5\"><div id=\"duration-result\" class=\"calc-result\"></div></div>",
+      "detail": "<p>Auto aspect needs a reference/source size. Active working-resolution fields override basic settings.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "timeline",
+      "chapter": "02 · Shots & references",
+      "title": "Edit shots in the timeline",
+      "lead": "Select a shot to edit its inspector.",
+      "body": "<ul class=\"points\"><li>Add, reorder or delete shots; set each prompt, mode, duration and seed.</li><li>Shared prompts/references apply across shots; local entries customize one shot.</li><li>Use per-shot brightness, contrast, saturation and audio gain/fades for finishing.</li></ul>",
+      "detail": "<p>Shared and local references are combined in resolved order. Grading and audio adjustments apply to decoded media; they do not change the model’s prompt.</p>",
+      "nodes": [],
+      "visual": "timeline"
+    },
+    {
+      "id": "selection",
+      "chapter": "02 · Shots & references",
+      "title": "Generate, preview & approve",
+      "lead": "These controls have different jobs.",
+      "body": "<ul class=\"points\"><li><strong>Generation selection:</strong> choose shots to run. <strong>Preview selection:</strong> choose media to inspect.</li><li>Approve/validate a completed take to reuse it; changing its inputs can invalidate reuse.</li><li>Changing a chained shot can invalidate downstream shots. Independent shots do not inherit that dependency.</li></ul>",
+      "detail": "<p>Validation marks a take as accepted; it does not score quality. Reuse requires matching inputs, model provenance and available cache files.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "seeds",
+      "chapter": "02 · Shots & references",
+      "title": "Keep or vary the seed",
+      "lead": "A fixed seed makes comparisons easier.",
+      "body": "<ul class=\"points\"><li>Keep the same seed while comparing one setting.</li><li>Change the seed to request another variation; the editor preserves full 64-bit values.</li><li>Saved completed takes record their actual and next seeds for recovery.</li></ul>",
+      "detail": "<p>The same seed does not guarantee identical results across different models, settings, hardware or sampling paths.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "references",
+      "chapter": "02 · Shots & references",
+      "title": "Add & prepare reference media",
+      "lead": "Upload, drag/drop or paste into the reference pool, then select for a shot.",
+      "body": "<ul class=\"points\"><li>Trim video/audio by start/end seconds; choose video, audio or both. The waveform shows decoded audio peaks.</li><li>Crop images/video using the rectangle or numeric fields. Scale with Off / Auto / Target / Fit / Fill; crop or pad to the required grid.</li><li>Set role and description. Subject/place/style/keyframe/pose are descriptive labels; pose is not a skeleton ControlNet.</li></ul>",
+      "detail": "<p><strong>Limits:</strong> 9 images, 3 videos, 3 audios, 12 combined; each reference video and their total duration must be ≤15 seconds. Native H3 may impose additional combination constraints. Crops retain the original asset; picking a source frame uses the original player time.</p>",
+      "nodes": [
+        "MiniMaxH3RefPack"
+      ],
+      "visual": null
+    },
+    {
+      "id": "refmods",
+      "chapter": "02 · Shots & references",
+      "title": "Use RefMods & bundles",
+      "lead": "Load an existing bundle; select its members as references.",
+      "body": "<ul class=\"points\"><li>Use <code>&lt;RefMod 1&gt;</code> or <code>&lt;RefMod 1:memberName&gt;</code> to mention a bundle/member.</li><li>Expanded members count toward the normal reference limits.</li><li>RefMods organize reference assets; this node does not train or create a new RefMod model.</li></ul>",
+      "detail": "",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "loras",
+      "chapter": "02 · Shots & references",
+      "title": "Apply a LoRA to one shot",
+      "lead": "Select compatible LoRA files and set model strength.",
+      "body": "<ul class=\"points\"><li>Attach up to <strong>8 LoRAs</strong> per shot.</li><li>Start with a moderate strength; compare with the same seed.</li><li>LoRAs modify the model; reference assets and RefMods supply media.</li></ul>",
+      "detail": "<p>The strength control supports −10 to 10, but extremes are not recommended presets. This is model-only LoRA application, with no separate CLIP strength. File hashes participate in cache identity.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "prompts",
+      "chapter": "03 · Prompts & source video",
+      "title": "Write & link your prompt",
+      "lead": "Describe what happens, then camera, environment and sound.",
+      "body": "<ul class=\"points\"><li>Example: <em>A cyclist turns onto a wet street. Low tracking camera. Evening shop lights. Tires hiss on pavement.</em></li><li>Use raw text or structured editing; shared text supplies recurring instructions.</li><li>Mention selected media with the editor’s reference tokens. Check resolved_prompt to see what H3 receives.</li></ul>",
+      "detail": "<p>Reference numbering follows the resolved selected order, not arbitrary upload labels. Source-edit modes reserve Video 1 for the source; other videos shift accordingly. RefMod aliases expand into native reference mentions.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "forge",
+      "chapter": "03 · Prompts & source video",
+      "title": "Draft prompts with Prompt Forge",
+      "lead": "Generate a draft, review it, then apply it.",
+      "body": "<ul class=\"points\"><li>Choose a provider: local Transformers/GGUF, Ollama or a compatible API. Select images if the provider supports vision.</li><li>Edit draft cards for prompt, duration and mode before applying; stale drafts are rejected when their source context changed.</li><li>For graph use: Local Prompt Model → Prompt Forge Draft → Review / Apply Prompt Draft; explicitly enable apply and choose append/replace.</li></ul>",
+      "detail": "<p>Provider requests run on the server: localhost means the remote ComfyUI machine. Local models do not auto-download. UI keys remain in the panel, but graph key widgets can be serialized in workflows. Avoid wiring a draft back into the same Master through a graph cycle; use a snapshot or the editor draft flow.</p>",
+      "nodes": [
+        "MiniMaxH3PromptForge",
+        "MiniMaxH3ApplyPromptDraft",
+        "MiniMaxH3LocalPromptModel"
+      ],
+      "visual": null
+    },
+    {
+      "id": "source",
+      "chapter": "03 · Prompts & source video",
+      "title": "Edit part of an existing video",
+      "lead": "Load a source, divide it into ranges, then select ranges to regenerate.",
+      "body": "<ul class=\"points\"><li>Use V2V/RV2V and describe the desired edit. The source becomes reference Video 1.</li><li>Split at the playhead, split equally or use optional scene detection. Merge only contiguous ranges from the same file.</li><li>Leave other ranges unselected for source passthrough; generated ranges are trimmed to the source length.</li></ul>",
+      "detail": "<p>There is no generic source-latent strength slider. Automatic continuity prefixes are disabled for source edits. Scene detection needs scenedetect[opencv]. To extend a video, use locked source Clip 0, then add generated shots. Source ranges keep original-time coordinates.</p>",
+      "nodes": [],
+      "visual": "source"
+    },
+    {
+      "id": "continuity",
+      "chapter": "04 · Continuity & projects",
+      "title": "Connect consecutive shots",
+      "lead": "Choose independent shots or continuity from the previous take.",
+      "body": "<ul class=\"points\"><li>Independent shots begin separately; chained shots use a saved tail as their prefix.</li><li>Context choices <strong>5 / 22 / 39 / 56 are pixel frames</strong>. The generated prefix is trimmed from the delivered shot.</li><li>Use a compatible completed take; inspect transitions before approving the sequence.</li></ul>",
+      "detail": "<p>The tail supplies context, not an exact motion guarantee. Prefix trim and previous trim are saved for later project assembly.</p>",
+      "nodes": [],
+      "visual": "continuity"
+    },
+    {
+      "id": "guides",
+      "chapter": "04 · Continuity & projects",
+      "title": "Place a guide at a time",
+      "lead": "Use Shot Extras to choose a guide reference and timestamp.",
+      "body": "<ul class=\"points\"><li>Enter the guide time in seconds inside the visible shot.</li><li>The native AddGuide path offsets the anchor for a continuity prefix.</li><li>Check the reference and timestamp when an anchor lands at the wrong point.</li></ul>",
+      "detail": "<p>This is a timestamped native guide, not an additional guide-strength control.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "takes",
+      "chapter": "04 · Continuity & projects",
+      "title": "Save, resume & branch takes",
+      "lead": "Completed takes are cached automatically.",
+      "body": "<ul class=\"points\"><li>Load Take Checkpoint: choose project ID, clip ID and latest or an explicit take UUID.</li><li>Connect a checkpoint to continue from that take. Use explicit IDs for a branch.</li><li>Advance Staged Take returns staged when its gate is true; otherwise it returns current.</li></ul>",
+      "detail": "<p>Cache contains completed media/latents and manifests. It cannot resume an unfinished sampler step. Missing files or changed inputs prevent reuse. Advance does not judge which take looks better.</p>",
+      "nodes": [
+        "MiniMaxH3Checkpoint",
+        "MiniMaxH3AdvanceCheckpoint"
+      ],
+      "visual": null
+    },
+    {
+      "id": "projects",
+      "chapter": "04 · Continuity & projects",
+      "title": "Choose what to export",
+      "lead": "Workflow wiring, project authoring and generated takes are separate.",
+      "body": "<ul class=\"points\"><li><strong>Workflow JSON:</strong> graph and node settings. <strong>Lightweight project JSON:</strong> timeline/settings with asset and cache hints.</li><li><strong>Portable .mmxproj:</strong> includes reference/source bytes; excludes models and heavy generated takes.</li><li>Append remaps incoming IDs; overwrite replaces authoring. New Project / Reset Timeline / Clear Cache have different scopes.</li></ul>",
+      "detail": "<p>Clear Cache removes generated takes while retaining uploaded assets. Appended shared references become local to imported shots. Back up generated-take storage separately when moving servers.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "enhance-order",
+      "chapter": "05 · Enhancements",
+      "title": "Where to connect enhancements",
+      "lead": "Configuration packs go into Master; pixel tools receive IMAGE frames.",
+      "body": "<ul class=\"points\"><li><strong>During sampling:</strong> optional model Cache, then SelfLift.</li><li><strong>After sampling:</strong> latent Refine, decode/grading, then FaceRefine.</li><li><strong>After Master:</strong> Pixel / RTX, Playback / Watermark / Loop, then Video Combine.</li></ul>",
+      "detail": "<p>Add one stage at a time and compare with a fixed seed. Acceleration Cache is separate from saved project takes.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "selflift",
+      "chapter": "05 · Enhancements",
+      "title": "SelfLift: switch to higher resolution",
+      "lead": "Connect SelfLift to the Master’s selflift input.",
+      "body": "<ul class=\"points\"><li>Start at <strong>lowres_scale 0.5</strong>; reserve <strong>4 high-resolution steps</strong> as an initial trial.</li><li>Choose the split with highres_steps or transition_step. Use a compatible model_hires override only when needed.</li><li>Use interpolation or compatible learned latent weights; tiling/chunking can reduce working memory.</li></ul>",
+      "detail": "<p>The weight dropdown has no explicit “interpolate” entry: when no weights are installed, its unset placeholder falls back to interpolation. native_low_carry reuses compatible low-resolution context only for chained shots. rho=0 disables the optional pixel-anchor mix; w_min/w_max bound its weighting.</p><div class=\"table-wrap\"><table><thead><tr><th>Control</th><th>Meaning</th></tr></thead><tbody><tr><td>lowres_scale</td><td>Spatial scale of the initial stage.</td></tr><tr><td>highres_steps / transition_step</td><td>Choose the resolution-switch location.</td></tr><tr><td>native_low_carry</td><td>Reuse low-resolution context between compatible chained shots.</td></tr><tr><td>rho</td><td>Enable/control mixing with a VAE pixel-anchor path.</td></tr><tr><td>w_min / w_max</td><td>Bounds for the anchor mix weighting.</td></tr><tr><td>model_hires</td><td>Optional MODEL for the high-resolution stage.</td></tr><tr><td>tiling / chunking</td><td>Spatial sampling tiles and learned-latent temporal chunks.</td></tr></tbody></table></div>",
+      "nodes": [
+        "MiniMaxH3DirectorSelfLift"
+      ],
+      "visual": null
+    },
+    {
+      "id": "refine",
+      "chapter": "05 · Enhancements",
+      "title": "Refine an existing latent",
+      "lead": "Connect Refine to the Master’s refine input.",
+      "body": "<ul class=\"points\"><li><strong>refine:</strong> another sampling pass. <strong>upscale:</strong> enlarge then refine. <strong>latent_upscale:</strong> enlarge without diffusion.</li><li>Start with one pass; adjust target size, steps and denoise. Default controls include 3 steps and denoise 0.45.</li><li>Global backend plans tiles from the memory budget; sampler backend uses explicit tile_count/overlap.</li></ul>",
+      "detail": "<p>Optional refine_model must be compatible. SIGMAS must be 1D, finite, nonnegative and nonincreasing, with ≥2 entries. More passes (1–20) cost compute and can drift.</p><div class=\"table-wrap\"><table><thead><tr><th>Control</th><th>Use</th></tr></thead><tbody><tr><td>refine_model</td><td>Optional compatible model for later refinement.</td></tr><tr><td>passes</td><td>Repeat refinement; supported range is 1–20.</td></tr><tr><td>sampler / scheduler</td><td>Choose the refine sampling procedure.</td></tr><tr><td>SIGMAS input</td><td>Supply an explicit noise schedule.</td></tr><tr><td>global backend</td><td>Memory-aware planner and temporal/spatial refinement.</td></tr><tr><td>sampler backend</td><td>Explicit native sampling alternative with per-step spatial tiles.</td></tr><tr><td>upscale_precision</td><td>auto, bf16, fp16 or fp32 for learned latent weights.</td></tr></tbody></table></div>",
+      "nodes": [
+        "MiniMaxH3DirectorRefine"
+      ],
+      "visual": null
+    },
+    {
+      "id": "latent-upscale",
+      "chapter": "05 · Enhancements",
+      "title": "Learned upscaling, tiles & chunks",
+      "lead": "Install compatible H3 latent weights under models/latent_upscale_models.",
+      "body": "<ul class=\"points\"><li>Weights must match the supported 24-channel 3D architecture; arbitrary image upscalers do not work here.</li><li>Spatial tiles overlap and blend. Temporal chunks reduce memory but may change attention/normalization behavior.</li><li>Choose auto / bf16 / fp16 / fp32 precision as supported; use interpolation when learned weights are unavailable.</li></ul>",
+      "detail": "<p>Supported checkpoint extensions: .safetensors, .sft, .pt, .pth. Loading validates architecture. Audio stays separate from visual latent enlargement.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "face",
+      "chapter": "05 · Enhancements",
+      "title": "Refine one tracked face",
+      "lead": "Connect FaceRefine to the Master’s face_refine input.",
+      "body": "<ul class=\"points\"><li>Select a compatible face detector; choose largest-face or centre-most initial selection.</li><li>Set crop size/context, prompt and sampling strength; preview the tracked result.</li><li>Control pasted region, feather/dilation, color matching and blend. Blend 0 preserves the base frames.</li></ul>",
+      "detail": "<p>Tracks one face, samples native audiovisual crops and keeps the main audio. No detections means a reported skip; a missing detector is a setup error. Inherit or offset the shot seed; stitching fades edits near boundaries.</p><div class=\"table-wrap\"><table><thead><tr><th>Control</th><th>Effect</th></tr></thead><tbody><tr><td>confidence / select</td><td>Detection threshold; initial largest-face or centre-most selection.</td></tr><tr><td>crop_factor / crop_size</td><td>How much surrounding context is sampled.</td></tr><tr><td>canvas_mode</td><td>Manual crop canvas or an automatically capped one.</td></tr><tr><td>paste_region</td><td>Face rectangle, ellipse or full crop.</td></tr><tr><td>mask_dilation / feather</td><td>Expand and soften the pasted region.</td></tr><tr><td>colour_match / blend</td><td>Match crop color and control how much to paste.</td></tr><tr><td>steps / sampler / scheduler / SIGMAS</td><td>Sampling of the face crop; separate from the main pass.</td></tr></tbody></table></div>",
+      "nodes": [
+        "MiniMaxH3DirectorFaceRefine"
+      ],
+      "visual": null
+    },
+    {
+      "id": "semantic-cache",
+      "chapter": "05 · Enhancements",
+      "title": "Semantic Bridge & acceleration Cache",
+      "lead": "Both affect generation; neither is a prompt writer.",
+      "body": "<ul class=\"points\"><li><strong>Semantic Bridge:</strong> install the exact student checkpoint under models/semantic_bridge; connect the pack and set alpha (default 0.15).</li><li><strong>Cache:</strong> connect the model acceleration configuration; adjust reuse threshold, active interval, maximum cached steps and device.</li><li>Compare quality against a baseline: reused model computation can introduce artifacts.</li></ul>",
+      "detail": "<p>Semantic Bridge adapts conditioning tokens. Cache defaults include threshold 0.05, start 0.15, end 0.90 and max steps 2. Its model hook depends on installed ComfyUI compatibility; no measured speedup is promised.</p>",
+      "nodes": [
+        "MiniMaxH3DirectorSemanticBridge",
+        "MiniMaxH3Cache"
+      ],
+      "visual": null
+    },
+    {
+      "id": "pixel",
+      "chapter": "05 · Enhancements",
+      "title": "Enlarge decoded frames",
+      "lead": "Master images → Pixel / RTX → exporter images.",
+      "body": "<ul class=\"points\"><li><strong>bicubic:</strong> resize. <strong>learned_pixel:</strong> supply an UPSCALE_MODEL.</li><li><strong>RTX VSR / RTX High Bitrate:</strong> require their optional providers and compatible hardware/runtime.</li><li>Set target width/height; keep the Master audio connected separately to the exporter.</li></ul>",
+      "detail": "<p>Bicubic and learned-pixel paths resize to the target, including stretching. resize_method applies to RTX providers. These tools work on pixels, unlike SelfLift/latent Refine.</p>",
+      "nodes": [
+        "MiniMaxH3PixelUpscale"
+      ],
+      "visual": null
+    },
+    {
+      "id": "outputs",
+      "chapter": "06 · Export",
+      "title": "Use the correct Master output",
+      "lead": "Normal video export uses images + audio.",
+      "body": "<ul class=\"points\"><li><strong>images/audio:</strong> assembled selected sequence. <strong>fps/frame_count:</strong> delivered timing.</li><li><strong>positive/latent/resolved_prompt:</strong> final shot only. <strong>status:</strong> execution report.</li><li><strong>project_state:</strong> timeline JSON. <strong>video:</strong> VHS_VIDEOINFO metadata, not playable VIDEO.</li></ul>",
+      "detail": "<p>For a genuine VIDEO socket, use Native Video Output. Final latent precedes decoded grading and FaceRefine; it is not a concatenation of all finished shots.</p>",
+      "nodes": [
+        "MiniMaxH3VideoOutput"
+      ],
+      "visual": null
+    },
+    {
+      "id": "combine",
+      "chapter": "06 · Export",
+      "title": "Save a playable video",
+      "lead": "Connect images and audio to Video Combine & Audio Muxer.",
+      "body": "<ul class=\"points\"><li>Set FPS, filename prefix, container and codec; enable save_output for permanent output rather than temp.</li><li>Use MP4 + H.264 for a first compatibility test. Other options include MKV/WebM/animated WebP/AVIF, H.265/VP9/AV1 and 8/10-bit paths.</li><li>Choose audio codec, metadata, crop-to-audio or ping-pong as needed.</li></ul>",
+      "detail": "<p>PyAV is default; FFmpeg is an explicit fallback. Codec/container support depends on installed builds. Audio options include Auto/AAC/Opus/MP3/FLAC. Passthrough frames does not disable encoding; preview transcodes can differ from the saved codec.</p>",
+      "nodes": [
+        "MiniMaxH3VideoCombine"
+      ],
+      "visual": null
+    },
+    {
+      "id": "project-export",
+      "chapter": "06 · Export",
+      "title": "Export an entire saved project",
+      "lead": "Master project_state → Project / Shot Video Export.",
+      "body": "<ul class=\"points\"><li>Choose all or selected shots, export FPS and optional individual shot files.</li><li>Select <strong>final</strong>, <strong>pre_refine</strong> or <strong>original_source</strong> stream.</li><li>Export assembles saved shots one at a time; generate missing takes before exporting.</li></ul>",
+      "detail": "<p>Final is the finished cached take; pre_refine uses its saved first-pass stream; original_source uses source ranges. Missing pre-refine can fall back to source when present. Assembly normalizes the canvas and uses H.264 MP4 with FFmpeg concatenation; it needs the original cache/assets.</p>",
+      "nodes": [
+        "MiniMaxH3ProjectVideo"
+      ],
+      "visual": null
+    },
+    {
+      "id": "playback",
+      "chapter": "06 · Export",
+      "title": "Change playback FPS",
+      "lead": "Master frames/audio → Playback / Watermark / Loop → exporter.",
+      "body": "<ul class=\"points\"><li><strong>resample:</strong> repeat/drop frames to preserve duration; this is not AI motion interpolation.</li><li><strong>retime:</strong> change speed and audio pitch; the waveform is resampled.</li><li>Set exporter FPS to the processing output’s timing.</li></ul>",
+      "detail": "",
+      "nodes": [
+        "MiniMaxH3OutputProcessing"
+      ],
+      "visual": null
+    },
+    {
+      "id": "finish",
+      "chapter": "06 · Export",
+      "title": "Watermark & loop",
+      "lead": "Configure the same Output Processing node.",
+      "body": "<ul class=\"points\"><li>Choose text or a logo, corner and opacity; a supplied logo takes precedence.</li><li>For loops, overlap end and beginning and crossfade picture + audio.</li><li>Overlap 0 disables looping; positive overlap must be less than half the clip. Output becomes shorter by the overlap.</li></ul>",
+      "detail": "<p>Example: 124 frames with 12-frame overlap produces 112 frames. Check the seam and sound before saving.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "overrides",
+      "chapter": "07 · Custom graphs",
+      "title": "Override a model per shot",
+      "lead": "Use Shot Model Pack → Master model_pack.",
+      "body": "<ul class=\"points\"><li>Give each compatible model entry a name; select that name on the shot.</li><li>SelfLift model_hires and Refine refine_model affect their own stages.</li><li>Keep model family/encoder compatibility consistent with the shot mode.</li></ul>",
+      "detail": "",
+      "nodes": [
+        "MiniMaxH3ModelOverridePack"
+      ],
+      "visual": null
+    },
+    {
+      "id": "groups",
+      "chapter": "07 · Custom graphs",
+      "title": "Build references & shot groups in a graph",
+      "lead": "Use these when you need inputs outside the timeline editor.",
+      "body": "<ul class=\"points\"><li>Image-to-Video Group / Reference-to-Video Group build shot groups; Groups Combine flattens up to 10 ordered inputs.</li><li>Reference Pack and Reference Bridge supply media pools; Prompt Bridge supplies newline-separated prompts by shot index.</li><li>Group inputs override timeline shots. Keep prompt order aligned with group order.</li></ul>",
+      "detail": "<p>Image-family groups precede reference-family groups when both are supplied directly. RefPack can hold graph multimedia inputs and local selections; the bridge adapts IMAGE inputs into reference entries.</p>",
+      "nodes": [
+        "MiniMaxH3DirectorGroupImageToVideo",
+        "MiniMaxH3DirectorGroupReferenceToVideo",
+        "MiniMaxH3DirectorGroupsCombine",
+        "MiniMaxH3RefPack",
+        "MiniMaxH3ReferenceBridge",
+        "MiniMaxH3PromptBridge"
+      ],
+      "visual": null
+    },
+    {
+      "id": "guide-mode",
+      "chapter": "07 · Custom graphs",
+      "title": "Advanced conditioning & sampling",
+      "lead": "Use only for a custom sampling graph.",
+      "body": "<ul class=\"points\"><li>Director Guide / Planner Conditioning produce conditioning paths for manual graph use.</li><li>Conditioning Guide Output returns final conditioning and an empty latent instead of executing a multishot movie.</li><li>Sampling Settings supplies advanced controls; Tail From Latent extracts/decode a manual continuation tail.</li></ul>",
+      "detail": "<p>Use Load Take Checkpoint for durable continuation. Custom guide dictionaries are advanced inputs, not a normal Master media output. Match socket types and avoid graph cycles.</p>",
+      "nodes": [
+        "MiniMaxH3DirectorGuide",
+        "MiniMaxH3DirectorPlannerConditioning",
+        "MiniMaxH3SamplingSettings",
+        "MiniMaxH3TailFromLatent"
+      ],
+      "visual": null
+    },
+    {
+      "id": "recipes",
+      "chapter": "08 · Recipes & fixes",
+      "title": "Three useful workflows",
+      "lead": "Try each with a short shot first.",
+      "body": "<ul class=\"points\"><li><strong>Story:</strong> create 3 shots → approve shot 1 → chain 2 and 3 → export cached final shots.</li><li><strong>Source edit:</strong> split a source → select one range → V2V/RV2V → leave other ranges as passthrough → assemble.</li><li><strong>Upscale comparison:</strong> save a baseline → compare SelfLift, latent Refine and pixel enlargement separately with matching inputs.</li></ul>",
+      "detail": "",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "troubleshoot",
+      "chapter": "08 · Recipes & fixes",
+      "title": "Find the failing stage",
+      "lead": "Read status first; isolate one optional stage at a time.",
+      "body": "<ul class=\"points\"><li><strong>Model/input error:</strong> check family, encoder/VAE, reference limits and canvas/frame grid.</li><li><strong>Missing take/export:</strong> regenerate the shot or restore its cache/assets. <strong>Provider error:</strong> check server-side models, URL and dependencies.</li><li><strong>Out of memory:</strong> shorten the shot, lower resolution, use tiles/chunks, then retry before increasing quality settings.</li></ul>",
+      "detail": "<p>Face detection requires detector dependencies and weights; RTX needs its provider. If a movie has wrong timing, compare fps/frame_count, Output Processing policy and exporter FPS. Inspect exact socket types when a connection fails.</p>",
+      "nodes": [],
+      "visual": null
+    },
+    {
+      "id": "checklist",
+      "chapter": "08 · Recipes & fixes",
+      "title": "Before a long run",
+      "lead": "Confirm these four things.",
+      "body": "<ul class=\"points\"><li>A short take generates and saves successfully with the selected model/encoders.</li><li>Reference mentions resolve correctly; approved takes and source assets remain available.</li><li>Transitions, sound and export FPS look right; there is enough server storage for completed takes.</li></ul>",
+      "detail": "<p>Save workflow and project authoring; back up media/take storage separately. Add optional stages only after the basic pipeline works.</p>",
+      "nodes": [],
+      "visual": null
+    }
+  ]
+}

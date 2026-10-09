@@ -173,6 +173,10 @@ class MockTorchModule:
         return MockTensor(np.array(data, dtype=np.float32))
 
     @staticmethod
+    def is_tensor(value):
+        return isinstance(value, MockTensor)
+
+    @staticmethod
     def from_numpy(data):
         return MockTensor(data)
 

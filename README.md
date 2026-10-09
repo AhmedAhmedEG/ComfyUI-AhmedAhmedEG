@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.0.3** consolidates the MiniMax/video production features of
+Version **1.0.4** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -14,6 +14,11 @@ There is one public **MiniMax H3 Master Node** name. The package has 30 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
 nodes. Start with the five types in `MiniMax H3/Start here`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
+[Open the animated HTML walkthrough](docs/MiniMax-H3-User-Guide.html) to follow
+the connections, try shot controls, bind a sample reference, explore continuity,
+and see where enhancements run. A searchable toolbox covers every public node;
+the starter workflow is downloadable inside the offline guide.
+Rebuild with `python tools/build_user_guide.py`.
 Saved UI workflows using the former Master Director type migrate on import.
 API prompts should use `MiniMaxH3MasterNode` as their `class_type`.
 
@@ -22,11 +27,23 @@ with ComfyUI's Python, and restart ComfyUI. The installed ComfyUI must provide
 native MiniMax H3 ImageToVideo, ReferenceToVideo, AddGuide, SigmaShift and current
 `comfy_api.latest` VIDEO APIs.
 
-Load `workflows/MiniMax H3 Consolidated.json`. Select your FL2VA and REF2VA
-checkpoints, Qwen MiniMax text encoder, video VAE and audio VAE. The example uses
+Load `workflows/MiniMax H3 Start Here.json` for a five-node text/image setup.
+Select your FL2VA checkpoint, Qwen MiniMax text encoder, video VAE and audio VAE.
+`MiniMax H3 Consolidated.json` adds REF2VA and optional cached-project export.
+The examples use
 this package's provenance loaders so saved shots can be reused after restarting.
 Edit shots and upload references inside the Master Node. The example uses only this package’s nodes; optional enhancements can be added
 when needed.
+
+After `git pull`, **restart the ComfyUI process**, then reload the browser.
+Pulling files does not reload Python node registrations in a running server.
+`/minimax_director/status` reports the loaded version and installation path;
+version 1.0.4 reports 30 types and only `MiniMaxH3MasterNode` as the Master.
+If loaders are unknown or `pyav` appears under `bit_depth`, the workflow and
+running definitions do not match. Reload the supplied workflow after restarting.
+Two model loader instances in the consolidated example load different model
+families; they are intentional. Advanced graph tools are optional, under their
+own menu category.
 
 Generation is **24 fps**, with native **17k + 5** frames and canvases divisible
 by 32. Requested generation durations round upward to that frame grid. Source

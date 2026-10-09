@@ -19,16 +19,24 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 log = logging.getLogger("MiniMaxH3MasterDirector")
+log.info("MiniMax H3 %s loaded from %s (%d public node types)", __version__, __file__, len(NODE_CLASS_MAPPINGS))
 _PREVIEW_LOCKS = weakref.WeakValueDictionary()
 
 # Register server API routes
 if getattr(PromptServer, "instance", None) is not None:
     routes = PromptServer.instance.routes
+
+    @routes.get("/minimax_director/status")
+    async def package_status(request):
+        """Report what this running process loaded, rather than files on disk."""
+        return web.json_response({"loaded_version": __version__, "loaded_from": __file__,
+            "node_count": len(NODE_CLASS_MAPPINGS), "node_types": list(NODE_CLASS_MAPPINGS),
+            "master_types": [name for name in NODE_CLASS_MAPPINGS if "Master" in name]})
 
     @routes.post("/minimax_director/media/upload")
     async def upload_media(request):

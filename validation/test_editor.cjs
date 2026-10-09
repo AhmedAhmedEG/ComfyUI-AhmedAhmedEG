@@ -25,6 +25,27 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
 (async()=>{
   const legacy = {nodes:[{type:'MiniMaxH3MasterDirector'}]};
   w.extension.beforeConfigureGraph(legacy); assert.strictEqual(legacy.nodes[0].type,'MiniMaxH3MasterNode');
+  const settingsValues=[1344,768,24,25,1,'euler','simple',12,3,0,'All-in-One Generation','simple','full_batch','Motion Context (Chained)','22','full'];
+  const oldExporter=[24,'H.264','mp4','8-bit',21,'Standard',false,true,'video/test',true,false,false,'Auto','192k',false,false];
+  const oldGraph={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[...settingsValues]},{type:'MiniMaxH3VideoCombine',widgets_values:[...oldExporter]}]};
+  w.extension.beforeConfigureGraph(oldGraph);
+  assert.strictEqual(oldGraph.nodes[0].widgets_values[10],'fixed');
+  assert.strictEqual(oldGraph.nodes[0].widgets_values[11],'All-in-One Generation');
+  assert.strictEqual(oldGraph.nodes[1].widgets_values[3],'ffmpeg');
+  assert.strictEqual(oldGraph.nodes[1].widgets_values[4],'8-bit');
+  w.extension.beforeConfigureGraph(oldGraph);assert.strictEqual(oldGraph.nodes[0].widgets_values.length,17);
+  function Exporter(){this.widgets=[{name:'quality',value:21},{name:'bit_depth',value:'10-bit'},{name:'encoder_backend',value:'pyav'},{name:'save_output',value:false},{name:'control_after_generate',value:'fixed',options:{serialize:false}},{name:'preview',value:'not_saved',serialize:false}];}
+  Exporter.prototype.onSerialize=function(data){data.other_extension='preserved';};
+  Exporter.prototype.onConfigure=function(){this.widgets[0].value='wrong positional value';};
+  await w.extension.beforeRegisterNodeDef(Exporter,{name:'MiniMaxH3VideoCombine'});
+  const exporter=new Exporter(),serialized={};exporter.onSerialize(serialized);
+  assert.strictEqual(serialized.other_extension,'preserved');
+  assert.strictEqual(serialized.widgets_values_named.save_output,false);
+  assert.strictEqual(serialized.widgets_values_named.control_after_generate,'fixed');
+  assert.strictEqual(serialized.widgets_values_named.preview,undefined);
+  exporter.widgets.reverse();exporter.onConfigure(serialized);
+  assert.strictEqual(exporter.widgets.find(widget=>widget.name==='quality').value,21);
+  assert.strictEqual(exporter.widgets.find(widget=>widget.name==='bit_depth').value,'10-bit');
   w.extension.nodeCreated(node);
   await new Promise(resolve=>setTimeout(resolve,40));
   assert(w.document.querySelector('.mmx-director-root'),'Editor mounts');

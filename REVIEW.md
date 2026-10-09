@@ -1,5 +1,32 @@
 # Consolidation review — 2026-10-09
 
+## 1.0.4 workflow import repair
+
+The Settings workflow omitted ComfyUI's extra `control_after_generate` widget
+after `seed`; this shifted subsequent execution/prompt/continuity fields.
+Both examples now include the seed control and named widget values. The editor
+migrates older Settings arrays and the previous exporter's array without its
+new backend field. Named serialization/restoration prevents later field additions
+from shifting values. Regression checks cover widget types/order, socket links,
+unique public names, preserved booleans, nonserialized UI widgets, and layout.
+
+`MiniMax H3 Start Here.json` uses five everyday nodes and one FL2VA loader.
+The consolidated example keeps REF2VA and a muted cached exporter; that exporter
+now sits below Video Combine rather than overlapping it. The offline animated
+guide downloads the simple starter. `/minimax_director/status` identifies the
+version and path loaded by the running process; pulling Git files alone does
+not reload its Python definitions.
+
+The reported screenshots match the pre-consolidation definitions: duplicate
+Master aliases, absent loaders/Project Video, and no exporter backend widget.
+This supports a running-definition mismatch, but the remote API timed out, so
+the server process and installation path have not been directly verified.
+
+ComfyUI automatically adds a workflow seed-control widget, as shown in its
+[integer widget implementation](https://github.com/Comfy-Org/ComfyUI_frontend/blob/main/src/renderer/extensions/vueNodes/widgets/composables/useIntWidget.ts).
+Validation for 1.0.4: 99 regression tests and 14 real CPU/media tests pass in
+the validation environment, plus the editor and animated-guide JavaScript checks.
+
 This 1.0.3 review supersedes the earlier 1.0.1 report. The earlier description of
 Image Inpaint, rejection of source V2V/RV2V parity, approximate SelfLift, independent
 whole-tile sampling, and heuristic face refinement no longer describes the default

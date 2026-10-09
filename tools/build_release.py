@@ -14,13 +14,13 @@ def build(root=None):
     names = ["__init__.py", "LICENSE", "README.md", "REVIEW.md", "NODE_GUIDE.md",
         "FEATURE_PARITY.md", "THIRD_PARTY_NOTICE.md", "requirements.txt", "pyproject.toml", ".gitignore", ".gitattributes"]
     files = [root/name for name in names]
-    for name in ("core", "nodes", "web", "workflows", "tests", "validation", "tools"):
+    for name in ("core", "nodes", "web", "workflows", "tests", "validation", "tools", "docs"):
         files += [p for p in (root/name).rglob("*") if p.is_file()
             and "__pycache__" not in p.parts and p.suffix not in (".pyc", ".pyo")]
     for path in files:
         if path.suffix == ".py": ast.parse(path.read_text(encoding="utf-8"),filename=str(path))
         if path.suffix == ".json": json.loads(path.read_text(encoding="utf-8"))
-        if path.suffix in (".py", ".js", ".md", ".json", ".toml", ".txt", ".cjs"):
+        if path.suffix in (".py", ".js", ".md", ".json", ".toml", ".txt", ".cjs", ".html"):
             if re.search(r"CF-Access-Client-(Id|Secret)|cfast_[A-Za-z0-9]",path.read_text(encoding="utf-8")):
                 raise ValueError(f"Credential marker in {path.relative_to(root)}")
     for path in (root/"workflows").glob("*.json"):

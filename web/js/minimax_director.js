@@ -4896,10 +4896,46 @@ app.registerExtension({
     // Upgrade saved UI workflows before ComfyUI resolves node types.
     for (const node of graphData?.nodes || []) {
       if (node.type === "MiniMaxH3MasterDirector") node.type = "MiniMaxH3MasterNode";
+      // Earlier examples omitted ComfyUI's workflow-only seed control.
+      // Preserve the seed and all subsequent Settings fields during import.
+      if (node.type === "MiniMaxH3DirectorSettings" && Array.isArray(node.widgets_values)
+          && node.widgets_values.length === 16 && !node.widgets_values_named) {
+        node.widgets_values.splice(10, 0, "fixed");
+      }
+      if (node.type === "MiniMaxH3VideoCombine" && Array.isArray(node.widgets_values)
+          && node.widgets_values.length === 16 && !node.widgets_values_named) {
+        // The pre-consolidation exporter used FFmpeg and had no backend widget.
+        node.widgets_values.splice(3, 0, "ffmpeg");
+      }
     }
   },
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
+    if (nodeData.name.startsWith("MiniMaxH3")) {
+      // Persist values by name as well as LiteGraph's positional array. Adding
+      // a widget must not shift existing values into unrelated input fields.
+      const serialize = nodeType.prototype.onSerialize;
+      nodeType.prototype.onSerialize = function (data) {
+        serialize?.apply(this, arguments);
+        data.widgets_values_named = {};
+        for (const widget of this.widgets || []) {
+          if (widget.serialize === false || !widget.name) continue;
+          if (["string", "number", "boolean"].includes(typeof widget.value)) {
+            data.widgets_values_named[widget.name] = widget.value;
+          }
+        }
+      };
+      const configure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function (info) {
+        configure?.apply(this, arguments);
+        for (const widget of this.widgets || []) {
+          if (widget.serialize === false) continue;
+          if (Object.hasOwn(info?.widgets_values_named || {}, widget.name)) {
+            widget.value = info.widgets_values_named[widget.name];
+          }
+        }
+      };
+    }
     if (["MiniMaxH3VideoCombine", "MiniMaxH3ProjectVideo"].includes(nodeData.name)) {
       const executed = nodeType.prototype.onExecuted;
       nodeType.prototype.onExecuted = function (message) {

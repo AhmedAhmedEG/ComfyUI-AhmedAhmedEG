@@ -40,48 +40,11 @@
       }
     },
     {
-      "id": 2,
-      "type": "MiniMaxH3ModelLoader",
-      "pos": [
-        0,
-        230
-      ],
-      "size": [
-        330,
-        180
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "properties": {
-        "Node name for S&R": "MiniMaxH3ModelLoader"
-      },
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "links": [
-            6
-          ]
-        }
-      ],
-      "widgets_values": [
-        "SELECT_REF2VA_CHECKPOINT",
-        "default"
-      ],
-      "title": "Select REF2VA checkpoint",
-      "widgets_values_named": {
-        "checkpoint": "SELECT_REF2VA_CHECKPOINT",
-        "weight_dtype": "default"
-      }
-    },
-    {
       "id": 3,
       "type": "MiniMaxH3EncoderLoader",
       "pos": [
         0,
-        460
+        240
       ],
       "size": [
         330,
@@ -134,7 +97,7 @@
       "id": 4,
       "type": "MiniMaxH3DirectorSettings",
       "pos": [
-        370,
+        380,
         0
       ],
       "size": [
@@ -164,8 +127,8 @@
         }
       ],
       "widgets_values": [
-        1344,
-        768,
+        960,
+        544,
         24,
         25,
         1,
@@ -183,8 +146,8 @@
         "full"
       ],
       "widgets_values_named": {
-        "width": 1344,
-        "height": 768,
+        "width": 960,
+        "height": 544,
         "frame_rate": 24,
         "steps": 25,
         "cfg": 1,
@@ -206,7 +169,7 @@
       "id": 5,
       "type": "MiniMaxH3MasterNode",
       "pos": [
-        740,
+        760,
         0
       ],
       "size": [
@@ -258,7 +221,7 @@
         {
           "name": "ref2va_model",
           "type": "MODEL",
-          "link": 6
+          "link": null
         },
         {
           "name": "selflift",
@@ -364,17 +327,15 @@
         {
           "name": "project_state",
           "type": "STRING",
-          "links": [
-            9
-          ]
+          "links": []
         }
       ],
       "widgets_values": [
-        "{\"version\": 2, \"project_id\": \"consolidated_example\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 5, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
+        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
         "{}"
       ],
       "widgets_values_named": {
-        "timeline_data": "{\"version\": 2, \"project_id\": \"consolidated_example\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 5, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
+        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
         "builder_state": "{}"
       }
     },
@@ -382,7 +343,7 @@
       "id": 6,
       "type": "MiniMaxH3VideoCombine",
       "pos": [
-        2000,
+        2020,
         0
       ],
       "size": [
@@ -462,60 +423,6 @@
         "save_first_frame": false,
         "save_last_frame": false
       }
-    },
-    {
-      "id": 7,
-      "type": "MiniMaxH3ProjectVideo",
-      "pos": [
-        2010,
-        700
-      ],
-      "size": [
-        350,
-        270
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 2,
-      "properties": {
-        "Node name for S&R": "MiniMaxH3ProjectVideo"
-      },
-      "inputs": [
-        {
-          "name": "timeline",
-          "type": "STRING",
-          "link": 9
-        }
-      ],
-      "outputs": [
-        {
-          "name": "video",
-          "type": "VIDEO",
-          "links": []
-        },
-        {
-          "name": "shot_files_json",
-          "type": "STRING",
-          "links": []
-        }
-      ],
-      "widgets_values": [
-        "consolidated_example",
-        "final",
-        "all",
-        24,
-        "minimax/cached_project",
-        true
-      ],
-      "title": "Cached disk export (enable when needed)",
-      "widgets_values_named": {
-        "project_id": "consolidated_example",
-        "stream": "final",
-        "selection": "all",
-        "fps": 24,
-        "filename_prefix": "minimax/cached_project",
-        "export_individual_shots": true
-      }
     }
   ],
   "links": [
@@ -560,14 +467,6 @@
       "MODEL"
     ],
     [
-      6,
-      2,
-      0,
-      5,
-      7,
-      "MODEL"
-    ],
-    [
       7,
       5,
       0,
@@ -582,38 +481,41 @@
       6,
       1,
       "AUDIO"
-    ],
-    [
-      9,
-      5,
-      9,
-      7,
-      0,
-      "STRING"
     ]
   ],
   "groups": [
     {
-      "title": "Select installed model files",
+      "title": "1. Select FL2VA + encoders",
       "bounding": [
         -20,
-        -50,
+        -55,
         370,
-        750
+        500
       ],
       "color": "#3f789e",
       "font_size": 22
     },
     {
-      "title": "Optional cached export — muted",
+      "title": "2. Sampling settings",
       "bounding": [
-        1990,
-        660,
-        390,
-        340
+        360,
+        -55,
+        380,
+        705
       ],
       "color": "#53674d",
-      "font_size": 20
+      "font_size": 22
+    },
+    {
+      "title": "3. Edit a shot, queue and save",
+      "bounding": [
+        740,
+        -55,
+        1650,
+        990
+      ],
+      "color": "#675443",
+      "font_size": 22
     }
   ],
   "config": {},
