@@ -1,0 +1,37 @@
+const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
+const fs=require('fs'), assert=require('assert');
+const dom=new JSDOM('<body><div id="root"><div id="toolbar"></div><div id="timeline"></div><div id="inspector"></div></div>',{url:'http://localhost/',runScripts:'outside-only'});
+const w=dom.window; let loads=0, plays=0, options={}, calls=[], pending;
+w.HTMLMediaElement.prototype.load=()=>{loads++};
+w.HTMLMediaElement.prototype.pause=()=>{};
+w.HTMLMediaElement.prototype.play=()=>{plays++;return Promise.resolve()};
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
+const api={apiURL:p=>p,fetchApi:async(path,request)=>{
+  assert.equal(path,'/minimax_director/preview/info');
+  const data=JSON.parse(request.body);calls.push(data);
+  if(pending)return pending;
+  return {ok:true,json:async()=>({found:true,scope:data.scope,label:'Shot 2',project_id:'project',key:data.scope==='latest'?'clip-revision':'full-revision'})};
+}};
+const player=w.installSmartPreview({root:w.document.querySelector('#root'),toolbar:w.document.querySelector('#toolbar'),timelinePanel:w.document.querySelector('#timeline'),inspector:w.document.querySelector('#inspector'),node:{setDirtyCanvas(){}},api,getTimeline:()=>({project_id:'project',preview_mode:'full',clips:[{id:'two'}]}),getOptions:()=>options,saveOptions:v=>{options=v}});
+const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
+(async()=>{
+  const preview=[...w.document.querySelectorAll('button')].find(b=>b.textContent==='Preview');
+  assert.equal(calls.length,0,'Hidden preview requests no media');
+  preview.click();await tick();
+  assert.equal(calls[0].scope,'latest','Latest is the default even if generation outputs the full video');
+  const video=w.document.querySelector('video');
+  assert(video.src.includes('clip-revision'));assert(!video.src.includes('full-revision'));
+  assert.equal(video.preload,'metadata');
+  assert(w.document.querySelector('a').href.includes('download=1'));
+  const before=loads;await player.refresh();assert.equal(loads,before,'Same revision does not rebuffer');
+  const select=w.document.querySelector('select');select.value='full';select.onchange();await tick();
+  assert(video.src.includes('full-revision'));assert.equal(options.scope,'full');
+  select.value='latest';select.onchange();await tick();
+  assert(video.src.includes('clip-revision'));
+  w.document.querySelector('input').checked=true;w.document.querySelector('input').onchange();
+  video.dispatchEvent(new w.Event('loadeddata'));assert.equal(plays,1);
+  let resolve;pending=new Promise(r=>{resolve=r});player.completed();
+  player.dispose();resolve({ok:true,json:async()=>({found:true,scope:'latest',label:'Late',project_id:'project',key:'stale-revision'})});await tick();
+  assert(!video.hasAttribute('src'),'Late responses cannot restart removed players');
+  dom.window.close();console.log('Preview passed: latest-only URLs, explicit full switch, stable revision buffering, save, autoplay and async cleanup.');
+})().catch(error=>{console.error(error);dom.window.close();process.exitCode=1});

@@ -1,5 +1,27 @@
 # Consolidation review — 2026-10-09
 
+## 1.0.6 editor and smart preview
+
+The timeline ruler now uses DOM text and ticks instead of a stretched canvas
+bitmap. Scrubbing converts screen coordinates to graph coordinates, including
+155% zoom. The editor inherits ComfyUI theme colors and removes nested outer
+borders. A Preview tab uses the existing node area rather than inflating its size.
+
+The preview player restores completed takes, follows newly finished shots,
+supports autoplay and saving, and defaults to Latest clip. Explicit Full video
+mode assembles completed caches and locked source ranges. Independent immutable
+preview revisions prevent whole-sequence buffering in Latest mode. Encoding is
+lazy and uses the existing PyAV H.264/AAC encoder, with HTTP byte-range delivery.
+Preview files fit within 960 × 540; final exports are unaffected. No sampling or
+VAE decode is added. A missing cache reports that no clip is available instead
+of silently falling back to a complete video.
+
+Validation: 102 regression tests, 19 real CPU/media tests, editor, preview and
+guide checks. Tiny encoded media verifies that Latest loads only the newest shot,
+Full respects seam trimming, and old preview revisions survive rerenders. Player
+checks cover stable URLs, autoplay, saving and late-response cleanup. GPU
+sampling was not run.
+
 ## 1.0.5 public-node audit
 
 Removed eight redundant public types: diffusion/encoder loaders and VIDEO
@@ -122,4 +144,5 @@ name, the current workflow, notices, tests and a reproducible release builder.
 Source-reference clones, scratch scripts and stale release ZIPs are development
 artifacts, excluded from Git and the package. The workflow is now tracked; the
 former blanket JSON/workflow ignore rules have been removed.
+
 

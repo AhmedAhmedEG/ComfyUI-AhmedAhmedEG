@@ -1,12 +1,20 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.0.5** consolidates the MiniMax/video production features of
+Version **1.0.6** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
 [FEATURE_PARITY.md](FEATURE_PARITY.md) records the pinned sources, required union,
 and subsystem choices. These choices follow code/API review; they are not GPU
 quality or speed benchmarks. See [REVIEW.md](REVIEW.md) for validation evidence.
+
+The Master’s **Preview** tab plays the **latest completed clip** by default.
+Switch to **Full video** to review the completed sequence. Each scope has its own
+cached H.264/AAC preview file; latest mode never downloads the complete video.
+The player restores from saved shot caches, supports autoplay and Save preview,
+and refreshes after a shot finishes. Preview is independent of the **Output**
+selector and never changes what downstream export nodes receive. Previews are
+scaled to fit 960 × 540; final export keeps its configured resolution.
 
 ## Install and start
 
@@ -43,7 +51,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.0.5 reports 22 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.0.6 reports 22 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.

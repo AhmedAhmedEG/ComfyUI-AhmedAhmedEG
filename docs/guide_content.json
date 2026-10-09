@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "title": "MiniMax H3 Animated Walkthrough",
   "date": "2026-10-09",
   "sourceCommit": "2e1aa1e6f76bff932c4221f7fc2a27f38c218766",
@@ -9,8 +9,8 @@
       "chapter": "01 · Start",
       "title": "Make your first video",
       "lead": "Start with the Master Node. Add other tools when you need them.",
-      "body": "<ul class=\"points\"><li>Load the starter workflow and select your model files.</li><li>Add a shot in the Master timeline; enter a prompt and duration.</li><li>Queue the workflow, review the take, then save with stock Create Video → Save Video.</li></ul><button data-action=\"download-workflow\" class=\"primary\">Download starter workflow</button>",
-      "detail": "<p>Models, uploaded media, optional providers and output files live on your <strong>ComfyUI server</strong>. This guide runs offline and does not generate video. Covers version 1.0.5; remote GPU generation was not verified.</p>",
+      "body": "<ul class=\"points\"><li>Load the starter workflow and select your model files.</li><li>Add a shot in the Master timeline; enter a prompt and duration.</li><li>Queue the workflow. Open Preview → Latest clip to review only the new take; choose Full video for the sequence. Save final output with stock Create Video → Save Video.</li></ul><button data-action=\"download-workflow\" class=\"primary\">Download starter workflow</button>",
+      "detail": "<p>Models, uploaded media, optional providers and output files live on your <strong>ComfyUI server</strong>. This guide runs offline and does not generate video. Covers version 1.0.6; remote GPU generation was not verified.</p>",
       "nodes": [
         "MiniMaxH3MasterNode",
         "MiniMaxH3DirectorSettings",

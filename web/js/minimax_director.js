@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { installLocale } from "./minimax_locale.js";
+import { installSmartPreview } from "./minimax_preview.js";
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -26,11 +27,11 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   min-height: 0;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: #e2e8f0;
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 8px;
-  padding: 8px;
+  color: var(--input-text, #dddddd);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 4px;
   user-select: none;
 }
 
@@ -45,9 +46,9 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   height: 24px;
   padding: 2px 6px;
   font-size: 11px;
-  background: #1e293b;
-  color: #e2e8f0;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  color: var(--input-text, #dddddd);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 4px;
 }
 
@@ -59,17 +60,17 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   gap: 8px;
   flex-wrap: wrap;
   padding-bottom: 6px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--comfy-input-bg, #333333);
 }
 
 .mmx-pill-group {
   display: flex;
   align-items: center;
   gap: 3px;
-  background: #090d16;
+  background: var(--comfy-input-bg, #222222);
   padding: 3px;
   border-radius: 20px;
-  border: 1px solid #1e293b;
+  border: 1px solid var(--comfy-input-bg, #333333);
 }
 
 .mmx-pill-btn {
@@ -97,8 +98,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-action-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   color: #cbd5e1;
   font-size: 11px;
   padding: 4px 10px;
@@ -111,7 +112,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-action-btn:hover {
-  background: #334155;
+  background: var(--border-color, #4a4a4a);
   color: #f8fafc;
   border-color: #475569;
 }
@@ -144,8 +145,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 8px;
   width: 100%;
@@ -161,8 +162,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   min-height: 90px;
   width: 100%;
   flex: 1;
-  background: #0f172a;
-  border: 1px solid #1e293b;
+  background: var(--comfy-menu-bg, #282828);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 4px 8px;
   gap: 8px;
@@ -197,8 +198,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   position: relative;
   width: 96px;
   height: 64px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 5px;
   overflow: hidden;
   cursor: pointer;
@@ -289,7 +290,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-add-slot {
   width: 38px;
   height: 64px;
-  border: 1px dashed #334155;
+  border: 1px dashed var(--border-color, #4a4a4a);
   border-radius: 5px;
   background: rgba(30, 41, 59, 0.4);
   color: #64748b;
@@ -316,8 +317,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   gap: 6px;
   min-width: 130px;
   height: 46px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 5px;
   padding: 4px 8px;
   cursor: pointer;
@@ -353,8 +354,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 10px;
   width: 100%;
@@ -376,8 +377,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-textarea {
   width: 100%;
   box-sizing: border-box;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--comfy-menu-bg, #282828);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 5px;
   color: #f8fafc;
   font-family: inherit;
@@ -408,8 +409,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-modal-panel {
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--comfy-menu-bg, #282828);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 10px;
   width: min(720px, 92vw);
   max-height: 85vh;
@@ -424,8 +425,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #1e293b;
-  background: #090d16;
+  border-bottom: 1px solid var(--comfy-input-bg, #333333);
+  background: var(--comfy-input-bg, #222222);
 }
 
 .mmx-modal-title {
@@ -448,8 +449,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   justify-content: flex-end;
   gap: 8px;
   padding: 10px 16px;
-  border-top: 1px solid #1e293b;
-  background: #090d16;
+  border-top: 1px solid var(--comfy-input-bg, #333333);
+  background: var(--comfy-input-bg, #222222);
 }
 
 /* View Navigation Tabs */
@@ -458,13 +459,13 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   align-items: center;
   gap: 6px;
   padding: 4px 0 6px 0;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--comfy-input-bg, #333333);
   margin-bottom: 4px;
 }
 
 .mmx-tab-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   color: #94a3b8;
   font-size: 11px;
   font-weight: 600;
@@ -478,7 +479,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-tab-btn:hover {
-  background: #334155;
+  background: var(--border-color, #4a4a4a);
   color: #f8fafc;
   border-color: #475569;
 }
@@ -506,8 +507,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 10px;
   width: 100%;
@@ -536,8 +537,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--comfy-menu-bg, #282828);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 6px;
   padding: 6px 10px;
 }
@@ -554,7 +555,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 
 .mmx-refmod-input {
   flex: 1;
-  background: #1e293b;
+  background: var(--comfy-input-bg, #333333);
   border: 1px solid #475569;
   border-radius: 4px;
   color: #f8fafc;
@@ -629,7 +630,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-textarea::-webkit-scrollbar-thumb,
 .mmx-multitrack-panel::-webkit-scrollbar-thumb,
 .mmx-structured-grid::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--border-color, #4a4a4a);
   border-radius: 3px;
 }
 
@@ -649,8 +650,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   position: relative;
   width: 100%;
   height: 28px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -674,7 +675,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   background: rgba(15, 23, 42, 0.8);
   padding: 2px 6px;
   border-radius: 3px;
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color, #4a4a4a);
 }
 
 .mmx-ruler-zoom {
@@ -685,8 +686,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-zoom-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   color: #94a3b8;
   width: 20px;
   height: 20px;
@@ -710,7 +711,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   flex-direction: column;
   gap: 3px;
   background: #080c14;
-  border: 1px solid #1e293b;
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -741,7 +742,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   min-width: 130px;
   max-width: 130px;
   background: #0b1120;
-  border-right: 1px solid #1e293b;
+  border-right: 1px solid var(--comfy-input-bg, #333333);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -772,8 +773,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: row;
   align-items: center;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 5px;
   padding: 3px 6px;
   cursor: pointer;
@@ -861,7 +862,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   max-width: 38px;
   position: relative;
   overflow: hidden;
-  background: #1e293b;
+  background: var(--comfy-input-bg, #333333);
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   display: flex;
@@ -885,7 +886,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   max-width: 56px;
   position: relative;
   overflow: hidden;
-  background: #1e293b;
+  background: var(--comfy-input-bg, #333333);
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   display: flex;
@@ -922,8 +923,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   gap: 8px;
   width: 100%;
   min-height: 105px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 8px;
   overflow-x: auto;
@@ -939,8 +940,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   justify-content: space-between;
   min-width: 160px;
   height: 90px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 6px;
   padding: 6px 8px;
   cursor: pointer;
@@ -1021,7 +1022,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   font-weight: 600;
   padding: 1px 4px;
   background: rgba(15, 23, 42, 0.7);
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 3px;
   color: #cbd5e1;
   white-space: nowrap;
@@ -1121,7 +1122,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   gap: 6px;
   min-width: 100px;
   height: 52px;
-  border: 2px dashed #334155;
+  border: 2px dashed var(--border-color, #4a4a4a);
   border-radius: 6px;
   background: rgba(30, 41, 59, 0.2);
   color: #94a3b8;
@@ -1150,7 +1151,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   flex-direction: column;
   gap: 8px;
   background: #0b1120;
-  border: 1px solid #1e293b;
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 10px;
   width: 100%;
@@ -1165,7 +1166,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--comfy-input-bg, #333333);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -1180,7 +1181,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-mode-select {
-  background: #1e293b;
+  background: var(--comfy-input-bg, #333333);
   border: 1px solid #475569;
   border-radius: 4px;
   color: #f8fafc;
@@ -1207,8 +1208,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  background: #0f172a;
-  border: 1px solid #1e293b;
+  background: var(--comfy-menu-bg, #282828);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 5px;
   padding: 8px 10px;
   flex-shrink: 0;
@@ -1235,8 +1236,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 4px;
   padding: 3px 8px;
   font-size: 10px;
@@ -1248,7 +1249,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 
 .mmx-local-ref-item:hover {
   border-color: #6366f1;
-  color: #e2e8f0;
+  color: var(--input-text, #dddddd);
 }
 
 .mmx-local-ref-item.checked {
@@ -1308,8 +1309,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-quick-tag-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   color: #818cf8;
   font-size: 9px;
   font-weight: 700;
@@ -1320,7 +1321,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-quick-tag-btn:hover {
-  background: #334155;
+  background: var(--border-color, #4a4a4a);
   color: #a5b4fc;
   border-color: #6366f1;
 }
@@ -1336,21 +1337,14 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   position: relative;
   width: 100%;
   height: 24px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
 }
 
-.mmx-ruler-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
+
 
 .mmx-playhead-needle {
   position: absolute;
@@ -1443,8 +1437,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   font-size: 11px;
   font-weight: 700;
   color: #38bdf8;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   padding: 2px 6px;
   border-radius: 3px;
   user-select: none;
@@ -1475,8 +1469,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 6px;
   padding: 10px 12px;
   cursor: pointer;
@@ -1518,8 +1512,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: #090d16;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 7px 10px;
   min-width: 0;
@@ -1571,7 +1565,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   font-weight: 600;
   cursor: pointer;
   user-select: none;
-  border: 1px solid #334155;
+  border: 1px solid var(--border-color, #4a4a4a);
   transition: all 0.15s ease;
 }
 
@@ -1583,8 +1577,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-validate-toggle.unvalidated {
-  background: #1e293b;
-  border-color: #334155;
+  background: var(--comfy-input-bg, #333333);
+  border-color: var(--border-color, #4a4a4a);
   color: #94a3b8;
 }
 
@@ -1597,8 +1591,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   display: flex;
   flex-direction: column;
   gap: 3px;
-  background: #060911;
-  border: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border: 1px solid var(--comfy-input-bg, #333333);
   border-radius: 6px;
   padding: 6px 8px;
   overflow-x: auto;
@@ -1631,8 +1625,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   font-size: 10px;
   font-weight: 700;
   color: #94a3b8;
-  background: #090d16;
-  border-right: 1px solid #1e293b;
+  background: var(--comfy-input-bg, #222222);
+  border-right: 1px solid var(--comfy-input-bg, #333333);
   box-shadow: 2px 0 6px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
   white-space: nowrap;
@@ -1660,7 +1654,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-subtrack-block {
   border-radius: 4px;
   background: #0b1120;
-  border: 1px solid #1e293b;
+  border: 1px solid var(--comfy-input-bg, #333333);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -1672,7 +1666,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-subtrack-block:hover {
-  border-color: #334155;
+  border-color: var(--border-color, #4a4a4a);
   background: #0e172a;
 }
 
@@ -1781,8 +1775,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-structured-input {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 4px;
   color: #f8fafc;
   font-size: 11px;
@@ -1797,8 +1791,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 
 .mmx-structured-textarea {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--comfy-input-bg, #333333);
+  border: 1px solid var(--border-color, #4a4a4a);
   border-radius: 4px;
   color: #f8fafc;
   font-size: 11px;
@@ -1812,10 +1806,10 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-prompt-mode-tabs {
   display: inline-flex;
   align-items: center;
-  background: #090d16;
+  background: var(--comfy-input-bg, #222222);
   padding: 2px 4px;
   border-radius: 20px;
-  border: 1px solid #1e293b;
+  border: 1px solid var(--comfy-input-bg, #333333);
   gap: 3px;
 }
 
@@ -1844,6 +1838,49 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
   box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
 }
 
+
+.mmx-director-root [hidden] { display: none !important; }
+.mmx-smart-preview { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.mmx-smart-preview video { width: 100%; flex: 1; min-height: 0; object-fit: contain; background: #000; border-radius: 4px; }
+.mmx-preview-status { flex: 1; font-size: 12px; color: var(--input-text, #dddddd); }
+.mmx-smart-preview label { font-size: 12px; white-space: nowrap; }
+.mmx-preview-empty { flex: 1; display: grid; place-items: center; color: var(--descrip-text, #999); font-size: 14px; }
+/* One continuous node surface; borders identify editable controls and selected shots. */
+.mmx-director-root .mmx-inspector {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border-color, #4a4a4a);
+  border-radius: 0;
+  padding: 10px 0;
+}
+.mmx-director-root .mmx-inspector-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 7px 0;
+}
+.mmx-director-root .mmx-multitrack-panel {
+  border: 0;
+  border-radius: 0;
+  padding: 6px 0;
+}
+.mmx-director-root .mmx-track-header-cell { box-shadow: none; }
+.mmx-director-root .mmx-action-btn { border-radius: 4px; }
+.mmx-time-ruler { position: relative; height: 24px; flex: none; }
+.mmx-time-tick {
+  position: absolute; top: 0; bottom: 0;
+  color: var(--input-text, #dddddd);
+  font: 11px ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.mmx-time-tick::after {
+  content: ''; position: absolute; bottom: 0; left: 0;
+  height: 6px; border-left: 1px solid var(--border-color, #4a4a4a);
+}
+.mmx-time-tick.major::after { height: 10px; }
+.mmx-time-tick span { padding-left: 4px; }
 `;
 
 function injectCSS() {
@@ -2316,6 +2353,7 @@ function mountDirectorUI(node) {
   syncState();
 
   // Create modern timeline root element
+  let smartPreview;
   const root = document.createElement("div");
   root.className = "mmx-director-root";
   node.__mmxLocaleCleanup?.();
@@ -2737,13 +2775,13 @@ function mountDirectorUI(node) {
   const previewModeLabel = document.createElement("span");
   previewModeLabel.style.fontSize = "11px";
   previewModeLabel.style.color = "#94a3b8";
-  previewModeLabel.textContent = "Preview:";
+  previewModeLabel.textContent = "Output:";
   previewModeWrap.appendChild(previewModeLabel);
 
   const previewModeSelect = document.createElement("select");
   previewModeSelect.className = "mmx-mode-select";
-  previewModeSelect.style.background = "#1e293b";
-  previewModeSelect.style.border = "1px solid #334155";
+  previewModeSelect.style.background = "var(--comfy-input-bg, #333333)";
+  previewModeSelect.style.border = "1px solid var(--border-color, #4a4a4a)";
   previewModeSelect.style.borderRadius = "4px";
   previewModeSelect.style.color = "#a5b4fc";
   previewModeSelect.style.fontSize = "11px";
@@ -2836,10 +2874,9 @@ function mountDirectorUI(node) {
   rulerHeader.innerHTML = `<span>⏱️</span><span>Timecode</span>`;
   const rulerLane = document.createElement("div");
   rulerLane.className = "mmx-track-lane-cell mmx-ruler-lane";
-  const rulerCanvas = document.createElement("canvas");
-  rulerCanvas.className = "mmx-ruler-canvas";
-  rulerCanvas.height = 24;
-  rulerLane.appendChild(rulerCanvas);
+  const rulerTicks = document.createElement("div");
+  rulerTicks.className = "mmx-time-ruler";
+  rulerLane.appendChild(rulerTicks);
   rulerRow.appendChild(rulerHeader);
   rulerRow.appendChild(rulerLane);
   multitrackPanel.appendChild(rulerRow);
@@ -2916,47 +2953,37 @@ function mountDirectorUI(node) {
 
   // Draw 24px Time Ruler
   const drawRuler = () => {
-    const ctx = rulerCanvas.getContext("2d");
-    if (!ctx) return;
     const totalClipsWidth = timelineState.clips.reduce((acc, c) => {
       const dur = parseFloat(c.duration) || 5.0;
       return acc + Math.max(160, Math.min(450, Math.round(dur * 32 * zoomLevel))) + 4;
     }, 0);
-    const laneW = rulerLane.clientWidth || 800;
+    // Measure the viewport, not the ruler child, to avoid resize feedback.
+    const laneW = Math.max(1, (multitrackPanel.clientWidth || 930) - 130);
     const w = Math.max(laneW, totalClipsWidth + 100);
-    rulerCanvas.width = w;
-    rulerCanvas.height = 24;
-
-    ctx.fillStyle = "#090d16";
-    ctx.fillRect(0, 0, w, 24);
+    rulerTicks.style.width = `${w}px`;
+    rulerTicks.replaceChildren();
 
     const totalDuration = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
     const effectiveTotal = Math.max(totalDuration, 1.0);
     const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (w / effectiveTotal);
 
-    ctx.font = "9px monospace";
-    ctx.fillStyle = "#94a3b8";
-    ctx.textAlign = "left";
-
-    // Second ticks
     const stepSec = pxPerSec > 80 ? 0.5 : (pxPerSec > 40 ? 1.0 : 2.0);
-    for (let s = 0; s <= effectiveTotal; s += stepSec) {
-      const x = Math.round(s * pxPerSec);
+    const ticks = document.createDocumentFragment();
+    for (let seconds = 0; seconds <= effectiveTotal; seconds += stepSec) {
+      const x = Math.round(seconds * pxPerSec);
       if (x > w) break;
-
-      const isMajor = Math.abs(s - Math.round(s)) < 0.01;
-      const tickH = isMajor ? 12 : 6;
-      ctx.strokeStyle = isMajor ? "#64748b" : "#334155";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, 24 - tickH);
-      ctx.lineTo(x, 24);
-      ctx.stroke();
-
-      if (isMajor) {
-        ctx.fillText(`${Math.round(s)}s`, x + 3, 11);
+      const major = Math.abs(seconds - Math.round(seconds)) < 0.01;
+      const tick = document.createElement("div");
+      tick.className = `mmx-time-tick${major ? " major" : ""}`;
+      tick.style.left = `${x}px`;
+      if (major) {
+        const label = document.createElement("span");
+        label.textContent = `${Math.round(seconds)}s`;
+        tick.appendChild(label);
       }
+      ticks.appendChild(tick);
     }
+    rulerTicks.appendChild(ticks);
 
     // Update playhead needle position (offset by sticky header 124px + lane padding 6px = 130px)
     const playheadX = Math.max(0, Math.min(w, playheadSeconds * pxPerSec));
@@ -2968,15 +2995,17 @@ function mountDirectorUI(node) {
   // Ruler & Playhead scrub interaction (Premiere-style full timeline scrubbing)
   let isScrubbing = false;
   const updateScrubFromClientX = (clientX) => {
-    const rect = rulerLane.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const rect = rulerTicks.getBoundingClientRect();
+    // Convert screen pixels back to node coordinates at any graph/browser zoom.
+    const laneWidth = parseFloat(rulerTicks.style.width) || rect.width;
+    const x = Math.max(0, Math.min(laneWidth, (clientX - rect.left) * laneWidth / (rect.width || 1)));
     const totalDuration = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
     const effectiveTotal = Math.max(totalDuration, 1.0);
     const totalClipsWidth = timelineState.clips.reduce((acc, c) => {
       const dur = parseFloat(c.duration) || 5.0;
       return acc + Math.max(160, Math.min(450, Math.round(dur * 32 * zoomLevel))) + 4;
     }, 0);
-    const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (rect.width / effectiveTotal);
+    const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (laneWidth / effectiveTotal);
     playheadSeconds = Math.max(0, Math.min(totalDuration, x / pxPerSec));
     drawRuler();
   };
@@ -3416,7 +3445,7 @@ function mountDirectorUI(node) {
             `;
           } else {
             cell.innerHTML = `
-              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: #1e293b; padding: 2px; text-align: center;">
+              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--comfy-input-bg, #333333); padding: 2px; text-align: center;">
                 <span style="font-size: 10px;">🖼️</span>
                 <span style="font-size: 8px; font-weight: 600; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%;">${escapeHtml(r.name)}</span>
               </div>
@@ -3610,6 +3639,7 @@ function mountDirectorUI(node) {
 
     // 5. Update Time Ruler
     drawRuler();
+    smartPreview?.contextChanged();
   };
 
   // Render Active Clip Inspector (Directly below timeline track!)
@@ -3634,8 +3664,8 @@ function mountDirectorUI(node) {
     titleWrap.appendChild(shotLabel);
 
     const nameInput = document.createElement("input");
-    nameInput.style.background = "#1e293b";
-    nameInput.style.border = "1px solid #334155";
+    nameInput.style.background = "var(--comfy-input-bg, #333333)";
+    nameInput.style.border = "1px solid var(--border-color, #4a4a4a)";
     nameInput.style.borderRadius = "4px";
     nameInput.style.color = "#f8fafc";
     nameInput.style.fontSize = "11px";
@@ -4171,8 +4201,8 @@ function mountDirectorUI(node) {
     durNum.step = "0.1";
     durNum.value = String(activeClip.duration || 5.0);
     durNum.style.width = "46px";
-    durNum.style.background = "#1e293b";
-    durNum.style.border = "1px solid #334155";
+    durNum.style.background = "var(--comfy-input-bg, #333333)";
+    durNum.style.border = "1px solid var(--border-color, #4a4a4a)";
     durNum.style.borderRadius = "4px";
     durNum.style.color = "#f8fafc";
     durNum.style.fontSize = "11px";
@@ -4258,8 +4288,8 @@ function mountDirectorUI(node) {
     tailSelect.className = "mmx-select mmx-continuity-select";
     tailSelect.style.fontSize = "11px";
     tailSelect.style.padding = "2px 6px";
-    tailSelect.style.background = "#1e293b";
-    tailSelect.style.border = "1px solid #334155";
+    tailSelect.style.background = "var(--comfy-input-bg, #333333)";
+    tailSelect.style.border = "1px solid var(--border-color, #4a4a4a)";
     tailSelect.style.borderRadius = "4px";
     tailSelect.style.color = "#f8fafc";
 
@@ -4288,8 +4318,8 @@ function mountDirectorUI(node) {
     tailNum.step = "1";
     tailNum.value = String(currentFrames);
     tailNum.style.width = "42px";
-    tailNum.style.background = "#1e293b";
-    tailNum.style.border = "1px solid #334155";
+    tailNum.style.background = "var(--comfy-input-bg, #333333)";
+    tailNum.style.border = "1px solid var(--border-color, #4a4a4a)";
     tailNum.style.borderRadius = "4px";
     tailNum.style.color = "#f8fafc";
     tailNum.style.fontSize = "11px";
@@ -4360,8 +4390,8 @@ function mountDirectorUI(node) {
     const seedInput = document.createElement("input");
     seedInput.type = "text";
     seedInput.style.width = "90px";
-    seedInput.style.background = "#1e293b";
-    seedInput.style.border = "1px solid #334155";
+    seedInput.style.background = "var(--comfy-input-bg, #333333)";
+    seedInput.style.border = "1px solid var(--border-color, #4a4a4a)";
     seedInput.style.borderRadius = "4px";
     seedInput.style.color = "#f8fafc";
     seedInput.style.fontSize = "11px";
@@ -4405,8 +4435,8 @@ function mountDirectorUI(node) {
 
     const seedModeSelect = document.createElement("select");
     seedModeSelect.className = "mmx-mode-select";
-    seedModeSelect.style.background = "#1e293b";
-    seedModeSelect.style.border = "1px solid #334155";
+    seedModeSelect.style.background = "var(--comfy-input-bg, #333333)";
+    seedModeSelect.style.border = "1px solid var(--border-color, #4a4a4a)";
     seedModeSelect.style.borderRadius = "4px";
     seedModeSelect.style.color = "#cbd5e1";
     seedModeSelect.style.fontSize = "11px";
@@ -4874,6 +4904,11 @@ N/A`;
     renderTimeline();
   };
 
+  smartPreview = installSmartPreview({root, toolbar: toolbarLeft, timelinePanel: multitrackPanel,
+    inspector, node, api, getTimeline: () => timelineState,
+    getOptions: () => builderState.smart_preview || {},
+    saveOptions: options => { builderState.smart_preview = options; syncState(); }});
+
   // Backend updates only the shot actually completed; clip-by-clip and selection
   // do not advance unrelated shot seeds.
   node.__mmxShotHandler = event => {
@@ -4881,6 +4916,7 @@ N/A`;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
     progressLabel.textContent = `${detail.phase} · ${detail.clip_id} · ${detail.index || ""}/${detail.total || ""}`;
     if (detail.phase === "completed") {
+      smartPreview.completed();
       const shot = timelineState.clips.find(value => value.id === detail.clip_id);
       if (shot) {
         shot.last_seed = detail.seed;
@@ -4894,6 +4930,7 @@ N/A`;
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
+      smartPreview.dispose();
       node.__mmxLocaleCleanup?.();
       api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
       node.__mmxShotHandler = null; node.__mmxShotListener = null;

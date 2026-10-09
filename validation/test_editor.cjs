@@ -18,6 +18,8 @@ w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),rem
   return {ok:true,json:async()=>result};
 }};
 w.eval(fs.readFileSync('web/js/minimax_locale.js','utf8').replace('export function','function'));
+w.HTMLMediaElement.prototype.pause=()=>{};w.HTMLMediaElement.prototype.load=()=>{};
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_director.js','utf8').replace(/^import .*;\r?\n/gm,''));
 const initial = {version:2,project_id:'editor',clips:[{id:'clip_1',type:'T2VA',prompt:'Original user text',duration:5,seed:'18446744073709551615',ref_ids:['uploaded']}],references:[{id:'uploaded',type:'image',filename:'example.png',name:'Subject'}]};
 const timeline = {name:'timeline_data',value:JSON.stringify(initial)};
@@ -55,6 +57,14 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   editorWidget.draw(null,{inputs:Array(18).fill({}),outputs:[]},1200,0,600);
   assert.equal(editorWidget.last_y,370,'Editor starts below all socket rows');
   assert.equal(editorRoot.style.height,editorRoot.style.maxHeight,'Editor stays inside its allocated node area');
+  assert(editorRoot.querySelector('.mmx-time-tick.major span'), 'Ruler labels use browser text');
+  assert(!editorRoot.querySelector('.mmx-ruler-canvas'), 'No stretched bitmap ruler');
+  const rulerLane=editorRoot.querySelector('.mmx-ruler-lane');
+  Object.defineProperty(rulerLane,'clientWidth',{value:800,configurable:true});
+  editorRoot.querySelector('.mmx-time-ruler').getBoundingClientRect=()=>({left:100,width:1240});
+  rulerLane.dispatchEvent(new w.MouseEvent('mousedown',{clientX:100+82*1.55,bubbles:true}));
+  assert.equal(editorRoot.querySelector('.mmx-timecode-display').textContent,'00:00:02:12','Scrubbing accounts for 155% graph zoom');
+  w.dispatchEvent(new w.MouseEvent('mouseup'));
   assert.strictEqual(JSON.parse(timeline.value).clips[0].seed,'18446744073709551615');
   assert.deepStrictEqual(JSON.parse(timeline.value).clips[0].ref_ids,['uploaded']);
   const language=w.document.querySelector('select[title="UI language"]');
