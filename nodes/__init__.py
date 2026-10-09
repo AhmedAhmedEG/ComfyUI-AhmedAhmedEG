@@ -124,4 +124,4 @@ _MENU_GROUPS = {
 }
 for _group, _names in _MENU_GROUPS.items():
     for _name in _names:
-        NODE_CLASS_MAPPINGS[_name].CATEGORY = "MiniMax H3/" + _group
+        NODE_CLASS_MAPPINGS[_name].CATEGORY = "MiniMax H3 Master Director/" + _group

@@ -12,7 +12,7 @@ quality or speed benchmarks. See [REVIEW.md](REVIEW.md) for validation evidence.
 
 There is one public **MiniMax H3 Master Node** name. The package has 30 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
-nodes. Start with the five types in `MiniMax H3/Start here`.
+nodes. Start with the five types in `MiniMax H3 Master Director/Start here`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
 [Open the animated HTML walkthrough](docs/MiniMax-H3-User-Guide.html) to follow
 the connections, try shot controls, bind a sample reference, explore continuity,

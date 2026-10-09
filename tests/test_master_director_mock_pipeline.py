@@ -617,7 +617,7 @@ class TestMockPipeline(CacheIsolatedTestCase):
         self.assertIs(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"], MiniMaxH3MasterDirector)
         self.assertEqual(len(NODE_CLASS_MAPPINGS), 30)
         self.assertEqual(len(set(NODE_CLASS_MAPPINGS.values())), 30)
-        self.assertEqual(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"].CATEGORY,"MiniMax H3/Start here")
+        self.assertEqual(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"].CATEGORY,"MiniMax H3 Master Director/Start here")
 
 
 if __name__ == "__main__":
