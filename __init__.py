@@ -19,7 +19,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 

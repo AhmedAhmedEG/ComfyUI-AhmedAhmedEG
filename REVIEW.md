@@ -1,5 +1,17 @@
 # Consolidation review — 2026-10-09
 
+## Node documentation site
+
+The guide is now a static documentation site with an index, Getting Started,
+and one separate HTML page for each of the 22 public nodes. Node contracts are
+extracted from the actual INPUT_TYPES/RETURN_TYPES declarations in an isolated
+process without loading weights. Dynamic installed-file/sampler lists are
+identified rather than fabricated. Each documented input has an explanation;
+all outputs, wiring examples, behavior and limits are checked against the code.
+The former guide URL forwards to the index and the unused walkthrough template
+is removed. Local link/anchor checks and desktop/mobile navigation checks cover
+the documentation site.
+
 ## 1.0.7 visual polish
 
 Larger controls, theme-aware surfaces, restrained violet selection, aligned
@@ -166,3 +178,7 @@ name, the current workflow, notices, tests and a reproducible release builder.
 Source-reference clones, scratch scripts and stale release ZIPs are development
 artifacts, excluded from Git and the package. The workflow is now tracked; the
 former blanket JSON/workflow ignore rules have been removed.
+
+## Timeline interaction repair (1.0.8)
+
+Shot bodies now drag to reorder the complete shot and its reference lanes, with an insertion marker and graph-zoom-aware motion. The right edge resizes duration. Every shot has Delete, including the last shot; intentionally empty timelines persist and execution reports Add Shot instead of creating a fallback. Move earlier/later buttons preserve keyboard access. Locked source clips stay in place, and affected successors lose approval after ordering changes. Verified in a browser and the editor regression harness; 103 Python tests pass.

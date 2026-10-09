@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.0.7** consolidates the MiniMax/video production features of
+Version **1.0.8** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -22,11 +22,11 @@ There is one public **MiniMax H3 Master Node** name. The package has 22 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
 nodes. The two core nodes are in `ComfyUI-AhmedAhmedEG/Start here`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
-[Open the practical HTML guide](docs/MiniMax-H3-User-Guide.html): follow one
-starter recipe, add a reference, build a second shot, review Latest clip and save
-the result. Inline diagrams explain the connections and preview transfer scope.
-Optional features are grouped by task with searchable instructions for all 22
-tools. The current starter can be downloaded directly from the offline guide.
+[Open the documentation index](docs/index.html), or begin with
+[Getting Started](docs/getting-started.html). Every public node has a separate
+reference page with its behavior, connections, usage steps, exact input/control
+schema, outputs and limitations. The site works locally with no external assets;
+keep the docs folder together. The starter is downloadable from Getting Started.
 Rebuild with `python tools/build_user_guide.py`.
 Saved UI workflows using the former Master Director type migrate on import.
 API prompts should use `MiniMaxH3MasterNode` as their `class_type`.
@@ -52,7 +52,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.0.7 reports 22 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.0.8 reports 22 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.

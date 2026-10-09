@@ -2,6 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { installLocale } from "./minimax_locale.js";
 import { installSmartPreview } from "./minimax_preview.js";
+import { bindShotDrag } from "./minimax_timeline.js";
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -2027,6 +2028,19 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-prompt-inspector { min-height: 160px; }
 .mmx-director-root .mmx-track-lane-cell .mmx-clip-dup-btn { min-height: 22px; padding: 1px 5px; }
 .mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block, .mmx-director-root .mmx-aud-block { height: 34px; }
+
+.mmx-director-root .mmx-shot-block { cursor: grab; touch-action: none; padding-right: 14px; }
+.mmx-director-root .mmx-shot-top-bar { width: 100%; gap: 5px; min-width: 0; }
+.mmx-director-root .mmx-clip-title { display: block; min-width: 0; }
+.mmx-director-root .mmx-clip-duration { white-space: nowrap; }
+.mmx-director-root .mmx-clip-dup-btn { display: none; }
+.mmx-director-root .mmx-clip-del-btn { flex: 0 0 22px; height: 22px; padding: 0; margin-left: auto; font: 18px/1 system-ui; }
+.mmx-director-root .mmx-clip-handle-right { width: 10px; border-left: 1px solid #ffffff18; background: #ffffff08; }
+.mmx-director-root .mmx-dragging { cursor: grabbing; opacity: .75; z-index: 4; box-shadow: 0 4px 14px #0006; pointer-events: none; }
+.mmx-director-root .mmx-drop-before { border-left: 3px solid #b4a5ff; }
+.mmx-director-root .mmx-drop-after { border-right: 3px solid #b4a5ff; }
+.mmx-director-root .mmx-inspector-header { flex-wrap: wrap; }
+.mmx-empty-timeline { color: var(--descrip-text, #aaa); padding: 18px 4px; }
 `;
 
 function injectCSS() {
@@ -2414,7 +2428,7 @@ function mountDirectorUI(node) {
         const parsed = typeof timelineWidget.value === "string" ? JSON.parse(timelineWidget.value) : timelineWidget.value;
         if (parsed && typeof parsed === "object") {
           timelineState = { ...timelineState, ...parsed };
-          if (!Array.isArray(timelineState.clips) || timelineState.clips.length === 0) {
+          if (!Array.isArray(timelineState.clips)) {
             timelineState.clips = [
               {
                 id: "clip_1",
@@ -2830,6 +2844,32 @@ function mountDirectorUI(node) {
     if (!slot) return;
     (timelineState.refmods ||= []).push({ slot, name: "", description: "", strength: 1, enabled: true }); syncState(); drawRefmods();
   }; refmodLibrary.appendChild(addRefmod); drawRefmods();
+
+  let cancelTimelineDrag = null;
+  const invalidateFrom = index => {
+    timelineState.clips.slice(index).forEach(shot => { if (!shot.locked) shot.validated = false; });
+  };
+  const deleteClip = clip => {
+    const index = timelineState.clips.indexOf(clip);
+    if (index < 0 || !confirm(`Delete "${clip.name || "shot"}" from the timeline?`)) return;
+    timelineState.clips.splice(index, 1); invalidateFrom(index);
+    activeClipId = timelineState.clips[Math.min(index, timelineState.clips.length - 1)]?.id || null;
+    syncState(); renderTimeline();
+  };
+  const moveClip = (clip, destination) => {
+    const index = timelineState.clips.indexOf(clip);
+    if (index < 0 || clip.locked) return;
+    // A locked source stays in place; shots cannot cross it.
+    let min = 0, max = timelineState.clips.length - 1;
+    timelineState.clips.forEach((shot, position) => {
+      if (shot.locked) { if (position < index) min = position + 1; else if (position > index) max = Math.min(max, position - 1); }
+    });
+    destination = Math.max(min, Math.min(max, destination));
+    if (destination === index) return;
+    timelineState.clips.splice(index, 1); timelineState.clips.splice(destination, 0, clip);
+    invalidateFrom(Math.min(index, destination)); activeClipId = clip.id;
+    syncState(); renderTimeline();
+  };
 
   // Helper: Deep Clone / Duplicate Clip
   const duplicateClip = (clipToClone) => {
@@ -3441,34 +3481,13 @@ function mountDirectorUI(node) {
         shotTopBar.appendChild(valBadge);
       }
 
-      const dupBtn = document.createElement("button");
-      dupBtn.className = "mmx-clip-dup-btn";
-      dupBtn.innerHTML = "📋";
-      dupBtn.title = `Duplicate ${clip.name}`;
-      dupBtn.onclick = (e) => {
-        e.stopPropagation();
-        duplicateClip(clip);
-      };
-      shotTopBar.appendChild(dupBtn);
-
-      if (timelineState.clips.length > 1) {
-        const delBtn = document.createElement("button");
-        delBtn.className = "mmx-clip-del-btn";
-        delBtn.innerHTML = "🗑️";
-        delBtn.title = `Delete ${clip.name} from timeline`;
-        delBtn.onclick = (e) => {
-          e.stopPropagation();
-          if (confirm(`Delete "${clip.name}" from timeline?`)) {
-            timelineState.clips.splice(idx, 1);
-            if (activeClipId === clip.id) {
-              activeClipId = timelineState.clips[Math.max(0, idx - 1)]?.id || null;
-            }
-            syncState();
-            renderTimeline();
-          }
-        };
-        shotTopBar.appendChild(delBtn);
-      }
+      const delBtn = document.createElement("button");
+      delBtn.className = "mmx-clip-del-btn";
+      delBtn.textContent = "×";
+      delBtn.title = `Delete ${clip.name || "shot"}`;
+      delBtn.setAttribute("aria-label", delBtn.title);
+      delBtn.onclick = e => { e.stopPropagation(); deleteClip(clip); };
+      shotTopBar.appendChild(delBtn);
 
       shotBlock.appendChild(shotTopBar);
 
@@ -3481,11 +3500,6 @@ function mountDirectorUI(node) {
       promptSnippet.style.fontStyle = hasPrompt ? "normal" : "italic";
       shotBlock.appendChild(promptSnippet);
 
-      // Left resize handle
-      const leftHandle = document.createElement("div");
-      leftHandle.className = "mmx-clip-handle mmx-clip-handle-left";
-      shotBlock.appendChild(leftHandle);
-
       // Right resize handle (synchronously resizes all 4 track blocks)
       const rightHandle = document.createElement("div");
       rightHandle.className = "mmx-clip-handle mmx-clip-handle-right";
@@ -3493,16 +3507,19 @@ function mountDirectorUI(node) {
       let startX = 0;
       let startDuration = dur;
 
+      rightHandle.title = "Drag to change duration";
       rightHandle.onmousedown = (e) => {
         e.stopPropagation();
         e.preventDefault();
         startX = e.clientX;
         startDuration = parseFloat(clip.duration) || 5.0;
+        const scale = shotBlock.getBoundingClientRect().width / (shotBlock.offsetWidth || baseWidth) || 1;
 
         const onMouseMove = (moveEvt) => {
           const deltaX = moveEvt.clientX - startX;
-          const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + (deltaX * 0.04) / zoomLevel) * 10) / 10));
+          const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + deltaX / (scale * 32 * zoomLevel)) * 10) / 10));
           clip.duration = newDur;
+          if (newDur !== startDuration) invalidateFrom(idx);
           durTag.textContent = `${newDur.toFixed(1)}s`;
           const newWidth = Math.max(160, Math.min(450, Math.round(newDur * 32 * zoomLevel)));
 
@@ -3732,6 +3749,11 @@ function mountDirectorUI(node) {
         audBlock.appendChild(empty);
       }
 
+      if (!clip.locked) bindShotDrag({block: shotBlock, scrollArea: multitrackPanel,
+        getGroups: () => clipTrackElements.map(row => [row.shotBlock, row.imgBlock, row.vidBlock, row.audBlock]),
+        select: () => selectClip(clip.id), move: destination => moveClip(clip, destination),
+        setCleanup: value => { cancelTimelineDrag = value; }});
+      shotBlock.title += clip.locked ? " · Locked source" : " · Drag body to reorder; drag right edge to resize";
       // Record elements for synchronous actions
       clipTrackElements.push({ clip, shotBlock, imgBlock, vidBlock, audBlock });
 
@@ -3762,7 +3784,11 @@ function mountDirectorUI(node) {
   const renderInspector = () => {
     inspector.innerHTML = "";
     const activeClip = timelineState.clips.find((c) => c.id === activeClipId) || timelineState.clips[0];
-    if (!activeClip) return;
+    if (!activeClip) {
+      const empty = document.createElement("p"); empty.className = "mmx-empty-timeline";
+      empty.textContent = "No shots. Click + Add Shot in the timeline to begin.";
+      inspector.appendChild(empty); return;
+    }
 
     // Header: Shot Name + Mode Dropdown + Duration + Auto-Tail
     const header = document.createElement("div");
@@ -3830,6 +3856,7 @@ function mountDirectorUI(node) {
     headerActions.style.display = "flex";
     headerActions.style.alignItems = "center";
     headerActions.style.gap = "8px";
+    headerActions.style.flexWrap = "wrap";
 
     const selectedLabel = document.createElement("label");
     const selected = document.createElement("input");
@@ -3860,23 +3887,18 @@ function mountDirectorUI(node) {
     headerActions.appendChild(dupShotBtn);
 
     // 3. Dedicated Delete Shot Button in Inspector Header
-    if (timelineState.clips.length > 1) {
-      const delShotBtn = document.createElement("button");
-      delShotBtn.className = "mmx-action-btn danger";
-      delShotBtn.innerHTML = "<span>🗑️</span><span>Delete Shot</span>";
-      delShotBtn.title = `Delete "${activeClip.name}" from the timeline`;
-      delShotBtn.onclick = () => {
-        if (confirm(`Delete "${activeClip.name}" from the timeline?`)) {
-          const idx = timelineState.clips.indexOf(activeClip);
-          if (idx !== -1) {
-            timelineState.clips.splice(idx, 1);
-            activeClipId = timelineState.clips[Math.max(0, idx - 1)]?.id || timelineState.clips[0]?.id || null;
-            syncState();
-            renderTimeline();
-          }
-        }
-      };
-      headerActions.appendChild(delShotBtn);
+    const delShotBtn = document.createElement("button");
+    delShotBtn.className = "mmx-action-btn danger";
+    delShotBtn.textContent = "Delete Shot";
+    delShotBtn.onclick = () => deleteClip(activeClip);
+    headerActions.appendChild(delShotBtn);
+    if (!activeClip.locked) for (const [offset, label] of [[-1, "← Move earlier"], [1, "Move later →"]]) {
+      const button = document.createElement("button"); button.className = "mmx-action-btn";
+      button.textContent = label;
+      const index = timelineState.clips.indexOf(activeClip), adjacent = timelineState.clips[index + offset];
+      button.disabled = !adjacent || !!adjacent.locked;
+      button.onclick = () => moveClip(activeClip, index + offset);
+      headerActions.appendChild(button);
     }
 
     header.appendChild(headerActions);
@@ -5050,6 +5072,7 @@ N/A`;
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
+      cancelTimelineDrag?.();
       smartPreview.dispose();
       node.__mmxLocaleCleanup?.();
       api.removeEventListener("minimax_director/shot", node.__mmxShotListener);

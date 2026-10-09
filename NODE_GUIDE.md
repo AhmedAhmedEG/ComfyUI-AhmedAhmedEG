@@ -1,3 +1,7 @@
+For the full reference, open the [documentation index](docs/index.html).
+[Getting Started](docs/getting-started.html) explains the basic workflow; the
+index links to a dedicated page for each of the 22 public nodes.
+
 # Which nodes should I use?
 
 The package has **22 public node types**, each with a single registered name.

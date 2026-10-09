@@ -220,6 +220,7 @@ class MiniMaxH3MasterDirector:
             timeline = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
             if not isinstance(timeline, dict):
                 raise ValueError("Timeline must be a JSON object.")
+            authored_clips = "clips" in timeline
             timeline = migrate_timeline(timeline)
             if timeline.get("resolution"):
                 try:
@@ -324,6 +325,8 @@ class MiniMaxH3MasterDirector:
             else:
                 clips = [{"id": f"prompt_{i+1}", "type": mode or "T2VA", "duration": duration, "prompt": value} for i, value in enumerate(prompts)]
         if not clips:
+            if authored_clips:
+                raise ValueError("The timeline has no shots. Click + Add Shot before running.")
             # Fallback single clip if timeline has no clips
             default_type = mode if mode else ("REF2VA" if ref_pool else "T2V")
             clips = [{

@@ -344,6 +344,11 @@ class RuntimeContracts(unittest.TestCase):
             self.execute([{ "id": "same", "type": "T2VA"}, {"id": "same", "type": "T2VA"}])
         self.assertEqual(self.sampling_calls, [])
 
+    def test_deleted_last_shot_does_not_generate_a_fallback(self):
+        with self.assertRaisesRegex(ValueError, "no shots.*Add Shot"):
+            self.execute(timeline_data=json.dumps({"clips": []}))
+        self.assertEqual(self.sampling_calls, [])
+
     def test_invalid_sigmas_do_not_reach_sampler(self):
         with self.assertRaisesRegex(ValueError, "SIGMAS"):
             self.execute(sigmas=torch.tensor([0., 1., 0.]))
