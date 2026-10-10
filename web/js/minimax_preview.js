@@ -1,11 +1,11 @@
 // On-demand player. Latest mode never requests a full-sequence media URL.
-export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions}) {
+export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions, standalone = false}) {
   const tabs = document.createElement("div");
   tabs.className = "mmx-pill-group";
   const edit = document.createElement("button"), preview = document.createElement("button");
   edit.className = "mmx-pill-btn active"; edit.textContent = "Shots";
   preview.className = "mmx-pill-btn"; preview.textContent = "Preview";
-  tabs.append(edit, preview); toolbar.prepend(tabs);
+  if (!standalone) { tabs.append(edit, preview); toolbar.prepend(tabs); }
   const panel = document.createElement("section");
   panel.className = "mmx-smart-preview"; panel.hidden = true;
   const header = document.createElement("div"); header.className = "mmx-toolbar";
@@ -37,6 +37,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   };
   const refreshPreview = async () => {
     if (disposed || panel.hidden) return;
+    if (!getTimeline().project_id) {stop();label.textContent = "Connect the Master's project_state output.";return;}
     const token = ++request; controller?.abort(); controller = new AbortController();
     label.textContent = "Checking completed clips…";
     try {
@@ -75,8 +76,14 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   scope.onchange = () => { stop(); persist(); refreshPreview(); };
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };
   refresh.onclick = refreshPreview;
-  if (getOptions().open) show(true);
+  if (standalone || getOptions().open) show(true);
   return {
+    restore() {
+      const options = getOptions();
+      scope.value = options.scope === "full" ? "full" : "latest";
+      autoplay.checked = !!options.autoplay;
+      show(standalone || !!options.open);
+    },
     completed() { preview.textContent = panel.hidden ? "Preview • New clip" : "Preview"; refreshPreview(); },
     refresh: refreshPreview,
     contextChanged() {

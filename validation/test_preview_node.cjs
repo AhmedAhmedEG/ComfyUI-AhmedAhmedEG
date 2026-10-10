@@ -1,0 +1,17 @@
+const fs=require('fs'),assert=require('assert');
+const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
+const dom=new JSDOM('<!doctype html><body></body>',{url:'http://localhost/',runScripts:'outside-only'}),w=dom.window;
+w.HTMLMediaElement.prototype.pause=()=>{};w.HTMLMediaElement.prototype.load=()=>{};
+const listeners=new Map(),requests=[];
+const timeline={project_id:'demo',clips:[{id:'one'}]};
+w.app={registerExtension:e=>w.extension=e,graph:{links:{5:{origin_id:1}},getNodeById:()=>({widgets:[{name:'timeline_data',value:JSON.stringify(timeline)}]})}};
+w.api={apiURL:p=>p,addEventListener:(k,v)=>listeners.set(k,v),removeEventListener:k=>listeners.delete(k),fetchApi:async(p,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({found:false})};}};
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
+w.eval(fs.readFileSync('web/js/minimax_smart_preview_node.js','utf8').replace(/^import .*;\r?\n/gm,''));
+const node={type:'MiniMaxH3SmartPreview',inputs:[{name:'project_state',link:5}],properties:{},size:[640,440],addDOMWidget(name,type,element){w.document.body.append(element);return {};}};
+(async()=>{w.extension.nodeCreated(node);await new Promise(resolve=>setTimeout(resolve,10));
+assert(w.document.querySelector('video'));assert(!w.document.querySelector('.mmx-pill-group'));
+assert.equal(requests[0].scope,'latest');assert.equal(requests[0].timeline.project_id,'demo');
+node.onExecuted({mmx_project:[JSON.stringify(timeline)]});await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(requests.length,2);node.onRemoved();assert.equal(listeners.size,0);dom.window.close();console.log('Separate preview mounts, reads its connected Master, defaults to latest and cleans up.');
+})().catch(error=>{console.error(error);process.exitCode=1;dom.window.close();});

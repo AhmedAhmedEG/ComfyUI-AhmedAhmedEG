@@ -1,8 +1,8 @@
 {
   "id": "b6d8e7c1-60d3-498a-a713-bbcde0a64b02",
   "revision": 0,
-  "last_node_id": 12,
-  "last_link_id": 13,
+  "last_node_id": 21,
+  "last_link_id": 20,
   "nodes": [
     {
       "id": 1,
@@ -24,7 +24,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            5
+            1
           ]
         }
       ],
@@ -39,14 +39,14 @@
         "unet_name": "MiniMax H3/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
         "weight_dtype": "default"
       },
-      "title": "FL2VA \u00b7 Load Diffusion Model"
+      "title": "FL2VA · Load Diffusion Model"
     },
     {
       "id": 2,
       "type": "UNETLoader",
       "pos": [
         0,
-        170
+        220
       ],
       "size": [
         350,
@@ -61,7 +61,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            6
+            3,
+            4
           ]
         }
       ],
@@ -76,14 +77,14 @@
         "unet_name": "MiniMax H3/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
         "weight_dtype": "default"
       },
-      "title": "REF2VA \u00b7 Load Diffusion Model"
+      "title": "REF2VA · Load Diffusion Model"
     },
     {
       "id": 3,
       "type": "CLIPLoader",
       "pos": [
         0,
-        340
+        800
       ],
       "size": [
         350,
@@ -98,7 +99,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            3
+            9
           ]
         }
       ],
@@ -115,14 +116,14 @@
         "type": "minimax",
         "device": "default"
       },
-      "title": "Text encoder \u00b7 Load CLIP"
+      "title": "Text encoder · Load CLIP"
     },
     {
       "id": 7,
       "type": "VAELoader",
       "pos": [
         0,
-        550
+        1050
       ],
       "size": [
         350,
@@ -137,7 +138,7 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            1
+            10
           ]
         }
       ],
@@ -150,14 +151,14 @@
       "widgets_values_named": {
         "vae_name": "MiniMax H3/minimax_h3_video_vae_fp16.safetensors"
       },
-      "title": "Video \u00b7 Load VAE"
+      "title": "Video · Load VAE"
     },
     {
       "id": 8,
       "type": "VAELoader",
       "pos": [
         0,
-        700
+        1230
       ],
       "size": [
         350,
@@ -172,7 +173,7 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            2
+            11
           ]
         }
       ],
@@ -185,18 +186,18 @@
       "widgets_values_named": {
         "vae_name": "MiniMax H3/minimax_h3_audio_vae_fp32.safetensors"
       },
-      "title": "Audio \u00b7 Load VAE"
+      "title": "Audio · Load VAE"
     },
     {
       "id": 4,
       "type": "MiniMaxH3DirectorSettings",
       "pos": [
-        400,
+        1000,
         0
       ],
       "size": [
-        340,
-        440
+        380,
+        430
       ],
       "flags": {},
       "order": 5,
@@ -216,7 +217,7 @@
           "name": "config",
           "type": "MMX_DIRECTOR_CONFIG",
           "links": [
-            4
+            12
           ]
         }
       ],
@@ -232,12 +233,9 @@
         3,
         0,
         "fixed",
-        "All-in-One Generation",
-        "simple",
-        "clip_by_clip",
+        "Next shot",
         "Independent (No Continuity)",
-        "22",
-        "full"
+        "22"
       ],
       "widgets_values_named": {
         "width": 960,
@@ -251,24 +249,21 @@
         "shift_audio": 3,
         "seed": 0,
         "control_after_generate": "fixed",
-        "execution_mode": "All-in-One Generation",
-        "prompt_mode": "simple",
-        "run_mode": "clip_by_clip",
         "continuity_mode": "Independent (No Continuity)",
         "context_length": "22",
-        "preview_mode": "full"
+        "generation_mode": "Next shot"
       }
     },
     {
       "id": 5,
       "type": "MiniMaxH3MasterNode",
       "pos": [
-        790,
+        1500,
         0
       ],
       "size": [
-        1200,
-        1160
+        1280,
+        1200
       ],
       "flags": {},
       "order": 6,
@@ -280,17 +275,17 @@
         {
           "name": "video_vae",
           "type": "VAE",
-          "link": 1
+          "link": 10
         },
         {
           "name": "audio_vae",
           "type": "VAE",
-          "link": 2
+          "link": 11
         },
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 3
+          "link": 9
         },
         {
           "name": "model",
@@ -300,22 +295,22 @@
         {
           "name": "config",
           "type": "MMX_DIRECTOR_CONFIG",
-          "link": 4
+          "link": 12
         },
         {
           "name": "ref_pack",
           "type": "MMX_REF_PACK",
-          "link": null
+          "link": 13
         },
         {
           "name": "fl2va_model",
           "type": "MODEL",
-          "link": 5
+          "link": 2
         },
         {
           "name": "ref2va_model",
           "type": "MODEL",
-          "link": 6
+          "link": 8
         },
         {
           "name": "selflift",
@@ -373,16 +368,16 @@
           "name": "images",
           "type": "IMAGE",
           "links": [
-            7,
-            11
+            15,
+            19
           ]
         },
         {
           "name": "audio",
           "type": "AUDIO",
           "links": [
-            9,
-            12
+            17,
+            20
           ]
         },
         {
@@ -409,7 +404,7 @@
           "name": "fps",
           "type": "FLOAT",
           "links": [
-            8
+            16
           ]
         },
         {
@@ -426,7 +421,7 @@
           "name": "project_state",
           "type": "STRING",
           "links": [
-            13
+            14
           ]
         }
       ],
@@ -437,14 +432,434 @@
       "widgets_values_named": {
         "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
         "builder_state": "{}"
+      },
+      "title": "MiniMax H3 Master Node"
+    },
+    {
+      "id": 11,
+      "type": "H3SLAAttention",
+      "pos": [
+        500,
+        0
+      ],
+      "size": [
+        440,
+        530
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "plaguekind-nodes",
+        "ver": "1.5.0",
+        "Node name for S&R": "H3SLAAttention"
+      },
+      "widgets_values": [
+        0.8,
+        "32",
+        12228,
+        0,
+        true,
+        true,
+        "2",
+        "comfy_kitchen",
+        true,
+        true,
+        "Heavy Enforcement",
+        false,
+        true,
+        "comfy_kitchen"
+      ],
+      "widgets_values_named": {
+        "sparsity_ratio": 0.8,
+        "block_size": "32",
+        "min_seq_len": 12228,
+        "dense_last_steps": 0,
+        "protect_audio": true,
+        "enabled": true,
+        "dense_steps": "2",
+        "dense_backend": "comfy_kitchen",
+        "disable_fp16_accum": true,
+        "stabilize_motion": true,
+        "reference_protection": "Heavy Enforcement",
+        "tail_correction": false,
+        "use_int8_qk": true,
+        "engine": "comfy_kitchen"
+      },
+      "title": "FL2VA · H3 SLA Attention"
+    },
+    {
+      "id": 12,
+      "type": "H3SLAAttention",
+      "pos": [
+        500,
+        600
+      ],
+      "size": [
+        440,
+        530
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "plaguekind-nodes",
+        "ver": "1.5.0",
+        "Node name for S&R": "H3SLAAttention"
+      },
+      "widgets_values": [
+        0.8,
+        "32",
+        12228,
+        0,
+        true,
+        true,
+        "2",
+        "comfy_kitchen",
+        true,
+        true,
+        "Heavy Enforcement",
+        false,
+        true,
+        "comfy_kitchen"
+      ],
+      "widgets_values_named": {
+        "sparsity_ratio": 0.8,
+        "block_size": "32",
+        "min_seq_len": 12228,
+        "dense_last_steps": 0,
+        "protect_audio": true,
+        "enabled": true,
+        "dense_steps": "2",
+        "dense_backend": "comfy_kitchen",
+        "disable_fp16_accum": true,
+        "stabilize_motion": true,
+        "reference_protection": "Heavy Enforcement",
+        "tail_correction": false,
+        "use_int8_qk": true,
+        "engine": "comfy_kitchen"
+      },
+      "title": "REF2VA · H3 SLA Attention"
+    },
+    {
+      "id": 13,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        0,
+        440
+      ],
+      "size": [
+        440,
+        140
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.32.0",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "MiniMax H3/minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
+        1
+      ],
+      "widgets_values_named": {
+        "lora_name": "MiniMax H3/minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
+        "strength_model": 1
+      },
+      "title": "REF2VA · Turbo LoRA"
+    },
+    {
+      "id": 14,
+      "type": "ComfySwitchNode",
+      "pos": [
+        1000,
+        600
+      ],
+      "size": [
+        380,
+        130
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "shape": 7,
+          "type": "MODEL",
+          "link": 4
+        },
+        {
+          "name": "on_true",
+          "shape": 7,
+          "type": "MODEL",
+          "link": 5
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "switch"
+          },
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "MODEL",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "title": "REF2VA · Base / Turbo LoRA",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.33.0",
+        "Node name for S&R": "ComfySwitchNode"
+      },
+      "widgets_values": [
+        false
+      ],
+      "widgets_values_named": {
+        "switch": false
       }
     },
     {
-      "id": 9,
+      "id": 15,
+      "type": "PrimitiveBoolean",
+      "pos": [
+        1000,
+        800
+      ],
+      "size": [
+        380,
+        100
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "title": "Enable REF2VA Turbo LoRA · use 8 steps",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.33.0",
+        "Node name for S&R": "PrimitiveBoolean"
+      },
+      "widgets_values": [
+        false
+      ],
+      "widgets_values_named": {
+        "value": false
+      },
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 16,
+      "type": "MiniMaxH3RefPack",
+      "pos": [
+        0,
+        1450
+      ],
+      "size": [
+        440,
+        520
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "ref_pack_optional",
+          "type": "MMX_REF_PACK",
+          "link": null
+        },
+        {
+          "name": "image_1",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image_2",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image_3",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image_4",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "video_1",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "video_2",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "audio_1",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "audio_2",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "ref_pack",
+          "type": "MMX_REF_PACK",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3RefPack"
+      },
+      "widgets_values": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None",
+        "None"
+      ],
+      "widgets_values_named": {
+        "image_1_name": "",
+        "image_2_name": "",
+        "image_3_name": "",
+        "image_4_name": "",
+        "video_1_name": "",
+        "video_2_name": "",
+        "audio_1_name": "",
+        "audio_2_name": "",
+        "refmod_1_name": "",
+        "refmod_2_name": "",
+        "refmod_1": "None",
+        "refmod_2": "None"
+      }
+    },
+    {
+      "id": 17,
+      "type": "MiniMaxH3SmartPreview",
+      "pos": [
+        2850,
+        0
+      ],
+      "size": [
+        800,
+        600
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "project_state",
+          "type": "STRING",
+          "link": 14
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SmartPreview",
+        "mmx_preview": {
+          "scope": "latest",
+          "autoplay": true
+        }
+      },
+      "widgets_values": [],
+      "widgets_values_named": {},
+      "title": "Smart Preview · Latest clip / Full video"
+    },
+    {
+      "id": 18,
       "type": "CreateVideo",
       "pos": [
-        2050,
-        0
+        2850,
+        750
       ],
       "size": [
         340,
@@ -457,12 +872,12 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 7
+          "link": 15
         },
         {
           "name": "fps",
           "type": "FLOAT",
-          "link": 8,
+          "link": 16,
           "widget": {
             "name": "fps"
           }
@@ -470,7 +885,7 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 9,
+          "link": 17,
           "shape": 7
         }
       ],
@@ -479,7 +894,7 @@
           "name": "VIDEO",
           "type": "VIDEO",
           "links": [
-            10
+            18
           ]
         }
       ],
@@ -498,11 +913,11 @@
       }
     },
     {
-      "id": 10,
+      "id": 19,
       "type": "SaveVideo",
       "pos": [
-        2050,
-        250
+        2850,
+        1350
       ],
       "size": [
         340,
@@ -515,7 +930,7 @@
         {
           "name": "video",
           "type": "VIDEO",
-          "link": 10
+          "link": 18
         }
       ],
       "outputs": [
@@ -540,11 +955,11 @@
       }
     },
     {
-      "id": 11,
+      "id": 20,
       "type": "MiniMaxH3VideoCombine",
       "pos": [
-        2050,
-        1100
+        3300,
+        1950
       ],
       "size": [
         350,
@@ -560,12 +975,12 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 11
+          "link": 19
         },
         {
           "name": "audio",
           "type": "AUDIO",
-          "link": 12
+          "link": 20
         },
         {
           "name": "seed",
@@ -625,11 +1040,11 @@
       }
     },
     {
-      "id": 12,
+      "id": 21,
       "type": "MiniMaxH3ProjectVideo",
       "pos": [
-        2450,
-        1100
+        3300,
+        2700
       ],
       "size": [
         350,
@@ -645,7 +1060,7 @@
         {
           "name": "timeline",
           "type": "STRING",
-          "link": 13
+          "link": null
         }
       ],
       "outputs": [
@@ -682,22 +1097,70 @@
   "links": [
     [
       1,
-      7,
+      1,
       0,
-      5,
+      11,
       0,
-      "VAE"
+      "MODEL"
     ],
     [
       2,
-      8,
+      11,
       0,
       5,
-      1,
-      "VAE"
+      6,
+      "MODEL"
     ],
     [
       3,
+      2,
+      0,
+      13,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      2,
+      0,
+      14,
+      0,
+      "MODEL"
+    ],
+    [
+      5,
+      13,
+      0,
+      14,
+      1,
+      "MODEL"
+    ],
+    [
+      6,
+      15,
+      0,
+      14,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      7,
+      14,
+      0,
+      12,
+      0,
+      "MODEL"
+    ],
+    [
+      8,
+      12,
+      0,
+      5,
+      7,
+      "MODEL"
+    ],
+    [
+      9,
       3,
       0,
       5,
@@ -705,7 +1168,23 @@
       "CLIP"
     ],
     [
-      4,
+      10,
+      7,
+      0,
+      5,
+      0,
+      "VAE"
+    ],
+    [
+      11,
+      8,
+      0,
+      5,
+      1,
+      "VAE"
+    ],
+    [
+      12,
       4,
       0,
       5,
@@ -713,152 +1192,88 @@
       "MMX_DIRECTOR_CONFIG"
     ],
     [
-      5,
-      1,
+      13,
+      16,
       0,
       5,
-      6,
-      "MODEL"
+      5,
+      "MMX_REF_PACK"
     ],
     [
-      6,
-      2,
-      0,
+      14,
       5,
-      7,
-      "MODEL"
-    ],
-    [
-      7,
-      5,
-      0,
       9,
+      17,
+      0,
+      "STRING"
+    ],
+    [
+      15,
+      5,
+      0,
+      18,
       0,
       "IMAGE"
     ],
     [
-      8,
+      16,
       5,
       6,
-      9,
+      18,
       1,
       "FLOAT"
     ],
     [
-      9,
+      17,
       5,
       1,
-      9,
+      18,
       2,
       "AUDIO"
     ],
     [
-      10,
-      9,
+      18,
+      18,
       0,
-      10,
+      19,
       0,
       "VIDEO"
     ],
     [
-      11,
+      19,
       5,
       0,
-      11,
+      20,
       0,
       "IMAGE"
     ],
     [
-      12,
+      20,
       5,
       1,
-      11,
+      20,
       1,
       "AUDIO"
-    ],
-    [
-      13,
-      5,
-      9,
-      12,
-      0,
-      "STRING"
     ]
   ],
-  "groups": [
-    {
-      "id": 1,
-      "title": "1. Stock model and encoder loaders",
-      "bounding": [
-        -20,
-        -65,
-        390,
-        910
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    },
-    {
-      "id": 2,
-      "title": "2. Director settings",
-      "bounding": [
-        380,
-        -65,
-        380,
-        560
-      ],
-      "color": "#53674d",
-      "flags": {}
-    },
-    {
-      "id": 3,
-      "title": "3. Timeline \u00b7 choose a shot mode",
-      "bounding": [
-        770,
-        -65,
-        1240,
-        1280
-      ],
-      "color": "#675443",
-      "flags": {}
-    },
-    {
-      "id": 4,
-      "title": "4. Stock video output",
-      "bounding": [
-        2030,
-        -65,
-        380,
-        900
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    },
-    {
-      "id": 5,
-      "title": "Optional advanced exports \u00b7 muted",
-      "bounding": [
-        2030,
-        1035,
-        790,
-        735
-      ],
-      "color": "#53674d",
-      "flags": {}
-    }
-  ],
+  "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.45,
+      "scale": 0.3,
       "offset": [
         70,
         150
       ]
     },
     "minimax_h3": {
-      "version": "1.0.7",
-      "requires_restart_after_update": true
+      "version": "1.1.0",
+      "requires_restart_after_update": true,
+      "preview": "Separate Smart Preview node",
+      "export_workflow": "MiniMax H3 Consolidated.json",
+      "dependencies": [
+        "plaguekind-nodes (H3SLAAttention)"
+      ]
     }
   },
   "version": 0.4

@@ -43,12 +43,9 @@ class MiniMaxH3DirectorSettings:
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "Base random seed."}),
 
                 # Pipeline & Continuity Settings
-                "execution_mode": (["All-in-One Generation", "Conditioning Guide Output"], {"default": "All-in-One Generation", "tooltip": "Choose between full in-node generation or emitting positive/latent for custom graphs."}),
-                "prompt_mode": (["structured", "simple"], {"default": "structured", "tooltip": "Structured prompts assemble IMD, soundscape, and music sections."}),
-                "run_mode": (["clip_by_clip", "full_batch"], {"default": "clip_by_clip", "tooltip": "Generate sequential shots individually or in one batch."}),
+                "generation_mode": (["Next shot", "All shots", "Conditioning only"], {"default": "Next shot", "tooltip": "Next shot generates one new shot; All shots processes the timeline; Conditioning only is for advanced external samplers."}),
                 "continuity_mode": (["Motion Context (Chained)", "Latent Carry (Pinned)", "Independent (No Continuity)", "FL2VA Tail Handoff"], {"default": "Motion Context (Chained)", "tooltip": "How adjacent shots link motion and style continuity."}),
-                "context_length": (["22", "5", "39", "56"], {"default": "22", "tooltip": "Number of latent frames passed across shot seams."}),
-                "preview_mode": (["full", "unvalidated_only"], {"default": "full", "tooltip": "Preview output: 'full' for complete sequence, 'unvalidated_only' for new/unvalidated clips only."}),
+                "context_length": (["22", "5", "39", "56"], {"default": "22", "tooltip": "Number of video frames passed across shot seams."}),
             },
             "optional": {
                 "settings_optional": (MMX_DIRECTOR_CONFIG, {"tooltip": "Optional previous configuration to chain or override."}),
@@ -73,6 +70,7 @@ class MiniMaxH3DirectorSettings:
         shift_video: float = 12.0,
         shift_audio: float = 3.0,
         seed: int = 0,
+        generation_mode: str = None,
         execution_mode: str = "All-in-One Generation",
         prompt_mode: str = "structured",
         run_mode: str = "clip_by_clip",
@@ -82,6 +80,12 @@ class MiniMaxH3DirectorSettings:
         settings_optional: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Tuple[Dict[str, Any]]:
+        if generation_mode is not None:
+            if generation_mode not in ("Next shot", "All shots", "Conditioning only"):
+                raise ValueError("Unknown generation mode.")
+            execution_mode = "Conditioning Guide Output" if generation_mode == "Conditioning only" else "All-in-One Generation"
+            run_mode = "full_batch" if generation_mode == "All shots" else "clip_by_clip"
+            prompt_mode = "simple"
         cfg_dict = {
             "width": int(width),
             "height": int(height),

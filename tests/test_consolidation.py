@@ -12,6 +12,19 @@ torch = setup_mock_torch_if_needed()
 
 
 class Consolidation(unittest.TestCase):
+    def test_starter_uses_separate_preview_and_attention_switching(self):
+        from nodes import NODE_CLASS_MAPPINGS
+        workflow=json.loads((Path(__file__).resolve().parents[1]/'workflows/MiniMax H3 Start Here.json').read_text(encoding='utf-8'))
+        master=next(n for n in workflow['nodes'] if n['type']=='MiniMaxH3MasterNode')
+        player=next(n for n in workflow['nodes'] if n['type']=='MiniMaxH3SmartPreview')
+        self.assertFalse(NODE_CLASS_MAPPINGS[master['type']].OUTPUT_NODE)
+        self.assertTrue(NODE_CLASS_MAPPINGS[player['type']].OUTPUT_NODE)
+        self.assertTrue(any(link[1]==master['id'] and link[2]==9 and link[3]==player['id'] for link in workflow['links']))
+        self.assertEqual(sum(n['type']=='H3SLAAttention' for n in workflow['nodes']),2)
+        self.assertTrue(any(n['type']=='ComfySwitchNode' for n in workflow['nodes']))
+        self.assertTrue(any(n['type']=='MiniMaxH3RefPack' for n in workflow['nodes']))
+        self.assertFalse(any(n['type']=='SaveVideo' for n in workflow['nodes']))
+
     def test_stock_loader_graph_preserves_cache_identity_across_reload(self):
         from core.provenance import record_graph_provenance
         from core.cache_manager import fingerprint_value

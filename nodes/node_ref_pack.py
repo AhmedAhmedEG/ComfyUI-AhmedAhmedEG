@@ -26,6 +26,16 @@ class MiniMaxH3RefPack:
             "optional": {
                 "ref_pack_optional": (MMX_REF_PACK, {"tooltip": "Optional previous RefPack to daisy-chain for unlimited references."}),
 
+                "image_1_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_1. Does not change reference tokens or IDs."}),
+                "image_2_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_2. Does not change reference tokens or IDs."}),
+                "image_3_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_3. Does not change reference tokens or IDs."}),
+                "image_4_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_4. Does not change reference tokens or IDs."}),
+                "video_1_name": ("STRING", {"default": "", "tooltip": "Optional display name for video_1. Does not change reference tokens or IDs."}),
+                "video_2_name": ("STRING", {"default": "", "tooltip": "Optional display name for video_2. Does not change reference tokens or IDs."}),
+                "audio_1_name": ("STRING", {"default": "", "tooltip": "Optional display name for audio_1. Does not change reference tokens or IDs."}),
+                "audio_2_name": ("STRING", {"default": "", "tooltip": "Optional display name for audio_2. Does not change reference tokens or IDs."}),
+                "refmod_1_name": ("STRING", {"default": "", "tooltip": "Optional display name for refmod_1. Does not change reference tokens or IDs."}),
+                "refmod_2_name": ("STRING", {"default": "", "tooltip": "Optional display name for refmod_2. Does not change reference tokens or IDs."}),
                 # Image references
                 "image_1": ("IMAGE", {"tooltip": "Reference image 1 (e.g. character, style, face, start frame)."}),
                 "image_2": ("IMAGE", {"tooltip": "Reference image 2."}),
@@ -96,7 +106,7 @@ class MiniMaxH3RefPack:
                     "alt_id": f"{id_prefix}{alt_id}",
                     "ref_id": f"ref_{slot_name}_{base_index}",
                     "pack_index": pack_index,
-                    "name": assigned_id,
+                    "name": str(kwargs.get(f"{slot_name}_name", "")).strip() or assigned_id,
                     "type": "image",
                     "data": img,
                 })
@@ -116,7 +126,7 @@ class MiniMaxH3RefPack:
                     "alt_id": f"{id_prefix}{alt_id}",
                     "ref_id": f"ref_{slot_name}_{base_index}",
                     "pack_index": pack_index,
-                    "name": assigned_id,
+                    "name": str(kwargs.get(f"{slot_name}_name", "")).strip() or assigned_id,
                     "type": "video",
                     "data": vid,
                 })
@@ -136,7 +146,7 @@ class MiniMaxH3RefPack:
                     "alt_id": f"{id_prefix}{alt_id}",
                     "ref_id": f"ref_{slot_name}_{base_index}",
                     "pack_index": pack_index,
-                    "name": assigned_id,
+                    "name": str(kwargs.get(f"{slot_name}_name", "")).strip() or assigned_id,
                     "type": "audio",
                     "data": aud,
                 })
@@ -156,7 +166,7 @@ class MiniMaxH3RefPack:
                     "alt_id": f"{id_prefix}{alt_id}",
                     "ref_id": f"ref_{slot_name}_{base_index}",
                     "pack_index": pack_index,
-                    "name": assigned_id,
+                    "name": str(kwargs.get(f"{slot_name}_name", "")).strip() or assigned_id,
                     "type": "refmod",
                     "data": str(mod).strip(),
                 })

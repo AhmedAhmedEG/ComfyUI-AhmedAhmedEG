@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..'),docs=path.join(root,'docs');
 const data=JSON.parse(fs.readFileSync(path.join(docs,'guide_content.json'),'utf8'));
 const manifest=JSON.parse(fs.readFileSync(path.join(docs,'generated_pages.json'),'utf8'));
 const nodes=manifest.filter(p=>p.startsWith('nodes/'));
-assert.equal(nodes.length,22);assert.equal(Object.keys(data.nodes).length,22);
+assert.equal(nodes.length,23);assert.equal(Object.keys(data.nodes).length,23);
 const errors=[];
 for(const relative of manifest){
  const absolute=path.join(docs,relative),vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e));
@@ -29,7 +29,7 @@ for(const relative of manifest){
   assert(d.querySelector('table tbody tr'));
  }
  if(relative==='index.html'){
-  assert.equal(d.querySelectorAll('.node-card').length,22);
+  assert.equal(d.querySelectorAll('.node-card').length,23);
   dom.window.eval(fs.readFileSync(path.join(docs,'assets/documentation.js'),'utf8'));
   const search=d.getElementById('nav-search');search.value='FaceRefine';search.dispatchEvent(new dom.window.Event('input'));
   assert.equal([...d.querySelectorAll('.nav-group a')].filter(a=>!a.hidden).length,1);
@@ -47,4 +47,4 @@ for(const relative of manifest){
  dom.window.close();
 }
 assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
-console.log('Documentation passed: index, Getting Started, 22 node pages, local links/anchors/assets, search, menu and current workflow download.');
+console.log('Documentation passed: index, Getting Started, 23 node pages, local links/anchors/assets, search, menu and current workflow download.');

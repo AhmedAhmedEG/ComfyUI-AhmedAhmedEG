@@ -609,8 +609,8 @@ class TestMockPipeline(CacheIsolatedTestCase):
         self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3MasterNode"], "MiniMax H3 Master Node")
         self.assertNotIn("MiniMaxH3MasterDirector", NODE_CLASS_MAPPINGS)
         self.assertIs(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"], MiniMaxH3MasterDirector)
-        self.assertEqual(len(NODE_CLASS_MAPPINGS), 22)
-        self.assertEqual(len(set(NODE_CLASS_MAPPINGS.values())), 22)
+        self.assertEqual(len(NODE_CLASS_MAPPINGS), 23)
+        self.assertEqual(len(set(NODE_CLASS_MAPPINGS.values())), 23)
         self.assertEqual(NODE_CLASS_MAPPINGS["MiniMaxH3MasterNode"].CATEGORY,"ComfyUI-AhmedAhmedEG/Start here")
 
 

@@ -1,7 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { installLocale } from "./minimax_locale.js";
-import { installSmartPreview } from "./minimax_preview.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 
 function escapeHtml(value) {
@@ -2041,6 +2040,21 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-drop-after { border-right: 3px solid #b4a5ff; }
 .mmx-director-root .mmx-inspector-header { flex-wrap: wrap; }
 .mmx-empty-timeline { color: var(--descrip-text, #aaa); padding: 18px 4px; }
+
+.mmx-director-root .mmx-track-row { border-bottom: 1px solid var(--border-color,#444); gap: 0; }
+.mmx-director-root .mmx-track-header-cell { background: #26282b; font-size: 11px; color: #c2c5ca; }
+.mmx-director-root .mmx-subtrack-block { border-radius: 2px; }
+.mmx-director-root .mmx-shot-block { background: #34384a; border-color: #687094; }
+.mmx-director-root .mmx-subtrack-block.active { background: #3b4055; box-shadow: none; border-color: #a6b1df; }
+.mmx-director-root .mmx-clip-img-cell { width: 64px; min-width: 64px; max-width: 64px; height: 44px; flex-basis:64px; }
+.mmx-director-root .mmx-clip-img-cell img { width:100%;height:100%;object-fit:contain; background:#151515; }
+.mmx-director-root .mmx-img-block { height:52px; }
+.mmx-director-root .mmx-clip-img-cell .mmx-ref-type-label { display:none; }
+
+.mmx-reference-dialog { padding:16px;background:#24262b;color:#eee;border:1px solid #61697b;border-radius:8px;max-width:85vw; }
+.mmx-reference-dialog::backdrop { background:#0009; }
+.mmx-reference-dialog img { max-width:80vw;max-height:75vh;display:block;object-fit:contain; }
+.mmx-director-root .mmx-track-row[hidden] { display:none; }
 `;
 
 function injectCSS() {
@@ -2052,6 +2066,7 @@ function injectCSS() {
 }
 
 function mountDirectorUI(node) {
+  node.__mmxDisposed = false;
   console.log("[DirectorUI] Attempting to mount:", node.id, node.type);
   if (!node || node.__mmxDirectorMounted) return;
   node.__mmxDirectorMounted = true;
@@ -2176,7 +2191,7 @@ function mountDirectorUI(node) {
         const customRefs = (timelineState.available_refs || []).filter(
           (r) => !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
         );
-        timelineState.available_refs = customRefs;
+        timelineState.available_refs = [];
         const validIds = new Set([...customRefs, ...(timelineState.references || [])].flatMap(r => [r.id, r.alt_id].filter(Boolean)));
         (timelineState.clips || []).forEach((c) => {
           if (Array.isArray(c.ref_ids)) {
@@ -2201,7 +2216,7 @@ function mountDirectorUI(node) {
         const customRefs = (timelineState.available_refs || []).filter(
           (r) => !r.id.startsWith("img_") && !r.id.startsWith("vid_") && !r.id.startsWith("aud_") && !r.id.startsWith("mod_") && !r.id.match(/^p\d+_/)
         );
-        timelineState.available_refs = customRefs;
+        timelineState.available_refs = [];
         const validIds = new Set([...customRefs, ...(timelineState.references || [])].flatMap(r => [r.id, r.alt_id].filter(Boolean)));
         (timelineState.clips || []).forEach((c) => {
           if (Array.isArray(c.ref_ids)) {
@@ -2243,39 +2258,26 @@ function mountDirectorUI(node) {
 
       const mediaRegex = /\.(png|jpe?g|webp|bmp|gif|mp4|webm|mov|mkv|avi|wav|mp3|ogg|flac|m4a)$/i;
 
-      // Helper to attach real-time reactivity hooks to upstream nodes and widgets
-      const hookNodeChange = (targetNode) => {
-        if (!targetNode) return;
-        if (targetNode.widgets) {
-          targetNode.widgets.forEach((w) => {
-            if (!w.__mmxSyncHooked) {
-              w.__mmxSyncHooked = true;
-              const origCb = w.callback;
-              w.callback = function () {
-                if (origCb) origCb.apply(this, arguments);
-                setTimeout(() => {
-                  resolveAvailableRefsFromGraph();
-                  syncState();
-                  renderTimeline();
-                  if (activeClipId) renderInspector();
-                }, 50);
-              };
-            }
-          });
-        }
-        if (!targetNode.__mmxConnHooked) {
-          targetNode.__mmxConnHooked = true;
-          const origConn = targetNode.onConnectionsChange;
-          targetNode.onConnectionsChange = function () {
-            if (origConn) origConn.apply(this, arguments);
-            setTimeout(() => {
-              resolveAvailableRefsFromGraph();
-              syncState();
-              renderTimeline();
-              if (activeClipId) renderInspector();
-            }, 50);
+      // Shared observers let several Masters use one pool without stale callbacks.
+      const updateRefs = node.__mmxRefObserver ||= () => setTimeout(() => {
+        if (node.__mmxDisposed) return;
+        resolveAvailableRefsFromGraph(); syncState(); renderTimeline();
+      }, 30);
+      const subscribe = (target, method, key) => {
+        if (!target[key]) {
+          const observers = target[key] = new Set(), original = target[method];
+          target[method] = function (...args) {
+            const result = original?.apply(this, args);
+            for (const observer of observers) observer();
+            return result;
           };
         }
+        target[key].add(updateRefs);
+        (node.__mmxRefObserverSets ||= new Set()).add(target[key]);
+      };
+      const hookNodeChange = target => {
+        for (const widget of target?.widgets || []) subscribe(widget,"callback","__mmxRefObservers");
+        if (target) subscribe(target,"onConnectionsChange","__mmxRefConnectionObservers");
       };
 
       const discoveredRefs = [];
@@ -2364,46 +2366,27 @@ function mountDirectorUI(node) {
           return { url: null, filename: null };
         };
 
-        // Images 1-4
-        const img1 = getConnectedAsset("image_1");
-        const img2 = getConnectedAsset("image_2");
-        const img3 = getConnectedAsset("image_3");
-        const img4 = getConnectedAsset("image_4");
-        discoveredRefs.push({ id: `${idPrefix}image_1`, alt_id: `${idPrefix}img_1`, name: `${prefix}image_1`, type: "image", url: img1.url, filename: img1.filename });
-        discoveredRefs.push({ id: `${idPrefix}image_2`, alt_id: `${idPrefix}img_2`, name: `${prefix}image_2`, type: "image", url: img2.url, filename: img2.filename });
-        discoveredRefs.push({ id: `${idPrefix}image_3`, alt_id: `${idPrefix}img_3`, name: `${prefix}image_3`, type: "image", url: img3.url, filename: img3.filename });
-        discoveredRefs.push({ id: `${idPrefix}image_4`, alt_id: `${idPrefix}img_4`, name: `${prefix}image_4`, type: "image", url: img4.url, filename: img4.filename });
-
-        // Videos 1-2
-        const vid1 = getConnectedAsset("video_1");
-        const vid2 = getConnectedAsset("video_2");
-        discoveredRefs.push({ id: `${idPrefix}video_1`, alt_id: `${idPrefix}vid_1`, name: `${prefix}video_1`, type: "video", url: vid1.url, filename: vid1.filename });
-        discoveredRefs.push({ id: `${idPrefix}video_2`, alt_id: `${idPrefix}vid_2`, name: `${prefix}video_2`, type: "video", url: vid2.url, filename: vid2.filename });
-
-        // Audios 1-2
-        const aud1 = getConnectedAsset("audio_1");
-        const aud2 = getConnectedAsset("audio_2");
-        discoveredRefs.push({ id: `${idPrefix}audio_1`, alt_id: `${idPrefix}aud_1`, name: `${prefix}audio_1`, type: "audio", url: aud1.url, filename: aud1.filename });
-        discoveredRefs.push({ id: `${idPrefix}audio_2`, alt_id: `${idPrefix}aud_2`, name: `${prefix}audio_2`, type: "audio", url: aud2.url, filename: aud2.filename });
-
-        // RefMods 1-2 (from RefPack)
-        const mod1 = getVal("refmod_1", "None");
-        const mod2 = getVal("refmod_2", "None");
-        discoveredRefs.push({ id: `${idPrefix}refmod_1`, alt_id: `${idPrefix}mod_1`, name: `${prefix}refmod_1`, type: "refmod", model: mod1 });
-        discoveredRefs.push({ id: `${idPrefix}refmod_2`, alt_id: `${idPrefix}mod_2`, name: `${prefix}refmod_2`, type: "refmod", model: mod2 });
+        for (const [slot, type, short] of [["image_1","image","img_1"],["image_2","image","img_2"],["image_3","image","img_3"],["image_4","image","img_4"],["video_1","video","vid_1"],["video_2","video","vid_2"],["audio_1","audio","aud_1"],["audio_2","audio","aud_2"]]) {
+          const input = rpNode.inputs?.find(row => row.name === slot);
+          if (input?.link == null || !app.graph.links[input.link]) continue;
+          const asset = getConnectedAsset(slot);
+          discoveredRefs.push({id: `${idPrefix}${slot}`, alt_id: `${idPrefix}${short}`, name: `${prefix}${getVal(slot+"_name",slot)}`, type, ...asset});
+        }
+        for (const [slot, short] of [["refmod_1","mod_1"],["refmod_2","mod_2"]]) {
+          const model = getVal(slot,"None");
+          if (!model || model.toLowerCase() === "none") continue;
+          discoveredRefs.push({id: `${idPrefix}${slot}`, alt_id: `${idPrefix}${short}`, name: `${prefix}${getVal(slot+"_name",slot)}`, type:"refmod", model});
+        }
       });
 
-      // Preserve any custom user-added tags (e.g. added via + Add Ref Tag)
-      const customRefs = (timelineState.available_refs || []).filter(
-        (r) => !discoveredRefs.some((d) => d.id === r.id || d.alt_id === r.id) && !r.id.startsWith("img_") && !r.id.startsWith("image_") && !r.id.startsWith("vid_") && !r.id.startsWith("video_") && !r.id.startsWith("aud_") && !r.id.startsWith("audio_") && !r.id.startsWith("mod_") && !r.id.startsWith("refmod_") && !r.id.match(/^p\d+_/)
-      );
-      timelineState.available_refs = [...discoveredRefs, ...customRefs];
+      const customRefs = [];
+      timelineState.available_refs = discoveredRefs;
 
       // Clean up any clip ref_ids that are no longer available in the graph, migrating any legacy alt_ids
       const validIds = new Set();
       discoveredRefs.forEach((d) => { validIds.add(d.id); if (d.alt_id) validIds.add(d.alt_id); });
-      customRefs.forEach((c) => validIds.add(c.id));
-      (timelineState.references || []).forEach(r => { validIds.add(r.id); if (r.alt_id) validIds.add(r.alt_id); });
+
+
 
       (timelineState.clips || []).forEach((c) => {
         if (Array.isArray(c.ref_ids)) {
@@ -2417,8 +2400,6 @@ function mountDirectorUI(node) {
       console.warn("Could not resolve RefPack references from graph:", e);
     }
 
-    renderTimeline();
-    if (activeClipId) renderInspector();
   };
 
   const loadState = () => {
@@ -2480,6 +2461,7 @@ function mountDirectorUI(node) {
       }
     } catch (e) {}
 
+    resolveAvailableRefsFromGraph();
     if (!activeClipId || !timelineState.clips.find((c) => c.id === activeClipId)) {
       activeClipId = timelineState.clips[0]?.id || "clip_1";
     }
@@ -2499,10 +2481,7 @@ function mountDirectorUI(node) {
     const parts = String(filename).replaceAll("\\", "/").split("/");
     return api.apiURL(`/view?${new URLSearchParams({ filename: parts.pop(), subfolder: parts.join("/"), type: "input" })}`);
   };
-  const refreshFileRefs = () => {
-    const files = (timelineState.references || []).map(row => ({ ...row, url: mediaUrl(row.filename) }));
-    timelineState.available_refs = [...new Map([...(timelineState.available_refs || []), ...files].map(row => [row.id, row])).values()];
-  };
+  const refreshFileRefs = () => {}; // Media is supplied by connected Reference Packs.
   const requestJson = async (url, body) => {
     const response = await api.fetchApi(url, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json();
@@ -2513,7 +2492,6 @@ function mountDirectorUI(node) {
   syncState();
 
   // Create modern timeline root element
-  let smartPreview;
   const root = document.createElement("div");
   root.className = "mmx-director-root";
   node.__mmxLocaleCleanup?.();
@@ -2718,24 +2696,6 @@ function mountDirectorUI(node) {
   fade.onchange = () => { timelineState.audio_fade_ms = Math.max(0,Math.min(1000,Number(fade.value)||0)); syncState(); }; fadeLabel.appendChild(fade); projectTools.appendChild(fadeLabel);
   const gainLabel = document.createElement("label"); const gain = document.createElement("input"); gain.type = "checkbox"; gain.checked = timelineState.audio_gain_match ?? true;
   gain.onchange = () => { timelineState.audio_gain_match = gain.checked; syncState(); }; gainLabel.append(gain,document.createTextNode("Match audio gain between shots")); projectTools.appendChild(gainLabel);
-  addProjectAction("Continue existing video", async () => {
-    const input = document.createElement("input"); input.type = "file"; input.accept = "video/*";
-    input.onchange = async () => {
-      try {
-        if (!input.files?.[0]) return;
-        const data = new FormData(); data.append("image", input.files[0]); data.append("type", "input");
-        const response = await api.fetchApi("/minimax_director/media/upload", { method: "POST", body: data });
-        const result = await response.json(); if (!response.ok || !result.name) throw new Error(result.error || "Upload failed");
-        const filename = [result.subfolder, result.name].filter(Boolean).join("/");
-        const info = await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
-        if (!(info.duration > 0)) throw new Error("Source duration is unavailable; enter a source range manually.");
-        const source = { id: `source_${crypto.randomUUID()}`, name: "Original video (locked)", type: "V2V", source: { filename },
-          duration: info.duration, source_start: 0, source_end: info.duration, locked: true, selected: false, audio_mode: "source", continuity: false };
-        timelineState.clips.unshift(source); timelineState.source_size = [info.width, info.height];
-        activeClipId = timelineState.clips[1]?.id || source.id; syncState(); renderTimeline();
-      } catch (error) { alert(error.message); }
-    }; input.click();
-  });
   const canvasMode = document.createElement("select");
   for (const mode of ["config", "original", "auto", "manual"]) { const option = document.createElement("option"); option.value = mode; option.textContent = `Canvas: ${mode}`; canvasMode.appendChild(option); }
   canvasMode.value = timelineState.resolution?.mode || "config";
@@ -2767,7 +2727,7 @@ function mountDirectorUI(node) {
   const forgeCount = document.createElement("input"); forgeCount.type = "number"; forgeCount.min = "1"; forgeCount.max = "100"; forgeCount.value = "1";
   const forgeInstruction = document.createElement("textarea"); forgeInstruction.placeholder = "Describe the shots, identities and details to retain";
   const forgeVision = document.createElement("input"); forgeVision.type = "checkbox";
-  const visionLabel = document.createElement("label"); visionLabel.append(forgeVision, document.createTextNode("Include uploaded visual references for vision review"));
+  const visionLabel = document.createElement("label"); visionLabel.append(forgeVision, document.createTextNode("Use assigned Reference Pack media for vision review"));
   const forgeReview = document.createElement("div");
   let reviewedDraft = null;
   const drawDraft = draft => {
@@ -2919,52 +2879,6 @@ function mountDirectorUI(node) {
   projectTools.appendChild(clearBtn);
 
   // Preview Output Mode Selector
-  const previewModeWrap = document.createElement("div");
-  previewModeWrap.style.display = "inline-flex";
-  previewModeWrap.style.alignItems = "center";
-  previewModeWrap.style.gap = "4px";
-  previewModeWrap.style.marginLeft = "8px";
-  previewModeWrap.className = "mmx-output-selector";
-  previewModeWrap.title = "Export Output: Choose whether downstream renders the full sequence or only new/unvalidated clips.";
-
-  const previewModeLabel = document.createElement("span");
-  previewModeLabel.style.fontSize = "11px";
-  previewModeLabel.style.color = "#94a3b8";
-  previewModeLabel.textContent = "Output:";
-  previewModeWrap.appendChild(previewModeLabel);
-
-  const previewModeSelect = document.createElement("select");
-  previewModeSelect.className = "mmx-mode-select";
-  previewModeSelect.style.background = "var(--comfy-input-bg, #333333)";
-  previewModeSelect.style.border = "1px solid var(--border-color, #4a4a4a)";
-  previewModeSelect.style.borderRadius = "4px";
-  previewModeSelect.style.color = "#a5b4fc";
-  previewModeSelect.style.fontSize = "11px";
-  previewModeSelect.style.fontWeight = "600";
-  previewModeSelect.style.padding = "2px 6px";
-  previewModeSelect.style.cursor = "pointer";
-
-  const optFull = document.createElement("option");
-  optFull.value = "full";
-  optFull.textContent = "🎞️ Full Video";
-  const optUnval = document.createElement("option");
-  optUnval.value = "unvalidated";
-  optUnval.textContent = "⚡ New / Unvalidated Only";
-
-  previewModeSelect.appendChild(optFull);
-  previewModeSelect.appendChild(optUnval);
-  const optSelected = document.createElement("option");
-  optSelected.value = "selected"; optSelected.textContent = "Selected shots";
-  previewModeSelect.appendChild(optSelected);
-
-  previewModeSelect.value = timelineState.preview_mode || "full";
-  previewModeSelect.onchange = () => {
-    timelineState.preview_mode = previewModeSelect.value;
-    syncState();
-  };
-  previewModeWrap.appendChild(previewModeSelect);
-  toolbarLeft.appendChild(previewModeWrap);
-
   toolbar.appendChild(toolbarLeft);
 
   // Right toolbar group: Duration, Timecode, Zoom
@@ -3110,7 +3024,7 @@ function mountDirectorUI(node) {
   const drawRuler = () => {
     const totalClipsWidth = timelineState.clips.reduce((acc, c) => {
       const dur = parseFloat(c.duration) || 5.0;
-      return acc + Math.max(160, Math.min(450, Math.round(dur * 32 * zoomLevel))) + 4;
+      return acc + Math.max(32, Math.round(dur * 64 * zoomLevel)) + 4;
     }, 0);
     // Measure the viewport, not the ruler child, to avoid resize feedback.
     const laneW = Math.max(1, (multitrackPanel.clientWidth || 930) - 130);
@@ -3159,7 +3073,7 @@ function mountDirectorUI(node) {
     const effectiveTotal = Math.max(totalDuration, 1.0);
     const totalClipsWidth = timelineState.clips.reduce((acc, c) => {
       const dur = parseFloat(c.duration) || 5.0;
-      return acc + Math.max(160, Math.min(450, Math.round(dur * 32 * zoomLevel))) + 4;
+      return acc + Math.max(32, Math.round(dur * 64 * zoomLevel)) + 4;
     }, 0);
     const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (laneWidth / effectiveTotal);
     playheadSeconds = Math.max(0, Math.min(totalDuration, x / pxPerSec));
@@ -3419,7 +3333,7 @@ function mountDirectorUI(node) {
     // 2. Render Clips across all 4 Sub-Tracks
     timelineState.clips.forEach((clip, idx) => {
       const dur = parseFloat(clip.duration) || 5.0;
-      const baseWidth = Math.max(160, Math.min(450, Math.round(dur * 32 * zoomLevel)));
+      const baseWidth = Math.max(32, Math.round(dur * 64 * zoomLevel));
       const isActive = clip.id === activeClipId;
       const isValidated = !!clip.validated;
 
@@ -3518,11 +3432,11 @@ function mountDirectorUI(node) {
 
         const onMouseMove = (moveEvt) => {
           const deltaX = moveEvt.clientX - startX;
-          const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + deltaX / (scale * 32 * zoomLevel)) * 10) / 10));
+          const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + deltaX / (scale * 64 * zoomLevel)) * 10) / 10));
           clip.duration = newDur;
           if (newDur !== startDuration) invalidateFrom(idx);
           durTag.textContent = `${newDur.toFixed(1)}s`;
-          const newWidth = Math.max(160, Math.min(450, Math.round(newDur * 32 * zoomLevel)));
+          const newWidth = Math.max(32, Math.round(newDur * 64 * zoomLevel));
 
           // Synchronously resize all 4 track blocks in real time!
           shotBlock.style.width = `${newWidth}px`;
@@ -3586,11 +3500,15 @@ function mountDirectorUI(node) {
             `;
           }
 
-          const badge = document.createElement("span");
-          badge.className = "mmx-cell-badge";
-          badge.style.color = r.type === "refmod" ? "#fde68a" : "#93c5fd";
-          badge.textContent = r.type === "refmod" ? "MOD" : "IMG";
-          cell.appendChild(badge);
+          if (r.url) cell.onclick = event => {
+            event.stopPropagation();
+            const dialog = document.createElement("dialog"); dialog.className = "mmx-reference-dialog";
+            const heading = document.createElement("p"); heading.textContent = r.name;
+            const image = document.createElement("img"); image.src = r.url; image.alt = r.name;
+            const close = document.createElement("button"); close.textContent = "Close"; close.onclick = () => dialog.close();
+            dialog.append(heading,image,close); document.body.append(dialog);
+            dialog.addEventListener("close",()=>dialog.remove(),{once:true}); dialog.showModal();
+          };
           imgBlock.appendChild(cell);
         });
       } else {
@@ -3765,6 +3683,9 @@ function mountDirectorUI(node) {
       audiosLane.appendChild(audBlock);
     });
 
+    const types = new Set(timelineState.clips.flatMap(shot => (shot.ref_ids || []).map(id => timelineState.available_refs.find(row => row.id === id)?.type)));
+    imagesRow.hidden = !types.has("image") && !types.has("refmod");
+    videosRow.hidden = !types.has("video"); audiosRow.hidden = !types.has("audio");
     // 3. Add Shot Button flush at end of Track 1 (Shots Lane)
     const addCard = document.createElement("div");
     addCard.className = "mmx-add-clip-card";
@@ -3778,7 +3699,7 @@ function mountDirectorUI(node) {
 
     // 5. Update Time Ruler
     drawRuler();
-    smartPreview?.contextChanged();
+
   };
 
   // Render Active Clip Inspector (Directly below timeline track!)
@@ -3927,177 +3848,7 @@ function mountDirectorUI(node) {
     const shotSections = document.createElement("div");
     shotSections.className = "mmx-shot-sections";
     inspector.appendChild(shotSections);
-    const referencePanel = document.createElement("details");
-    const referenceHeading = document.createElement("summary"); referenceHeading.textContent = "Upload and edit references";
-    referencePanel.appendChild(referenceHeading); shotSections.appendChild(referencePanel);
-    const uploadReferences = async (files, replace = null) => {
-      for (const file of files) {
-        const data = new FormData(); data.append("image", file); data.append("type", "input");
-        const response = await api.fetchApi("/minimax_director/media/upload", { method: "POST", body: data });
-        const result = await response.json(); if (!response.ok || !result.name) throw new Error(result.error || "Reference upload failed");
-        const filename = [result.subfolder, result.name].filter(Boolean).join("/");
-        const type = result.media_type || (file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "image");
-        const row = replace || { id: `upload_${crypto.randomUUID()}`, name: file.name, role: "subject", description: "" };
-        Object.assign(row, { filename, type });
-        if (!replace) {
-          (timelineState.references ||= []).push(row);
-          (activeClip.ref_ids ||= []).push(row.id);
-        }
-        activeClip.validated = false;
-      }
-      refreshFileRefs(); syncState(); renderTimeline();
-    };
     modeSelect.disabled = !!activeClip.locked;
-    const referenceUpload = document.createElement("input"); referenceUpload.type = "file"; referenceUpload.multiple = true;
-    referenceUpload.accept = "image/*,video/*,audio/*";
-    referenceUpload.onchange = () => uploadReferences(referenceUpload.files || []).catch(error => alert(error.message));
-    referencePanel.appendChild(referenceUpload);
-    referencePanel.ondragover = event => { event.preventDefault(); };
-    referencePanel.ondrop = event => { event.preventDefault(); event.stopPropagation(); uploadReferences(event.dataTransfer.files || []).catch(error => alert(error.message)); };
-    referencePanel.onpaste = event => {
-      const files = Array.from(event.clipboardData?.items || []).filter(item => item.kind === "file").map(item => item.getAsFile()).filter(Boolean);
-      if (files.length) { event.preventDefault(); uploadReferences(files).catch(error => alert(error.message)); }
-    };
-    for (const row of timelineState.references || []) {
-      const card = document.createElement("fieldset"); const title = document.createElement("legend"); title.textContent = row.name || row.filename; card.appendChild(title);
-      const shared = document.createElement("input"); shared.type = "checkbox"; shared.checked = (timelineState.shared_ref_ids || []).includes(row.id);
-      shared.onchange = () => { timelineState.shared_ref_ids = shared.checked ? [...new Set([...(timelineState.shared_ref_ids || []), row.id])] : (timelineState.shared_ref_ids || []).filter(id => id !== row.id); syncState(); };
-      const sharedLabel = document.createElement("label"); sharedLabel.append(shared, document.createTextNode("Shared across shots")); card.appendChild(sharedLabel);
-      const role = document.createElement("select");
-      for (const value of ["subject", "place", "style", "keyframe", "pose", "custom"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; role.appendChild(option); }
-      role.value = row.role || "subject"; role.onchange = () => { row.role = role.value; syncState(); }; card.appendChild(role);
-      const description = document.createElement("input"); description.placeholder = "Reference description"; description.value = row.description || "";
-      description.onchange = () => { row.description = description.value; syncState(); }; card.appendChild(description);
-      if (row.type === "video") {
-        const mediaMode = document.createElement("select");
-        for (const value of ["video", "audio", "both"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; mediaMode.appendChild(option); }
-        mediaMode.value = row.media_mode || "video"; mediaMode.onchange = () => { row.media_mode = mediaMode.value; syncState(); }; card.appendChild(mediaMode);
-      }
-      const preview = document.createElement(row.type === "image" ? "img" : row.type === "video" ? "video" : "audio");
-      preview.src = mediaUrl(row.filename); preview.style.cssText = "display:block;max-height:160px;max-width:100%;margin:6px 0";
-      if (row.type !== "image") {
-        preview.controls = true;
-        preview.ontimeupdate = () => { if (row.end != null && preview.currentTime >= row.end) { preview.pause(); preview.currentTime = row.start || 0; } };
-        preview.onplay = () => { if (preview.currentTime < (row.start || 0)) preview.currentTime = row.start || 0; };
-      }
-      card.appendChild(preview);
-      if (row.type !== "image") for (const key of ["start", "end"]) {
-        const label = document.createElement("label"); label.textContent = `${key} (s): `;
-        const value = document.createElement("input"); value.type = "number"; value.min = "0"; value.step = ".01"; value.style.width = "70px"; value.value = row[key] ?? "";
-        value.onchange = () => { row[key] = value.value === "" ? undefined : Number(value.value); syncState(); };
-        label.appendChild(value); card.appendChild(label);
-      }
-      if (row.type === "audio" || row.type === "video" && row.media_mode !== "video") {
-        const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 40; canvas.style.touchAction = "none"; card.appendChild(canvas);
-        requestJson(`/minimax_director/media/waveform?filename=${encodeURIComponent(row.filename)}`).then(result => {
-          const draw = () => {
-            const context = canvas.getContext("2d"); context.clearRect(0,0,256,40); context.fillStyle = "#818cf8";
-            result.peaks.forEach((value, i) => { const height = Math.max(1, value * 38); context.fillRect(i*256/result.peaks.length, 20-height/2, 256/result.peaks.length, height); });
-            const left = (row.start || 0)/result.duration*256; const right = (row.end ?? result.duration)/result.duration*256;
-            context.fillStyle = "rgba(0,0,0,.55)"; context.fillRect(0,0,left,40); context.fillRect(right,0,256-right,40);
-            context.fillStyle = "#fff"; context.fillRect(left,0,3,40); context.fillRect(right-3,0,3,40);
-          };
-          let handle = null;
-          const timeAt = event => Math.max(0, Math.min(result.duration, (event.clientX-canvas.getBoundingClientRect().left)/canvas.getBoundingClientRect().width*result.duration));
-          canvas.title = "Drag the left or right boundary to trim the reference";
-          canvas.onpointerdown = event => { event.preventDefault(); const time = timeAt(event); handle = Math.abs(time-(row.start || 0)) < Math.abs(time-(row.end ?? result.duration)) ? "start" : "end"; canvas.setPointerCapture(event.pointerId); };
-          canvas.onpointermove = event => {
-            if (!handle) return; const time = timeAt(event);
-            row[handle] = handle === "start" ? Math.min(time,(row.end ?? result.duration)-.01) : Math.max(time,(row.start || 0)+.01);
-            activeClip.validated = false; draw();
-          };
-          canvas.onpointerup = canvas.onpointercancel = () => { if (handle) { handle = null; syncState(); } };
-          draw();
-        }).catch(error => { canvas.title = error.message; });
-      }
-      if (row.type !== "audio") {
-        const scaling = document.createElement("select"); scaling.title = "Scaling";
-        for (const value of ["Off","Auto","Target","Fit","Fill and crop","Fit and pad","Divisible crop"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; scaling.appendChild(option); }
-        scaling.value = row.scaling || "Auto"; scaling.onchange = () => { row.scaling = scaling.value; activeClip.validated = false; syncState(); }; card.appendChild(scaling);
-        const bounds = document.createElement("div"); bounds.style.cssText = "position:relative;display:inline-block;max-width:100%;touch-action:none";
-        preview.style.margin = "0"; card.appendChild(bounds); bounds.appendChild(preview);
-        const selection = document.createElement("div"); selection.style.cssText = "position:absolute;border:2px solid #818cf8;box-sizing:border-box;cursor:move;touch-action:none";
-        selection.dataset.corner = "move"; bounds.appendChild(selection);
-        for (const corner of ["nw","ne","sw","se"]) {
-          const handle = document.createElement("span"); handle.dataset.corner = corner;
-          handle.style.cssText = `position:absolute;width:10px;height:10px;background:#fff;border:1px solid #818cf8;cursor:${corner}-resize;${corner.includes("n")?"top:-5px":"bottom:-5px"};${corner.includes("w")?"left:-5px":"right:-5px"}`;
-          selection.appendChild(handle);
-        }
-        const cropped = document.createElement("canvas"); cropped.style.cssText = "display:block;max-width:256px;max-height:160px;margin:6px 0"; card.appendChild(cropped);
-        const cropInputs = {};
-        const drawCrop = () => {
-          const crop = row.crop || { x:0,y:0,width:1,height:1 };
-          selection.style.left = `${crop.x*100}%`; selection.style.top = `${crop.y*100}%`;
-          selection.style.width = `${crop.width*100}%`; selection.style.height = `${crop.height*100}%`;
-          for (const [key, input] of Object.entries(cropInputs)) input.value = Math.round(crop[key]*10000)/100;
-          const sourceWidth = preview.naturalWidth || preview.videoWidth;
-          const sourceHeight = preview.naturalHeight || preview.videoHeight;
-          if (!sourceWidth || !sourceHeight) return;
-          cropped.width = Math.max(1,Math.min(256,Math.round(sourceWidth*crop.width)));
-          cropped.height = Math.max(1,Math.round(cropped.width*sourceHeight*crop.height/(sourceWidth*crop.width)));
-          const context = cropped.getContext("2d");
-          context.filter = `brightness(${2**(row.edits?.exposure || 0)}) contrast(${row.edits?.contrast ?? 1}) saturate(${row.edits?.saturation ?? 1})`;
-          try { context.drawImage(preview, crop.x*sourceWidth,crop.y*sourceHeight,crop.width*sourceWidth,crop.height*sourceHeight,0,0,cropped.width,cropped.height); } catch {}
-        };
-        const setCrop = value => {
-          const min = .001;
-          const width = Math.max(min,Math.min(1,value.width)); const height = Math.max(min,Math.min(1,value.height));
-          row.crop = { x:Math.max(0,Math.min(1-width,value.x)), y:Math.max(0,Math.min(1-height,value.y)), width,height };
-          activeClip.validated = false; drawCrop();
-        };
-        let drag = null;
-        bounds.onpointerdown = event => {
-          if (event.target !== selection && !event.target.dataset.corner) return;
-          event.preventDefault(); event.stopPropagation(); bounds.setPointerCapture(event.pointerId);
-          drag = { x:event.clientX,y:event.clientY,corner:event.target.dataset.corner || "move",crop:{ ...(row.crop || {x:0,y:0,width:1,height:1}) } };
-        };
-        bounds.onpointermove = event => {
-          if (!drag) return;
-          const rect = preview.getBoundingClientRect();
-          const dx = (event.clientX-drag.x)/rect.width; const dy = (event.clientY-drag.y)/rect.height;
-          const crop = { ...drag.crop };
-          if (drag.corner === "move") { crop.x += dx; crop.y += dy; }
-          else {
-            if (drag.corner.includes("w")) { const right = crop.x+crop.width; crop.x = Math.min(right-.001,Math.max(0,crop.x+dx)); crop.width = right-crop.x; }
-            if (drag.corner.includes("e")) crop.width = Math.max(.001,Math.min(1-crop.x,crop.width+dx));
-            if (drag.corner.includes("n")) { const bottom = crop.y+crop.height; crop.y = Math.min(bottom-.001,Math.max(0,crop.y+dy)); crop.height = bottom-crop.y; }
-            if (drag.corner.includes("s")) crop.height = Math.max(.001,Math.min(1-crop.y,crop.height+dy));
-          }
-          setCrop(crop);
-        };
-        bounds.onpointerup = bounds.onpointercancel = () => { if (drag) { drag = null; syncState(); } };
-        if (row.type === "image") preview.onload = drawCrop;
-        else {
-          preview.onloadeddata = drawCrop;
-          const timeUpdate = preview.ontimeupdate; preview.ontimeupdate = event => { timeUpdate?.(event); drawCrop(); };
-        }
-        for (const [key,label] of [["x","Left %"],["y","Top %"],["width","Width %"],["height","Height %"]]) {
-          const wrap = document.createElement("label"); wrap.textContent = label;
-          const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.max = "100"; input.step = ".1"; input.style.width = "65px";
-          input.onchange = () => { const value = Number(input.value); if (!Number.isFinite(value)) return; setCrop({ ...(row.crop || {x:0,y:0,width:1,height:1}),[key]:value/100 }); syncState(); };
-          cropInputs[key] = input; wrap.appendChild(input); card.appendChild(wrap);
-        }
-        const reset = document.createElement("button"); reset.textContent = "Reset crop"; reset.onclick = () => { delete row.crop; drawCrop(); syncState(); }; card.appendChild(reset);
-        for (const [key,label,low,high,fallback] of [["exposure","Exposure",-10,10,0],["contrast","Contrast",0,4,1],["saturation","Saturation",0,4,1]]) {
-          const wrap = document.createElement("label"); wrap.textContent = label;
-          const input = document.createElement("input"); input.type = "range"; input.min = low; input.max = high; input.step = ".05"; input.value = row.edits?.[key] ?? fallback;
-          input.oninput = () => { (row.edits ||= {})[key] = Number(input.value); drawCrop(); syncState(); };
-          wrap.appendChild(input); card.appendChild(wrap);
-        }
-        drawCrop();
-      }
-      const replace = document.createElement("button"); replace.textContent = "Replace file";
-      replace.onclick = () => { const input = document.createElement("input"); input.type = "file"; input.accept = referenceUpload.accept; input.onchange = () => uploadReferences(input.files || [], row).catch(error => alert(error.message)); input.click(); }; card.appendChild(replace);
-      const remove = document.createElement("button"); remove.textContent = "Remove reference";
-      remove.onclick = () => {
-        timelineState.references = timelineState.references.filter(value => value !== row);
-        timelineState.available_refs = (timelineState.available_refs || []).filter(value => value.id !== row.id);
-        timelineState.shared_ref_ids = (timelineState.shared_ref_ids || []).filter(id => id !== row.id);
-        for (const shot of timelineState.clips) shot.ref_ids = (shot.ref_ids || []).filter(id => id !== row.id);
-        syncState(); renderTimeline();
-      }; card.appendChild(remove); referencePanel.appendChild(card);
-    }
-
     const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Shot models, guides and grading";
     shotExtras.appendChild(extrasTitle); shotSections.appendChild(shotExtras);
     const modelOverride = document.createElement("input"); modelOverride.placeholder = "Named model override";
@@ -4137,33 +3888,21 @@ function mountDirectorUI(node) {
       const sourcePanel = document.createElement("fieldset");
       const legend = document.createElement("legend"); legend.textContent = "Source video range";
       sourcePanel.appendChild(legend); inspector.appendChild(sourcePanel);
-      const filename = document.createElement("input");
-      filename.placeholder = "Video filename in ComfyUI input";
-      filename.value = typeof activeClip.source === "string" ? activeClip.source : activeClip.source?.filename || "";
-      filename.onchange = () => { activeClip.source = { filename: filename.value.trim() }; syncState(); renderInspector(); };
-      sourcePanel.appendChild(filename);
-      const upload = document.createElement("input"); upload.type = "file"; upload.accept = "video/*";
-      upload.onchange = async () => {
-        const file = upload.files?.[0]; if (!file) return;
-        upload.disabled = true;
-        try {
-          const data = new FormData(); data.append("image", file); data.append("type", "input");
-          const response = await api.fetchApi("/minimax_director/media/upload", { method: "POST", body: data });
-          const result = await response.json();
-          if (!response.ok || !result.name) throw new Error(result.error || "Source upload failed");
-          const path = [result.subfolder, result.name].filter(Boolean).join("/");
-          activeClip.source = { filename: path }; activeClip.source_start = 0;
-          const infoResponse = await api.fetchApi(`/minimax_director/source/info?filename=${encodeURIComponent(path)}`);
-          const info = await infoResponse.json();
-          if (!infoResponse.ok) throw new Error(info.error || "Cannot inspect source video");
-          if (Number.isFinite(info.duration) && info.duration > 0) {
-            activeClip.source_end = info.duration; activeClip.duration = info.duration;
-          }
-          activeClip.validated = false; syncState(); renderTimeline();
-        } catch (error) { syncState(); alert(error.message); }
-        finally { upload.disabled = false; }
+      const filename = document.createElement("select");
+      const blank = document.createElement("option"); blank.value = ""; blank.textContent = "Choose a video from Reference Pack"; filename.append(blank);
+      const currentSource = typeof activeClip.source === "string" ? activeClip.source : activeClip.source?.filename || "";
+      const videos = (timelineState.available_refs || []).filter(row => row.type === "video" && row.filename);
+      if (currentSource && !videos.some(row => row.filename === currentSource)) videos.push({filename:currentSource,name:"Saved source (legacy project)"});
+      for (const row of videos) {const option=document.createElement("option");option.value=row.filename;option.textContent=row.name;filename.append(option);}
+      filename.value=currentSource;
+      filename.onchange=async()=>{
+        if (!filename.value) return;
+        const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename.value)}`);
+        activeClip.source={filename:filename.value};activeClip.source_start=0;
+        if (info.duration>0) {activeClip.source_end=info.duration;activeClip.duration=info.duration;}
+        activeClip.validated=false;syncState();renderTimeline();
       };
-      sourcePanel.appendChild(upload);
+      sourcePanel.append(filename);
       let sourcePlayer = null;
       if (filename.value) {
         const video = document.createElement("video"); video.controls = true; video.preload = "metadata";
@@ -4241,14 +3980,7 @@ function mountDirectorUI(node) {
         activeClip.ref_ids = [...new Set([...(activeClip.ref_ids || []), ...(next.ref_ids || [])])];
         activeClip.validated = false; timelineState.clips.splice(index+1,1); syncState(); renderTimeline();
       }; sourcePanel.appendChild(merge);
-      const pickFrame = document.createElement("button"); pickFrame.textContent = "Use source frame as reference";
-      pickFrame.onclick = async () => {
-        try {
-          const result = await requestJson("/minimax_director/media/frame", { filename: filename.value, time: sourcePlayer?.currentTime || 0 });
-          const row = { id: `upload_${crypto.randomUUID()}`, type: "image", filename: result.filename, name: "Source frame", role: "keyframe" };
-          (timelineState.references ||= []).push(row); (activeClip.ref_ids ||= []).push(row.id); refreshFileRefs(); syncState(); renderTimeline();
-        } catch (error) { alert(error.message); }
-      }; sourcePanel.appendChild(pickFrame);
+
       if (activeClip.locked) for (const control of sourcePanel.querySelectorAll("input,button")) control.disabled = control !== pickFrame;
     }
 
@@ -4653,10 +4385,6 @@ function mountDirectorUI(node) {
       refsList.appendChild(item);
     });
 
-    const addTagInput = document.createElement("button");
-    addTagInput.textContent = "+ Upload reference";
-    addTagInput.onclick = () => referenceUpload.click();
-    refsList.appendChild(addTagInput);
     refsPoolWrap.appendChild(refsList);
     inspector.appendChild(refsPoolWrap);
 
@@ -4807,9 +4535,9 @@ function mountDirectorUI(node) {
         return field;
       };
 
-      grid.appendChild(createField("subject_definitions", "subject_definitions:", true, false, "<Subject 1> is the character in <Picture 1>.\n<Video 1> provides dynamic camera motion."));
+      grid.appendChild(createField("subject_definitions", "subject_definitions:", true, false, "Describe the subjects and assigned references."));
       grid.appendChild(createField("summary", "summary:", false, false, "[reference generation] Cinematic sequence for this shot with atmospheric lighting..."));
-      grid.appendChild(createField("retention_analysis", "retention_analysis:", true, false, "<Subject 1>: fully_preserved - features and costume maintained.\n<Video 1>: attribute_transfer - motion transferred."));
+      grid.appendChild(createField("retention_analysis", "retention_analysis:", true, false, "Describe which assigned subjects or features should stay unchanged."));
       grid.appendChild(createField("detailed_description", "detailed_description:", true, false, "Describe continuous action, choreography, camera movements (pan, tilt, push-in), and lighting..."));
       grid.appendChild(createField("overall_soundscape", "overall_soundscape:", false, false, "Diegetic audio: wind ambience, footsteps, mechanical hums, natural reverberation..."));
       grid.appendChild(createField("non_diegetic_music", "non_diegetic_music:", false, false, "N/A or musical soundtrack style, e.g. Ambient orchestral cello drone..."));
@@ -4823,15 +4551,12 @@ function mountDirectorUI(node) {
       const quickTags = document.createElement("div");
       quickTags.className = "mmx-quick-tags";
 
-      const tags = [
-        { label: "+ <Picture 1>", tag: "<Picture 1>" },
-        { label: "+ <Picture 2>", tag: "<Picture 2>" },
-        { label: "+ <Subject 1>", tag: "<Subject 1>" },
-        { label: "+ <Subject 2>", tag: "<Subject 2>" },
-        { label: "+ <Video 1>", tag: "<Video 1>" },
-        { label: "+ <Video 2>", tag: "<Video 2>" },
-        { label: "+ <Audio 1>", tag: "<Audio 1>" },
-      ];
+      const counts = {image:0, video:0, audio:0, refmod:0};
+      const tags = (activeClip.ref_ids || []).map(id => (timelineState.available_refs || []).find(row => row.id === id)).filter(Boolean).map(row => {
+        const kind = {image:"Picture", video:"Video", audio:"Audio", refmod:"RefMod"}[row.type];
+        const tag = `<${kind} ${++counts[row.type]}>`;
+        return {label: `${row.name} · ${tag}`, tag};
+      });
 
       tags.forEach((t) => {
         const tagBtn = document.createElement("button");
@@ -4862,25 +4587,7 @@ function mountDirectorUI(node) {
       promptArea.style.flex = "1";
       promptArea.style.height = "100%";
       promptArea.style.minHeight = "100px";
-      promptArea.placeholder = `subject_definitions:
-<Subject 1> is the character in <Picture 1>.
-<Video 1> provides dynamic camera motion and pacing.
-
-summary:
-[reference generation] Cinematic sequence for ${activeClip.name} with dramatic lighting.
-
-retention_analysis:
-<Subject 1>: fully_preserved - appearance, facial features, and costume are maintained.
-<Video 1>: attribute_transfer - motion pacing and camera trajectory are transferred.
-
-detailed_description:
-Smooth tracking push-in shot following <Subject 1>. Soft atmospheric lighting illuminates the environment with natural physical dynamics.
-
-overall_soundscape:
-Subtle whispering breeze, footsteps on gravel, and natural room reverberation.
-
-non_diegetic_music:
-N/A`;
+      promptArea.placeholder = `Describe the action, camera movement and sound. Assign references from the connected pool to insert their tokens.`;
       promptArea.value = activeClip.prompt || "";
       promptArea.oninput = () => {
         activeClip.prompt = promptArea.value;
@@ -5045,12 +4752,8 @@ N/A`;
     }
     loadState();
     renderTimeline();
-  };
 
-  smartPreview = installSmartPreview({root, toolbar: toolbarLeft, timelinePanel: multitrackPanel,
-    inspector, node, api, getTimeline: () => timelineState,
-    getOptions: () => builderState.smart_preview || {},
-    saveOptions: options => { builderState.smart_preview = options; syncState(); }});
+  };
 
   // Backend updates only the shot actually completed; clip-by-clip and selection
   // do not advance unrelated shot seeds.
@@ -5059,7 +4762,7 @@ N/A`;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
     progressLabel.textContent = `${detail.phase} · ${detail.clip_id} · ${detail.index || ""}/${detail.total || ""}`;
     if (detail.phase === "completed") {
-      smartPreview.completed();
+
       const shot = timelineState.clips.find(value => value.id === detail.clip_id);
       if (shot) {
         shot.last_seed = detail.seed;
@@ -5073,8 +4776,11 @@ N/A`;
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
+      node.__mmxDisposed = true;
+      for (const observers of node.__mmxRefObserverSets || []) observers.delete(node.__mmxRefObserver);
+      node.__mmxRefObserverSets?.clear();
       cancelTimelineDrag?.();
-      smartPreview.dispose();
+
       node.__mmxLocaleCleanup?.();
       api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
       node.__mmxShotHandler = null; node.__mmxShotListener = null;
@@ -5101,6 +4807,14 @@ app.registerExtension({
       if (node.type === "MiniMaxH3DirectorSettings" && Array.isArray(node.widgets_values)
           && node.widgets_values.length === 16 && !node.widgets_values_named) {
         node.widgets_values.splice(10, 0, "fixed");
+      }
+      if (node.type === "MiniMaxH3DirectorSettings" && Array.isArray(node.widgets_values) && node.widgets_values.length === 17) {
+        const old = node.widgets_values, mode = old[11] === "Conditioning Guide Output" ? "Conditioning only" : old[13] === "full_batch" ? "All shots" : "Next shot";
+        node.widgets_values = [...old.slice(0,11), mode, old[14], old[15]];
+        if (node.widgets_values_named) {
+          node.widgets_values_named.generation_mode = mode;
+          for (const key of ["execution_mode","run_mode","prompt_mode","preview_mode"]) delete node.widgets_values_named[key];
+        }
       }
       if (node.type === "MiniMaxH3VideoCombine" && Array.isArray(node.widgets_values)
           && node.widgets_values.length === 16 && !node.widgets_values_named) {

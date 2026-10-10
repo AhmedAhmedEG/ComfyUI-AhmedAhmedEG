@@ -1,10 +1,10 @@
 For the full reference, open the [documentation index](docs/index.html).
 [Getting Started](docs/getting-started.html) explains the basic workflow; the
-index links to a dedicated page for each of the 22 public nodes.
+index links to a dedicated page for each of the 23 public nodes.
 
 # Which nodes should I use?
 
-The package has **22 public node types**, each with a single registered name.
+The package has **23 public node types**, each with a single registered name.
 The main editor is **MiniMax H3 Master Node**. Internal algorithms such as
 conditioning construction, tile planning, tracking, cache serialization and
 encoding adapters are Python modules, not nodes you must connect.
@@ -21,8 +21,8 @@ Use ComfyUI's stock nodes around them:
 | Load Diffusion Model ×2 | FL2VA → `fl2va_model`; REF2VA → `ref2va_model` |
 | Load CLIP, type `minimax` | `clip` |
 | Load VAE ×2 | Video VAE → `video_vae`; audio VAE → `audio_vae` |
-| Create Video | Master `images`, `audio`, and `fps` |
-| Save Video | Create Video's `VIDEO` output |
+
+The starter connects Master `project_state` to **Smart Preview**. Latest clip / Full video and autoplay live in that separate player. Reference Pack is the only authoring source for references, with optional names. The starter also includes both H3 SLA Attention patches and the Boolean switch for REF2VA Turbo LoRA. Settings has one Generation mode: Next shot / All shots / Conditioning only. Raw / Structured is per shot.
 
 ## Optional feature tools — fifteen types
 

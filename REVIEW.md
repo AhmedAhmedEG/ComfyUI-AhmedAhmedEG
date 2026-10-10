@@ -188,3 +188,13 @@ Shot bodies now drag to reorder the complete shot and its reference lanes, with 
 Getting Started now explains nodes, sockets, cables, model files, all nine starter boxes and common generation terms. All 22 node pages include a plain-language explanation and first-use example. Real screenshots were captured from the installed ComfyUI frontend running the supplied starter in an isolated read-only preview, including readable model, VAE and settings close-ups. No generation or remote workflow changes were made.
 
 Shot dragging now captures the pointer and handles movement/release before canvas listeners, cancels on leaving the editor, losing capture or losing window focus, and clears transforms during rerenders. Actual ComfyUI browser checks confirmed reordering and outside-node cancellation; regression tests cover outside movement and blur without lost clips.
+
+## Smart-preview starter (1.0.10)
+
+The starter now ends at the Master's integrated Smart Preview, opens Latest clip with autoplay, and omits Create Video / Save Video. The Master is an output node so generation runs without an export sink. The consolidated workflow retains final export. Workflow import now restores the preview panel, scope and autoplay instead of only loading the saved options. Regression coverage verifies runnable output registration, absence of starter savers, valid links and restored player settings.
+
+## Separate preview and pool-only authoring (1.1.0)
+
+Smart Preview is now a separate output node connected to Master project_state. Master has no integrated player or preview/output selector. Settings presents one Generation mode and removes prompt/preview controls. Raw/Structured remains per shot. Reference discovery includes only connected pool slots or nonempty RefMods; named references retain stable IDs, and prompt tokens appear only for assigned media. New reference uploads and manual file inputs are removed from Master; source selection is from the pool, with legacy project compatibility. Reference observers support multiple Masters and clean up when removed. Image thumbnails use larger contained previews and click-to-expand, and empty tracks are hidden. Timeline widths follow duration.
+
+Starter and consolidated graphs include both H3 SLA Attention patches and the existing stock REF2VA Turbo LoRA/Boolean/model switch, using the supplied workflow and schemas read from the installed remote nodes. The user still sets the intended 8-step sampling value when enabling the supplied LoRA. Backend: 107 tests pass. Editor, preview, separate-player and documentation regressions pass.

@@ -24,11 +24,13 @@ from .node_project_video import MiniMaxH3ProjectVideo
 from .node_output_processing import MiniMaxH3OutputProcessing
 from .node_pixel_upscale import MiniMaxH3PixelUpscale
 from .node_ref_pack import MiniMaxH3RefPack
+from .node_smart_preview import MiniMaxH3SmartPreview
 
 # Single public Master Node name; implementation class stays internal.
 MiniMaxH3MasterNode = MiniMaxH3MasterDirector
 
 NODE_CLASS_MAPPINGS = {
+    "MiniMaxH3SmartPreview": MiniMaxH3SmartPreview,
     # Flagship Master Node (named MiniMax H3 Master Node)
     "MiniMaxH3MasterNode": MiniMaxH3MasterNode,
 
@@ -63,6 +65,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "MiniMaxH3SmartPreview": "MiniMax H3 Smart Preview",
     "MiniMaxH3MasterNode": "MiniMax H3 Master Node",
 
     "MiniMaxH3DirectorSettings": "MiniMax H3 Director Settings",
@@ -106,6 +109,7 @@ _MENU_GROUPS = {
         "MiniMaxH3PixelUpscale"
     ],
     "Output": [
+        "MiniMaxH3SmartPreview",
         "MiniMaxH3VideoCombine",
         "MiniMaxH3ProjectVideo",
         "MiniMaxH3OutputProcessing"

@@ -68,7 +68,7 @@ class WorkflowContracts(unittest.TestCase):
                             self.assertIsInstance(value, str)
                     inputs = {k: v[0] for group in ("required", "optional") for k, v in cls.INPUT_TYPES().get(group, {}).items()}
                     for socket in node["inputs"]:
-                        self.assertEqual(socket["type"], inputs[socket["name"]])
+                        if inputs[socket["name"]] not in ("*", "COMFY_MATCHTYPE_V3"): self.assertEqual(socket["type"], inputs[socket["name"]])
                 for _, origin, slot, target, target_slot, kind in data["links"]:
                     self.assertEqual(by_id[origin]["outputs"][slot]["type"], kind)
                     self.assertEqual(by_id[target]["inputs"][target_slot]["type"], kind)
@@ -79,10 +79,10 @@ class WorkflowContracts(unittest.TestCase):
 
     def test_starter_uses_stock_loaders_and_both_model_families(self):
         data = json.loads((ROOT / "workflows/MiniMax H3 Start Here.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(data["nodes"]), 9)
+        self.assertEqual(len(data["nodes"]), 14)
         self.assertEqual({n["type"] for n in data["nodes"]}, {
             "UNETLoader", "CLIPLoader", "VAELoader", "MiniMaxH3DirectorSettings",
-            "MiniMaxH3MasterNode", "CreateVideo", "SaveVideo"})
+            "MiniMaxH3MasterNode", "MiniMaxH3SmartPreview", "MiniMaxH3RefPack", "H3SLAAttention", "LoraLoaderModelOnly", "PrimitiveBoolean", "ComfySwitchNode"})
         master = next(n for n in data["nodes"] if n["type"] == "MiniMaxH3MasterNode")
         self.assertTrue(all(i["link"] for i in master["inputs"] if i["name"] in ("fl2va_model", "ref2va_model")))
     def test_example_layouts_fit_groups_and_do_not_overlap(self):

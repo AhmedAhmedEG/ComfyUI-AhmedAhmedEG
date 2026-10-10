@@ -1,5 +1,5 @@
 {
-  "version": "1.0.9",
+  "version": "1.1.0",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -10,20 +10,19 @@
         "For text, opening/closing-frame and still-image modes, uses FL2VA. REF2VA, V2V and RV2V use REF2VA. Connected family models are loaded lazily.",
         "Generates a new take or reuses a matching saved take. Applies enabled SelfLift, Refine and FaceRefine stages, then assembles the requested output.",
         "Clip-by-clip stops after one newly generated shot. Full-batch works through the sequence. Conditioning Guide Output emits the last shot’s conditioning and latent for an external sampler.",
-        "The Preview tab requests separate latest-clip or complete-sequence preview files from completed caches. It does not change the Output selection."
+        "The separate Smart Preview node reads completed cache takes. Its Latest clip / Full video switch controls what your browser downloads."
       ],
       "steps": [
-        "Load the starter and select both diffusion models, CLIP type minimax, and the video/audio VAEs.",
-        "Edit a shot’s mode, duration, prompt, audio policy and references in the Shots tab.",
-        "Run the workflow and inspect Preview → Latest clip. Validate a take you accept.",
-        "Add a shot and choose independent or chained continuity. Set Output → Full Video for a complete downstream export."
+        "Select the installed files and configure Generation mode in Settings.",
+        "Supply media only through connected Reference Packs. Assign existing named items to shots.",
+        "Edit prompts with the per-shot Raw / Structured switch and click Run. Watch the separate Smart Preview."
       ],
       "wiring": [
         "Load Diffusion Model (FL2VA) → fl2va_model",
         "Load Diffusion Model (REF2VA) → ref2va_model",
         "Load CLIP → clip; video Load VAE → video_vae; audio Load VAE → audio_vae",
         "Director Settings config → config",
-        "images + audio + fps → Create Video → Save Video"
+        "project_state → Smart Preview; optional final export: images + audio + fps → Create Video → Save Video"
       ],
       "notes": [
         "Generation is fixed at 24 fps. Canvas dimensions must be multiples of 32. Generated durations round to the 5 + 17k frame grid.",
@@ -39,7 +38,7 @@
         "MiniMaxH3Checkpoint",
         "MiniMaxH3ProjectVideo"
       ],
-      "extra": "<h2 id=\"editor\">Shot editor</h2><p><b>Move:</b> drag a shot’s body left or right. The insertion marker shows its new position; image, video and audio assignments move with it. Shots stay joined without gaps. Move earlier / Move later buttons offer the same operation.</p><p><b>Resize:</b> drag the shot’s right edge to change duration. <b>Delete:</b> click × on the shot or Delete Shot in its inspector, then confirm. The last shot can be deleted; use + Add Shot to start again. A locked source stays in place. Reordering or deleting clears approval on affected later shots so chained output is regenerated.</p><p>Use Director Settings for size, steps, seed, execution and continuity. Use the Master for shots, prompts, references and review.</p><ul><li>Keep a fixed seed while comparing a setting. Increment, decrement or randomize requests the next variation.</li><li>Only selected shots are generated when Generate selected shots is enabled. Unselected source ranges can pass through unchanged.</li><li>Validate a completed take to approve it. Reuse also requires matching inputs and files; changing a chained shot can invalidate its successors.</li><li>Generation uses a 24 fps frame grid: 5, 22, 39, 56, 73… frames. Width and height must be multiples of 32.</li></ul><p>All-in-One Generation is the usual execution mode. Clip-by-clip stops after one new shot; full-batch processes the sequence. Manual resolution uses your dimensions, Auto uses aspect and megapixels, and Original snaps the source dimensions to the grid. Active working-resolution overrides take precedence.</p><h4>Prompts and shot LoRAs</h4><ul class=\"points\"><li>Example: <em>A cyclist turns onto a wet street. Low tracking camera. Evening shop lights. Tires hiss on pavement.</em></li><li>Use raw text or structured editing; shared text supplies recurring instructions.</li><li>Mention selected media with the editor’s reference tokens. Check resolved_prompt to see what H3 receives.</li></ul><ul class=\"points\"><li>Attach up to <strong>8 LoRAs</strong> per shot.</li><li>Start with a moderate strength; compare with the same seed.</li><li>LoRAs modify the model; reference assets and RefMods supply media.</li></ul><h3>References and timed guides</h3><h4>Add & prepare reference media</h4><ul class=\"points\"><li>Trim video/audio by start/end seconds; choose video, audio or both. The waveform shows decoded audio peaks.</li><li>Crop images/video using the rectangle or numeric fields. Scale with Off / Auto / Target / Fit / Fill; crop or pad to the required grid.</li><li>Set role and description. Subject/place/style/keyframe/pose are descriptive labels; pose is not a skeleton ControlNet.</li></ul><h4>Use RefMods & bundles</h4><ul class=\"points\"><li>Use <code>&lt;RefMod 1&gt;</code> or <code>&lt;RefMod 1:memberName&gt;</code> to mention a bundle/member.</li><li>Expanded members count toward the normal reference limits.</li><li>RefMods organize reference assets; this node does not train or create a new RefMod model.</li></ul><h4>Place a guide at a time</h4><ul class=\"points\"><li>Enter the guide time in seconds inside the visible shot.</li><li>The native AddGuide path offsets the anchor for a continuity prefix.</li><li>Check the reference and timestamp when an anchor lands at the wrong point.</li></ul><p><strong>Limits:</strong> 9 images, 3 videos, 3 audios, 12 combined; each reference video and their total duration must be ≤15 seconds. Native H3 may impose additional combination constraints. Crops retain the original asset; picking a source frame uses the original player time.</p><p>This is a timestamped native guide, not an additional guide-strength control.</p><h3>Source-video editing</h3><ul class=\"points\"><li>Use V2V/RV2V and describe the desired edit. The source becomes reference Video 1.</li><li>Split at the playhead, split equally or use optional scene detection. Merge only contiguous ranges from the same file.</li><li>Leave other ranges unselected for source passthrough; generated ranges are trimmed to the source length.</li></ul><p>There is no generic source-latent strength slider. Automatic continuity prefixes are disabled for source edits. Scene detection needs scenedetect[opencv]. To extend a video, use locked source Clip 0, then add generated shots. Source ranges keep original-time coordinates.</p><h3>Project files and recovery</h3><ul class=\"points\"><li><strong>Workflow JSON:</strong> graph and node settings. <strong>Lightweight project JSON:</strong> timeline/settings with asset and cache hints.</li><li><strong>Portable .mmxproj:</strong> includes reference/source bytes; excludes models and heavy generated takes.</li><li>Append remaps incoming IDs; overwrite replaces authoring. New Project / Reset Timeline / Clear Cache have different scopes.</li></ul><p>Clear Cache removes generated takes while retaining uploaded assets. Appended shared references become local to imported shots. Back up generated-take storage separately when moving servers.</p>",
+      "extra": "<h2 id=\"editor\">Shot editor</h2><p>Drag a shot body to reorder it, drag its right edge to change duration, or click × / Delete Shot to remove it. References move with the shot. Dragging outside cancels safely.</p><p>Reference Pack is the sole source of new reference media. Connect image, video-frame or audio loaders to the pool; optional names identify them in the Master. Only existing connections appear. Assign a pool item to a shot to reveal its prompt token. Click an image thumbnail for a full-size preview. Empty media tracks stay hidden.</p><p>Raw / Structured is a per-shot editing choice. Generation mode lives in Director Settings. Preview scope and autoplay live in Smart Preview. H3 generation is 24 fps, with dimensions in multiples of 32 and durations rounded to the 5 + 17k grid.</p><h3>Advanced source edits</h3><p>For V2V / RV2V, select a video provided by the pool. File-backed inputs offer source-range splitting and merging. Existing saved projects retain legacy source compatibility; new uploads are handled upstream, not inside the Master.</p><h3>Project files</h3><p>Workflow JSON stores the graph and controls. Generated takes stay in the server cache. Export uses the consolidated workflow; Save preview downloads the smaller preview copy.</p>",
       "control_descriptions": {},
       "output_descriptions": [
         "Assembled RGB frames for the Output selection.",
@@ -55,7 +54,7 @@
       ],
       "beginner": {
         "meaning": "This is where you direct the video. A shot is one short clip. You give each shot a written description, a length and, optionally, pictures or other media to follow. The Master runs the AI and joins the completed shots.",
-        "first_use": "Make a two-second text-to-video shot first. Write what happens, how the camera moves and what you hear. Leave optional enhancement connections empty. Click Run, then open Preview → Latest clip."
+        "first_use": "Write a two-second text shot in the Master, select Next shot in Settings, and click Run. Watch the result in the separate Smart Preview node. Add images, video or audio through Reference Pack when needed."
       }
     },
     "MiniMaxH3DirectorSettings": {
@@ -67,10 +66,9 @@
         "When settings_optional is connected, incoming values take precedence over this node’s values."
       ],
       "steps": [
-        "Connect config to the Master config socket.",
-        "For a first run, use the starter’s 960 × 544, 24 fps, 25 steps, CFG 1, euler/simple and fixed seed.",
-        "Choose All-in-One Generation, then clip_by_clip or full_batch.",
-        "Set Independent for separate scenes, or a continuity mode for a sequence."
+        "Connect config to Master config.",
+        "Choose Next shot, All shots or Conditioning only in Generation mode.",
+        "Set resolution, sampler, steps and continuity. Prompt editing belongs to each shot; playback scope belongs to Smart Preview."
       ],
       "wiring": [
         "config → Master config"
@@ -383,7 +381,8 @@
       "steps": [
         "Connect reference media to the matching sockets.",
         "Chain pools through ref_pack_optional if more graph inputs are needed.",
-        "Connect ref_pack to Master ref_pack, press Sync Refs, and assign assets to the intended shot."
+        "Connect ref_pack to Master ref_pack, press Sync Refs, and assign assets to the intended shot.",
+        "Give connected references optional names such as Alice or Courtyard. Only connected items are listed; assign them to a shot to show their prompt tokens."
       ],
       "wiring": [
         "Reference Pack ref_pack → Master ref_pack",
@@ -815,6 +814,38 @@
         "meaning": "This enlarges finished pictures after they have been decoded. Bicubic is a conventional resize; learned upscaling uses an image-upscale model; RTX effects need the supported NVIDIA software and hardware.",
         "first_use": "Connect Master images. Start with bicubic and a modest scale to verify the graph. Send the resized frames to Create Video and keep the Master’s audio connected separately. This node returns pictures, not sound or a finished video file."
       }
+    },
+    "MiniMaxH3SmartPreview": {
+      "summary": "Plays completed cached shots in a separate node, with Latest clip and Full video scopes.",
+      "when": "Connect this at the end of the starter instead of a video-saving node.",
+      "behavior": [
+        "Reads the Master’s project_state output to identify completed cached takes. It does not generate video or combine the full movie on every run.",
+        "Latest clip requests a separate preview file for the newest completed take. Full video explicitly requests the completed sequence. Preview copies fit within 960 × 540.",
+        "Autoplay, Refresh and Save preview live in this player. Preview URLs are revision-addressed so unchanged clips do not rebuffer."
+      ],
+      "steps": [
+        "Connect Master project_state to Smart Preview project_state.",
+        "Run after editing shots in the Master. The latest completed clip appears here.",
+        "Choose Full video only when you want the sequence. Use Save preview to download the preview copy."
+      ],
+      "wiring": [
+        "Master project_state → Smart Preview project_state"
+      ],
+      "notes": [
+        "This is an output node: its connection makes the Master run. It needs completed take caches on the same ComfyUI server.",
+        "For final-resolution export, use the consolidated workflow’s Create Video → Save Video path."
+      ],
+      "related": [
+        "MiniMaxH3MasterNode",
+        "MiniMaxH3ProjectVideo"
+      ],
+      "extra": "<h2 id=\"player-controls\">Player controls</h2><ul><li><b>Latest clip:</b> download only the newest completed take.</li><li><b>Full video:</b> explicitly request the completed sequence.</li><li><b>Autoplay:</b> play new media when the browser permits; native play controls remain available.</li><li><b>Refresh:</b> retry the current preview without generating another shot.</li><li><b>Save preview:</b> download the currently selected preview copy.</li></ul>",
+      "control_descriptions": {},
+      "output_descriptions": [],
+      "beginner": {
+        "meaning": "This is your video player, in its own box. It watches completed shots from the Master. The default shows only the newest clip, so you do not download the whole movie again just to see the new part.",
+        "first_use": "Connect the Master’s project_state socket to this node, leave Latest clip selected, and click Run. Use Full video when you want to inspect joins between shots."
+      }
     }
   },
   "control_descriptions": {
@@ -924,6 +955,17 @@
     "deblur": "Enable the optional RTX deblur effect before the main RTX effect.",
     "upscale_model": "Stock-loaded image UPSCALE_MODEL required by learned_pixel.",
     "timeline_data": "Timeline JSON owned by the shot editor. Connect a reviewed timeline here for advanced graph authoring.",
-    "builder_state": "Serialized editor/project-tool state. Normal authoring manages this automatically."
+    "builder_state": "Serialized editor/project-tool state. Normal authoring manages this automatically.",
+    "generation_mode": "Next shot generates one new shot. All shots processes the sequence. Conditioning only supplies conditioning/latent data for an advanced external sampler.",
+    "image_1_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "image_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "image_3_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "image_4_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "video_1_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "video_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "audio_1_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "audio_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "refmod_1_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "refmod_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change."
   }
 }

@@ -22,9 +22,13 @@ w.HTMLMediaElement.prototype.pause=()=>{};w.HTMLMediaElement.prototype.load=()=>
 w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_timeline.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_director.js','utf8').replace(/^import .*;\r?\n/gm,''));
-const initial = {version:2,project_id:'editor',clips:[{id:'clip_1',type:'T2VA',prompt:'Original user text',duration:5,seed:'18446744073709551615',ref_ids:['uploaded']}],references:[{id:'uploaded',type:'image',filename:'example.png',name:'Subject'}]};
+const refPool={id:20,type:'MiniMaxH3RefPack',inputs:[{name:'image_1',link:11},{name:'image_2',link:null},{name:'video_1',link:null}],widgets:[{name:'image_1_name',value:'Alice'},{name:'refmod_1',value:'None'},{name:'refmod_2',value:'None'}]};
+const imageLoader={id:21,type:'LoadImage',widgets:[{name:'image',value:'alice.png'}]};
+w.app.graph.links={10:{origin_id:20},11:{origin_id:21}};
+w.app.graph.getNodeById=id=>id===20?refPool:id===21?imageLoader:null;
+const initial = {version:2,project_id:'editor',clips:[{id:'clip_1',type:'T2VA',prompt:'Original user text',duration:5,seed:'18446744073709551615',ref_ids:['image_1']}],references:[{id:'uploaded',type:'image',filename:'example.png',name:'Subject'}]};
 const timeline = {name:'timeline_data',value:JSON.stringify(initial)};
-const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'}],inputs:[],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
+const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'}],inputs:[{name:'ref_pack',link:10}],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
 (async()=>{
   const legacy = {nodes:[{type:'MiniMaxH3MasterDirector'}]};
   w.extension.beforeConfigureGraph(legacy); assert.strictEqual(legacy.nodes[0].type,'MiniMaxH3MasterNode');
@@ -33,10 +37,10 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const oldGraph={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[...settingsValues]},{type:'MiniMaxH3VideoCombine',widgets_values:[...oldExporter]}]};
   w.extension.beforeConfigureGraph(oldGraph);
   assert.strictEqual(oldGraph.nodes[0].widgets_values[10],'fixed');
-  assert.strictEqual(oldGraph.nodes[0].widgets_values[11],'All-in-One Generation');
+  assert.strictEqual(oldGraph.nodes[0].widgets_values[11],'All shots');
   assert.strictEqual(oldGraph.nodes[1].widgets_values[3],'ffmpeg');
   assert.strictEqual(oldGraph.nodes[1].widgets_values[4],'8-bit');
-  w.extension.beforeConfigureGraph(oldGraph);assert.strictEqual(oldGraph.nodes[0].widgets_values.length,17);
+  w.extension.beforeConfigureGraph(oldGraph);assert.strictEqual(oldGraph.nodes[0].widgets_values.length,14);
   function Exporter(){this.widgets=[{name:'quality',value:21},{name:'bit_depth',value:'10-bit'},{name:'encoder_backend',value:'pyav'},{name:'save_output',value:false},{name:'control_after_generate',value:'fixed',options:{serialize:false}},{name:'preview',value:'not_saved',serialize:false}];}
   Exporter.prototype.onSerialize=function(data){data.other_extension='preserved';};
   Exporter.prototype.onConfigure=function(){this.widgets[0].value='wrong positional value';};
@@ -52,6 +56,9 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.extension.nodeCreated(node);
   await new Promise(resolve=>setTimeout(resolve,40));
   assert(w.document.querySelector('.mmx-director-root'),'Editor mounts');
+  const initialTags=[...w.document.querySelectorAll('.mmx-quick-tag-btn')].map(el=>el.textContent);
+  assert(initialTags.some(text=>text.includes('Alice') && text.includes('<Picture 1>')));
+  assert(!initialTags.some(text=>text.includes('<Video') || text.includes('<Audio') || text.includes('<Picture 2>')));
   const editorRoot=w.document.querySelector('.mmx-director-root');
   assert.equal(editorRoot.querySelector('.mmx-language-select').parentElement.className,'mmx-toolbar-right');
   const editorWidget=node.widgets.find(widget=>widget.name==='master_director_ui');
@@ -63,11 +70,11 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const rulerLane=editorRoot.querySelector('.mmx-ruler-lane');
   Object.defineProperty(rulerLane,'clientWidth',{value:800,configurable:true});
   editorRoot.querySelector('.mmx-time-ruler').getBoundingClientRect=()=>({left:100,width:1240});
-  rulerLane.dispatchEvent(new w.MouseEvent('mousedown',{clientX:100+82*1.55,bubbles:true}));
+  rulerLane.dispatchEvent(new w.MouseEvent('mousedown',{clientX:100+162*1.55,bubbles:true}));
   assert.equal(editorRoot.querySelector('.mmx-timecode-display').textContent,'00:00:02:12','Scrubbing accounts for 155% graph zoom');
   w.dispatchEvent(new w.MouseEvent('mouseup'));
   assert.strictEqual(JSON.parse(timeline.value).clips[0].seed,'18446744073709551615');
-  assert.deepStrictEqual(JSON.parse(timeline.value).clips[0].ref_ids,['uploaded']);
+  assert.deepStrictEqual(JSON.parse(timeline.value).clips[0].ref_ids,['image_1']);
   const language=w.document.querySelector('select[title="UI language"]');
   language.value='ar'; language.onchange();
   assert(w.document.body.textContent.includes('أدوات المشروع'));
@@ -88,7 +95,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.dispatchEvent(new w.MouseEvent('pointerup',{clientX:890}));
   const afterDrag=JSON.parse(timeline.value).clips;
   assert.deepStrictEqual(afterDrag.map(c=>c.id),[beforeDrag[1].id,beforeDrag[2].id,beforeDrag[0].id]);
-  assert.deepStrictEqual(afterDrag[2].ref_ids,['uploaded']);
+  assert.deepStrictEqual(afterDrag[2].ref_ids,['image_1']);
   assert.equal(afterDrag[2].seed,beforeDrag[0].seed); assert.equal(afterDrag[2].duration,5,'Dragging does not resize');
   const area=editorRoot.querySelector('.mmx-multitrack-panel');
   assert(area);
@@ -110,7 +117,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   Object.defineProperty(resized,'offsetWidth',{value:160});resized.getBoundingClientRect=()=>({width:248});
   resized.querySelector('.mmx-clip-handle-right').dispatchEvent(new w.MouseEvent('mousedown',{clientX:500,bubbles:true}));
   w.dispatchEvent(new w.MouseEvent('mousemove',{clientX:549.6}));w.dispatchEvent(new w.MouseEvent('mouseup'));
-  assert.equal(JSON.parse(timeline.value).clips[2].duration,6,'Resize accounts for 155% graph zoom');
+  assert.equal(JSON.parse(timeline.value).clips[2].duration,5.5,'Resize accounts for 155% graph zoom');
   inspectorDelete().click(); inspectorDelete().click(); inspectorDelete().click();
   assert.equal(JSON.parse(timeline.value).clips.length,0,'The final shot can be deleted');
   node.__mmxDirectorRefresh();
@@ -126,9 +133,16 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.strictEqual(submittedDraft.shots[0].prompt,'Reviewed action');
   assert.strictEqual(JSON.parse(timeline.value).clips[0].prompt,'Reviewed action');
   assert.strictEqual(problems.length,0,problems.join('\n'));
+  assert.equal(editorRoot.querySelector('.mmx-smart-preview'),null,'Preview is a separate node');
+  assert(!editorRoot.textContent.includes('Upload reference'));
+  assert(!editorRoot.textContent.includes('Upload and edit references'));
+  assert.equal(editorRoot.querySelector('input[type="file"]'),null);
+  const quick=[...editorRoot.querySelectorAll('.mmx-quick-tag-btn')].map(el=>el.textContent);
+  assert.equal(quick.length,0,'No reference tokens are offered for an unassigned draft shot');
+  assert(!quick.some(text=>text.includes('<Video') || text.includes('<Audio') || text.includes('<Picture 2>')));
   node.onRemoved();assert.strictEqual(listeners.size,0);
   w.prompt=()=> '2';
-  const sourceState={...initial,clips:[{id:'clip_1',name:'Source',type:'V2V',source:{filename:'source.mp4'},source_start:3,source_end:9,duration:6,prompt:'Keep this action',ref_ids:['uploaded'],validated:true}]};
+  const sourceState={...initial,clips:[{id:'clip_1',name:'Source',type:'V2V',source:{filename:'source.mp4'},source_start:3,source_end:9,duration:6,prompt:'Keep this action',ref_ids:['image_1'],validated:true}]};
   const sourceTimeline={name:'timeline_data',value:JSON.stringify(sourceState)};
   const sourceNode={...node,id:8,widgets:[sourceTimeline,{name:'builder_state',value:'{}'}],__mmxDirectorMounted:false,__mmxShotListener:null,__mmxLocaleCleanup:null,onRemoved:undefined};
   w.extension.nodeCreated(sourceNode);
@@ -137,7 +151,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const split=JSON.parse(sourceTimeline.value).clips;
   assert.deepStrictEqual(split.map(shot=>[shot.source_start,shot.source_end]),[[3,6],[6,9]]);
   assert(split.every(shot=>shot.prompt==='Keep this action' && !shot.validated));
-  assert(split.every(shot=>shot.ref_ids[0]==='uploaded'));
+  assert(split.every(shot=>shot.ref_ids[0]==='image_1'));
   sourceNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, language, draft review, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

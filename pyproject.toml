@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-minimax-h3-master-director"
-version = "1.0.9"
+version = "1.1.0"
 description = "Unified master director and sequence extender for ComfyUI MiniMax H3"
 authors = [{ name = "AI Master Director Team" }]
 license = { text = "GPL-3.0" }

@@ -102,6 +102,7 @@ class MiniMaxH3MasterDirector:
     RETURN_TYPES = ("IMAGE", "AUDIO", "VHS_VIDEOINFO", "CONDITIONING", "LATENT", "STRING", "FLOAT", "INT", "STRING", "STRING")
     RETURN_NAMES = ("images", "audio", "video", "positive", "latent", "resolved_prompt", "fps", "frame_count", "status", "project_state")
     FUNCTION = "execute"
+    OUTPUT_NODE = False
     CATEGORY = CATEGORY
 
     @classmethod
@@ -651,7 +652,7 @@ class MiniMaxH3MasterDirector:
                     detailed_description=translate_refmod_aliases(ref_dict.get("detailed_description", ""), tag_map),
                     soundscape=translate_refmod_aliases(b_soundscape, tag_map),
                     music=translate_refmod_aliases(b_music, tag_map),
-                    prompt_mode=prompt_mode,
+                    prompt_mode=clip_prompt_mode,
                 )
             else:
                 b_soundscape = builder.get("overall_soundscape") or builder.get("soundscape", "")
@@ -664,7 +665,7 @@ class MiniMaxH3MasterDirector:
                     duration_sec=clip_dur,
                     has_first_frame=first_frame is not None,
                     has_last_frame=last_frame is not None,
-                    prompt_mode=prompt_mode,
+                    prompt_mode=clip_prompt_mode,
                 )
 
             try:
