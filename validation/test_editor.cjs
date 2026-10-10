@@ -90,7 +90,13 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const globalProject=w.document.querySelector('.mmx-project-workspace');
   assert.equal(globalProject.parentElement.className,'mmx-director-root');
   assert(globalProject.compareDocumentPosition(w.document.querySelector('.mmx-multitrack-panel')) & w.Node.DOCUMENT_POSITION_FOLLOWING,'Project precedes the timeline');
-  assert.equal(globalProject.querySelectorAll('.mmx-project-group').length,2,'Shared prompt and audio have horizontal groups');
+  assert.equal(globalProject.querySelectorAll('.mmx-project-group').length,1,'Project owns audio finishing, not shared prompt');
+  const sharedPromptSection=w.document.querySelector('.mmx-shared-prompt');
+  assert.strictEqual(w.document.querySelector('.mmx-multitrack-panel').nextElementSibling,sharedPromptSection,'Shared prompt is immediately below the timeline');
+  assert.equal(sharedPromptSection.querySelectorAll('textarea').length,1);
+  assert.equal(globalProject.querySelectorAll('textarea').length,0,'Shared prompt has one visible owner');
+  const sharedText=sharedPromptSection.querySelector('textarea');sharedText.value='Consistent cinematic style';sharedText.onchange();
+  assert.equal(JSON.parse(timeline.value).shared_prompt,'Consistent cinematic style');
   globalProject.open=true;
   const help=w.document.querySelector('.mmx-tools-heading button');help.click();
   assert(w.document.querySelector('.mmx-edit-tools').classList.contains('mmx-show-help'));

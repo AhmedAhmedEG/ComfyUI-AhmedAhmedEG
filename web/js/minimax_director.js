@@ -2206,7 +2206,7 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-project-workspace > summary::after { content:'+';margin-left:auto;font-size:20px;color:#a9c5db; }
 .mmx-director-root .mmx-project-workspace[open] > summary::after { content:'−'; }
 .mmx-director-root .mmx-project-workspace > summary span { font-size:12px;font-weight:400;color:#b4c2cf; }
-.mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px 24px;padding:16px;border-top:1px solid #414e5a; }
+.mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:1fr;gap:16px;padding:16px;border-top:1px solid #414e5a; }
 .mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:1/-1;align-self:start;margin:0;border:0;border-top:1px solid #414e5a;border-radius:0;background:transparent; }
 .mmx-director-root .mmx-project-group { display:flex;flex-direction:column;gap:10px;min-width:0; }
 .mmx-director-root .mmx-project-group + .mmx-project-group { border-left:1px solid #414e5a;padding-left:24px; }
@@ -2224,6 +2224,12 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-project-workspace .mmx-export-options { padding:4px 0;border:0;background:transparent;font-size:12px; }
 .mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
 .mmx-director-root .mmx-project-workspace .mmx-section > summary { padding:12px 0 0; }
+.mmx-director-root .mmx-shared-prompt { display:flex;flex-direction:column;gap:8px;flex-shrink:0;padding:0 0 14px;border-bottom:1px solid #414e5a; }
+.mmx-director-root .mmx-shared-prompt-header { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap; }
+.mmx-director-root .mmx-shared-prompt-header h3 { margin:0;font-size:14px;color:#d1e1ec; }
+.mmx-director-root .mmx-shared-prompt textarea { box-sizing:border-box;width:100%;height:72px;min-height:64px;resize:vertical;border:1px solid #4c5966;border-radius:6px;padding:10px 12px;background:#1d2229;color:#ecedf0;font:inherit; }
+.mmx-director-root .mmx-shared-prompt-header .mmx-project-placement { font-size:12px; }
+.mmx-director-root .mmx-project-workspace .mmx-project-group { flex-direction:row;align-items:center;flex-wrap:wrap;gap:24px; }
 @container (max-width:800px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:1fr; } .mmx-director-root .mmx-project-group + .mmx-project-group { border-left:0;border-top:1px solid #414e5a;padding:14px 0 0; } .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @container (max-width:600px) { .mmx-project-workspace > summary span { display:none; } }
 
@@ -2849,7 +2855,7 @@ function mountDirectorUI(node) {
   };
   const projectTools = document.createElement("details");
   const projectHeading = document.createElement("summary"); projectHeading.textContent = "Project";
-  const projectScope=document.createElement("span");projectScope.textContent="All clips · shared prompt, audio & files";projectHeading.append(projectScope);
+  const projectScope=document.createElement("span");projectScope.textContent="All clips · audio & files";projectHeading.append(projectScope);
   projectTools.appendChild(projectHeading);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
@@ -3029,20 +3035,25 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.3";
+  generationBar.dataset.version="1.4.4";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
   finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
   projectTools.classList.add("mmx-project-workspace");
   const projectBody=projectTools.querySelector(":scope > .mmx-section-body");
   const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
-  const promptGroup=group("Prompt defaults",sharedPrompt.closest(".mmx-field"),sharedPolicy.closest(".mmx-field"));
-  promptGroup.querySelector("h3").remove();
+  const sharedPromptSection=document.createElement("section");sharedPromptSection.className="mmx-shared-prompt";
+  const sharedPromptHeader=document.createElement("div");sharedPromptHeader.className="mmx-shared-prompt-header";
+  const sharedPromptHeading=document.createElement("h3");sharedPromptHeading.textContent="Shared prompt";
+  sharedPromptHeader.append(sharedPromptHeading,sharedPolicy.closest(".mmx-field"));
+  const oldPromptField=sharedPrompt.closest(".mmx-field");
+  sharedPromptSection.append(sharedPromptHeader,sharedPrompt);oldPromptField.remove();
+  sharedPrompt.setAttribute("aria-label","Shared prompt");sharedPrompt.title="Applies to every clip. Placement controls whether it comes before or after the clip prompt.";
   sharedPolicy.closest(".mmx-field").classList.add("mmx-project-placement");
   fadeLabel.classList.add("mmx-project-audio-fade");
   const audioGroup=group("Audio finishing",fadeLabel,gainLabel);
   const projectFiles=projectBody.querySelector("details");
-  projectBody.append(promptGroup,audioGroup,projectFiles);
+  projectBody.append(audioGroup,projectFiles);
   root.append(projectTools);
 
 
@@ -3126,6 +3137,7 @@ function mountDirectorUI(node) {
   multitrackPanel.appendChild(playheadNeedle);
 
   root.appendChild(multitrackPanel);
+  root.appendChild(sharedPromptSection);
 
   // 3. Active Clip Inspector (Directly below timeline - 100% pure timeline!)
   const inspector = document.createElement("div");

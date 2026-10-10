@@ -3,6 +3,7 @@ const labels = {
   "Project tools": ["项目工具", "أدوات المشروع"],
   "Project": ["项目", "المشروع"],
   "All clips · shared prompt, audio & files": ["所有片段 · 共享提示词、音频和文件", "كل المقاطع · الوصف المشترك والصوت والملفات"],
+  "All clips · audio & files": ["所有片段 · 音频和文件", "كل المقاطع · الصوت والملفات"],
   "Audio finishing": ["音频处理", "معالجة الصوت"],
   "Prompt defaults": ["提示词默认设置", "إعدادات الوصف المشتركة"],
   "Refresh pool": ["刷新素材池", "تحديث المراجع"],

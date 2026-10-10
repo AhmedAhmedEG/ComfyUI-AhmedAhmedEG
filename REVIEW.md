@@ -251,3 +251,7 @@ Moved global Project configuration above the timeline into a wide, collapsible s
 ## 1.4.3 — compact Project layout
 
 Replaced the sparse three-column Project form with a short prompt/audio row and a full-width collapsible file-action grid. Removed duplicate prompt headings and repeated inline descriptions. Export media selection remains next to its single export action. Action help remains available through tooltips and the technical guide.
+
+## 1.4.4 — shared prompt below the timeline
+
+Moved the single shared prompt textarea and its placement selector immediately below the timeline, ahead of clip controls. Removed shared prompt from Project; Project now owns only audio finishing and file operations. Regression checks verify DOM order, sole ownership and serialization.
