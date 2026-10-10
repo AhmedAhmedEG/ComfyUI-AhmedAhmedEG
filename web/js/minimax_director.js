@@ -2201,22 +2201,31 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-export-options { display:flex!important;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px!important; }
 .mmx-director-root .mmx-export-options input { width:16px!important;min-width:16px;height:16px;accent-color:#7eafcf; }
 .mmx-director-root .mmx-export-options small { flex-basis:100%; }
-.mmx-director-root .mmx-project-workspace { border:1px solid #4b5966;border-radius:8px;background:#252b32; }
+.mmx-director-root .mmx-project-workspace { border:1px solid #414e5a;border-radius:8px;background:#23292f; }
 .mmx-director-root .mmx-project-workspace > summary { display:flex;align-items:center;gap:14px;padding:12px 14px;font-weight:600;cursor:pointer;list-style:none; }
 .mmx-director-root .mmx-project-workspace > summary::after { content:'+';margin-left:auto;font-size:20px;color:#a9c5db; }
 .mmx-director-root .mmx-project-workspace[open] > summary::after { content:'−'; }
 .mmx-director-root .mmx-project-workspace > summary span { font-size:12px;font-weight:400;color:#b4c2cf; }
-.mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr);gap:16px;padding:14px;border-top:1px solid #4b5966; }
-.mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:auto;align-self:start; }
-.mmx-director-root .mmx-project-group { display:flex;flex-direction:column;gap:12px;min-width:0; }
+.mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px 24px;padding:16px;border-top:1px solid #414e5a; }
+.mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:1/-1;align-self:start;margin:0;border:0;border-top:1px solid #414e5a;border-radius:0;background:transparent; }
+.mmx-director-root .mmx-project-group { display:flex;flex-direction:column;gap:10px;min-width:0; }
+.mmx-director-root .mmx-project-group + .mmx-project-group { border-left:1px solid #414e5a;padding-left:24px; }
 .mmx-director-root .mmx-project-group > h3 { font-size:13px;margin:0;color:#c6d8e7; }
 .mmx-director-root .mmx-clip-type-label { display:inline-flex;align-items:center;padding:5px 10px;border:1px solid #506477;border-radius:5px;background:#2b3a47;color:#cce0ef;font-size:13px; }
-.mmx-director-root .mmx-project-group textarea { min-height:96px;resize:vertical; }
-.mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:1fr;max-height:260px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain; }
-.mmx-director-root .mmx-project-workspace .mmx-section-intro { grid-column:1/-1;margin:0; }
-.mmx-director-root .mmx-project-workspace small { display:block; }
-@container (max-width:900px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:repeat(2,minmax(0,1fr)); } .mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:1/-1; } }
-@container (max-width:600px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:1fr; } .mmx-project-workspace > summary span { display:none; } }
+.mmx-director-root .mmx-project-group textarea { min-height:68px;height:68px;resize:vertical; }
+.mmx-director-root .mmx-project-placement { flex-direction:row;align-items:center;gap:12px; }
+.mmx-director-root .mmx-project-placement select { width:150px!important; }
+.mmx-director-root .mmx-project-audio-fade { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.mmx-director-root .mmx-project-audio-fade input { width:100px; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:12px 0 0;border:0; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions > .mmx-field { padding:0;border:0;background:transparent;justify-content:flex-start; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions button { min-height:40px; }
+.mmx-director-root .mmx-project-workspace small { display:none; }
+.mmx-director-root .mmx-project-workspace .mmx-export-options { padding:4px 0;border:0;background:transparent;font-size:12px; }
+.mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
+.mmx-director-root .mmx-project-workspace .mmx-section > summary { padding:12px 0 0; }
+@container (max-width:800px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:1fr; } .mmx-director-root .mmx-project-group + .mmx-project-group { border-left:0;border-top:1px solid #414e5a;padding:14px 0 0; } .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@container (max-width:600px) { .mmx-project-workspace > summary span { display:none; } }
 
 `;
 
@@ -3020,7 +3029,7 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.2";
+  generationBar.dataset.version="1.4.3";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
   finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
@@ -3028,6 +3037,9 @@ function mountDirectorUI(node) {
   const projectBody=projectTools.querySelector(":scope > .mmx-section-body");
   const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
   const promptGroup=group("Prompt defaults",sharedPrompt.closest(".mmx-field"),sharedPolicy.closest(".mmx-field"));
+  promptGroup.querySelector("h3").remove();
+  sharedPolicy.closest(".mmx-field").classList.add("mmx-project-placement");
+  fadeLabel.classList.add("mmx-project-audio-fade");
   const audioGroup=group("Audio finishing",fadeLabel,gainLabel);
   const projectFiles=projectBody.querySelector("details");
   projectBody.append(promptGroup,audioGroup,projectFiles);

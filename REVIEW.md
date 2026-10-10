@@ -247,3 +247,7 @@ Removed the duplicate Project shortcut. Consolidated JSON and portable archive i
 ## 1.4.2 — project scope and fixed clip types
 
 Moved global Project configuration above the timeline into a wide, collapsible section with horizontal prompt/audio/file groups. The clip sidebar contains only Continuity, Look and LoRAs. The project DOM and expansion state survive clip changes and empty timelines. Removed in-place task-type editing; the existing Add Clip picker selects types before creation. Tests cover fixed types, clean new references and project ownership.
+
+## 1.4.3 — compact Project layout
+
+Replaced the sparse three-column Project form with a short prompt/audio row and a full-width collapsible file-action grid. Removed duplicate prompt headings and repeated inline descriptions. Export media selection remains next to its single export action. Action help remains available through tooltips and the technical guide.
