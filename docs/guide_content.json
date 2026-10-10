@@ -1,5 +1,5 @@
 {
-  "version": "1.1.3",
+  "version": "1.2.0",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -13,7 +13,7 @@
         "The separate Smart Preview node reads completed cache takes. Its Latest clip / Full video switch controls what your browser downloads."
       ],
       "steps": [
-        "Select the installed files and configure Generation mode in Settings.",
+        "Select the installed files and configure Generation mode at the top of the Master.",
         "Supply media only through connected Reference Packs. Assign existing named items to shots.",
         "Edit prompts with the per-shot Raw / Structured switch and click Run. Watch the separate Smart Preview."
       ],
@@ -38,7 +38,7 @@
         "MiniMaxH3Checkpoint",
         "MiniMaxH3ProjectVideo"
       ],
-      "extra": "<h2 id=\"editor\">Shot editor</h2><p>Drag a shot body to reorder it, drag its right edge to change duration, or click × / Delete Shot to remove it. References move with the shot. Dragging outside cancels safely.</p><p>Reference Pack is the sole source of new reference media. Connect image, video-frame or audio loaders to the pool; optional names identify them in the Master. Only existing connections appear. Assign a pool item to a shot to reveal its prompt token. Click an image thumbnail for a full-size preview. Empty media tracks stay hidden.</p><p>Raw / Structured is a per-shot editing choice. Generation mode lives in Director Settings. Preview scope and autoplay live in Smart Preview. H3 generation is 24 fps, with dimensions in multiples of 32 and durations rounded to the 5 + 17k grid.</p><h3>Advanced source edits</h3><p>For V2V / RV2V, select a video provided by the pool. File-backed inputs offer source-range splitting and merging. Existing saved projects retain legacy source compatibility; new uploads are handled upstream, not inside the Master.</p><h3>Project files</h3><p>Workflow JSON stores the graph and controls. Generated takes stay in the server cache. Export uses the consolidated workflow; Save preview downloads the smaller preview copy.</p>",
+      "extra": "<h2 id=\"editor\">Shot editor</h2><p>Drag a shot body to reorder it, drag its right edge to change duration, or click × / Delete Shot to remove it. References move with the shot. Dragging outside cancels safely.</p><p>Reference Pack is the sole source of new reference media. Connect image, video-frame or audio loaders to the pool; optional names identify them in the Master. Only existing connections appear. Assign a pool item to a shot to reveal its prompt token. Click an image thumbnail for a full-size preview. Empty media tracks stay hidden.</p><p>Raw / Structured is a per-shot editing choice. Generation mode is prominent at the top of the Master. Continuity is configured per clip. Preview scope and autoplay live in Smart Preview. H3 generation is 24 fps, with dimensions in multiples of 32 and durations rounded to the 5 + 17k grid.</p><h3>Advanced source edits</h3><p>For V2V / RV2V, select a video provided by the pool. File-backed inputs offer source-range splitting and merging. Existing saved projects retain legacy source compatibility; new uploads are handled upstream, not inside the Master.</p><h3>Project files</h3><p>Workflow JSON stores the graph and controls. Generated takes stay in the server cache. Export uses the consolidated workflow; Save preview downloads the smaller preview copy.</p>",
       "control_descriptions": {},
       "output_descriptions": [
         "Assembled RGB frames for the Output selection.",
@@ -58,7 +58,7 @@
       }
     },
     "MiniMaxH3DirectorSettings": {
-      "summary": "Builds the canvas, sampling and execution configuration consumed by the Master.",
+      "summary": "Canvas, sampling, noise schedules and base seed for the Master.",
       "when": "Use this in every ordinary starter workflow.",
       "behavior": [
         "Returns one configuration dictionary. This node does not sample or decode media.",
@@ -67,16 +67,14 @@
       ],
       "steps": [
         "Connect config to Master config.",
-        "Choose Next shot, All shots or Conditioning only in Generation mode.",
-        "Set resolution, sampler, steps and continuity. Prompt editing belongs to each shot; playback scope belongs to Smart Preview."
+        "Set canvas, sampler, steps, noise shifts and base seed. Generation mode and per-clip Continuity are visible in the Master."
       ],
       "wiring": [
         "config → Master config"
       ],
       "notes": [
-        "A newly created node defaults to 1344 × 768, res_multistep and chained continuity. The starter uses 960 × 544, euler and Independent for the first test.",
-        "context_length choices are video-frame context lengths, unrelated to language-model context tokens.",
-        "Changing export playback FPS uses Output Processing; the Master generation frame_rate must stay at 24."
+        "A newly created Settings node defaults to 1344 × 768 and res_multistep. The starter uses 960 × 544 and euler.",
+        "Changing export playback FPS uses Output Processing; Master generation frame_rate stays at 24."
       ],
       "related": [
         "MiniMaxH3MasterNode",
@@ -93,8 +91,8 @@
         "Configuration consumed by the Master config input."
       ],
       "beginner": {
-        "meaning": "This is the control panel for how the video is generated. It sends settings to the Master; it does not make a video by itself. Width and height set the picture size. Steps set how many sampling iterations the AI takes. Seed is the starting random number.",
-        "first_use": "Connect config to the Master’s config input. Use the starter values for your first run. Change only one setting at a time. Keep seed fixed while comparing results so a new random starting point does not hide the effect of your change."
+        "meaning": "This node sets the size, sampling method and noise settings used to generate video. It does not create a video itself.",
+        "first_use": "Use the starter values first, then connect config to the Master. Find Generation mode above the Master timeline and Continuity inside the selected clip."
       }
     },
     "MiniMaxH3DirectorSelfLift": {

@@ -218,8 +218,39 @@ class RuntimeContracts(unittest.TestCase):
         guides = [kw for name, kw in self.native_calls if name == "MiniMaxH3AddGuide"]
         self.assertEqual(len(guides), 1)
         self.assertEqual(guides[0]["frame_idx"], 0)
-        self.assertEqual(guides[0]["image"].shape[0], 5)
+        self.assertEqual(guides[0]["image"].shape[0], 22)
         self.assertEqual(result[7], 39 + 39)
+
+    def test_per_shot_context_overrides_global_and_can_disable_audio(self):
+        clips = [{"id":"one","type":"T2VA","duration":2,"continuity_mode":"Independent (No Continuity)"},
+                 {"id":"two","type":"T2VA","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":39,"audio_context_length":0}]
+        self.execute(clips, continuity_mode="Independent (No Continuity)")
+        guides = [kw for name,kw in self.native_calls if name=="MiniMaxH3AddGuide"]
+        self.assertEqual(guides[0]["image"].shape[0],39)
+        self.assertIsNone(guides[0].get("audio"))
+
+    def test_master_timeline_generation_mode_overrides_config(self):
+        clips=[{"id":"one","type":"T2VA","duration":1},{"id":"two","type":"T2VA","duration":1}]
+        self.execute(timeline_data=json.dumps({"version":2,"project_id":"regression","generation_mode":"Next shot","clips":clips}),run_mode="full_batch")
+        self.assertEqual(len(self.sampling_calls),1)
+
+    def test_continuity_modes_validate_and_clamp_audio(self):
+        from core.continuity import resolve_continuity
+        result=resolve_continuity({"continuity_mode":"Latent Carry (Pinned)","context_length":5,"audio_context_length":56})
+        self.assertEqual(result["audio_frames"],5)
+        self.assertEqual(resolve_continuity({"continuity_mode":"FL2VA Tail Handoff"})["video_frames"],1)
+        self.assertEqual(resolve_continuity({"continuity":False})["video_frames"],0)
+        with self.assertRaises(ValueError):resolve_continuity({"context_length":12})
+
+    def test_latent_carry_receives_per_shot_audio_policy(self):
+        clips=[{"id":"one","type":"T2VA","duration":2,"continuity_mode":"Independent (No Continuity)"},
+               {"id":"two","type":"T2VA","duration":2,"continuity_mode":"Latent Carry (Pinned)","context_length":39,"audio_context_length":5,"continuity_redraw":.3}]
+        with patch('core.vendor.aimixer.director.h3_latent_continue.apply_latent_continue',side_effect=lambda latent,**kw:(latent,39,0)) as carry, patch('core.advanced_sampling.sample_stage',side_effect=lambda model,latent,*args,**kw:latent):
+            self.execute(clips)
+        self.assertEqual(carry.call_args.kwargs['context_length'],39)
+        self.assertEqual(carry.call_args.kwargs['audio_context_length'],5)
+        self.assertTrue(carry.call_args.kwargs['pin_audio'])
+        self.assertEqual(carry.call_args.kwargs['seam_min_mask'],.3)
 
     def test_clip_by_clip_advances_only_the_completed_seed(self):
         clips = [{"id":"one","type":"T2V","duration":1,"seed":"18446744073709551615","seed_mode":"increment"},

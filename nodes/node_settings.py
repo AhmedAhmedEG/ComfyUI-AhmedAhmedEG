@@ -42,10 +42,6 @@ class MiniMaxH3DirectorSettings:
                 "shift_audio": ("FLOAT", {"default": 3.0, "min": 0.1, "max": 100.0, "step": 0.1, "tooltip": "Sigma shift exponent for audio stream."}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "Base random seed."}),
 
-                # Pipeline & Continuity Settings
-                "generation_mode": (["Next shot", "All shots", "Conditioning only"], {"default": "Next shot", "tooltip": "Next shot generates one new shot; All shots processes the timeline; Conditioning only is for advanced external samplers."}),
-                "continuity_mode": (["Motion Context (Chained)", "Latent Carry (Pinned)", "Independent (No Continuity)", "FL2VA Tail Handoff"], {"default": "Motion Context (Chained)", "tooltip": "How adjacent shots link motion and style continuity."}),
-                "context_length": (["22", "5", "39", "56"], {"default": "22", "tooltip": "Number of video frames passed across shot seams."}),
             },
             "optional": {
                 "settings_optional": (MMX_DIRECTOR_CONFIG, {"tooltip": "Optional previous configuration to chain or override."}),

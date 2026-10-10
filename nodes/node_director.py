@@ -225,6 +225,12 @@ class MiniMaxH3MasterDirector:
                 raise ValueError("Timeline must be a JSON object.")
             authored_clips = "clips" in timeline
             timeline = migrate_timeline(timeline)
+            generation = timeline.get("generation_mode")
+            if generation is not None:
+                if generation not in ("Next shot", "All shots", "Conditioning only"):
+                    raise ValueError("Unknown timeline generation mode.")
+                execution_mode = "Conditioning Guide Output" if generation == "Conditioning only" else "All-in-One Generation"
+                run_mode = "full_batch" if generation == "All shots" else "clip_by_clip"
             if timeline.get("resolution"):
                 try:
                     from ..core.resolution import plan_canvas, timeline_media_size
@@ -396,7 +402,15 @@ class MiniMaxH3MasterDirector:
             if not math.isfinite(clip_dur) or clip_dur <= 0:
                 raise ValueError(f"Shot {clip_idx + 1} duration must be positive and finite.")
             clip_prompt_text = str(clip_item.get("prompt", "") or prompt or "")
-            clip_continuity = bool(clip_item.get("continuity", True)) and continuity_mode != "Independent (No Continuity)"
+            try:
+                from ..core.continuity import resolve_continuity
+            except ImportError:
+                from core.continuity import resolve_continuity
+            continuity = resolve_continuity(clip_item, continuity_mode, context_length)
+            clip_continuity_mode = continuity["mode"]
+            clip_context_length = continuity["video_frames"]
+            clip_audio_context = continuity["audio_frames"]
+            clip_continuity = clip_continuity_mode != "Independent (No Continuity)"
             clip_ref_ids = clip_item.get("ref_ids", [])
             clip_ref_ids = list(dict.fromkeys([*timeline.get("shared_ref_ids", []), *clip_ref_ids]))
             if "tail_seconds" in clip_item:
@@ -542,8 +556,9 @@ class MiniMaxH3MasterDirector:
                 if clip_continuity and previous_tail is not None and clip_idx > 0:
                     if not ref_images and not ref_videos and previous_tail.get("last_frame") is not None:
                         ref_images["ref_image_1"] = previous_tail["last_frame"]
-                    if not ref_audios and previous_tail.get("tail_audio") is not None:
-                        ref_audios["ref_audio_1"] = previous_tail["tail_audio"]
+                    if clip_audio_context and not ref_audios and previous_tail.get("tail_audio") is not None:
+                        audio_tail = previous_tail["tail_audio"]
+                        ref_audios["ref_audio_1"] = {**audio_tail, "waveform": audio_tail["waveform"][..., -round(clip_audio_context / FPS * audio_tail["sample_rate"]):]}
                 is_chained_from_previous = False
 
 
@@ -569,17 +584,18 @@ class MiniMaxH3MasterDirector:
             audio_mode = clip_item.get("audio_mode", timeline.get("audio_mode", "generate"))
             visible_frames = source["frames"].shape[0] if source is not None else align_frame_count(int(clip_dur * FPS))
             continuation_prefix = 0
-            latent_carry = continuity_mode == "Latent Carry (Pinned)"
+            latent_carry = clip_continuity_mode == "Latent Carry (Pinned)"
             if source is None and canon_mode != MODE_INPAINT and clip_continuity and previous_tail is not None:
                 frames = previous_tail.get("tail_frames")
-                if frames is not None and frames.shape[0] >= 5 and continuity_mode in ("Motion Context (Chained)", "Latent Carry (Pinned)"):
-                    count = align_frame_count(min(int(context_length), int(frames.shape[0])), "down")
+                if frames is not None and frames.shape[0] >= 5 and clip_continuity_mode in ("Motion Context (Chained)", "Latent Carry (Pinned)"):
+                    count = align_frame_count(min(clip_context_length, int(frames.shape[0])), "down")
                     continuation_prefix = count
+                    clip_audio_context = min(clip_audio_context, count)
                     clip_dur = align_frame_count(visible_frames + count) / FPS
                     if not latent_carry:
-                        guide_audio = previous_tail.get("tail_audio")
+                        guide_audio = previous_tail.get("tail_audio") if clip_audio_context else None
                         if guide_audio is not None:
-                            guide_audio = {**guide_audio, "waveform": guide_audio["waveform"][..., -round(count/FPS*guide_audio["sample_rate"]):]}
+                            guide_audio = {**guide_audio, "waveform": guide_audio["waveform"][..., -round(min(count, clip_audio_context)/FPS*guide_audio["sample_rate"]):]}
                         guide_frames = [{"frame": frames[-count:], "frame_idx": 0, "audio": guide_audio}]
                     if first_frame is not None and not is_chained_from_previous:
                         guide_frames = [*(guide_frames or []), {"frame": first_frame, "frame_idx": count}]
@@ -737,6 +753,7 @@ class MiniMaxH3MasterDirector:
                     context_length=continuation_prefix,
                     context_end_frame=previous_av.get("_mmx_visible_end") if previous_av else None,
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
+                    pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
                     seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
@@ -765,7 +782,8 @@ class MiniMaxH3MasterDirector:
                     "sampler": sampler, "scheduler": scheduler, "shift_video": shift_video,
                     "shift_audio": shift_audio, "selflift": selflift, "refine": refine,
                     "face_refine": face_refine, "semantic_bridge": semantic_bridge, "sigmas": sigmas,
-                    "continuity_mode": continuity_mode, "context_length": context_length,
+                    "continuity_mode": clip_continuity_mode, "context_length": clip_context_length,
+                    "audio_context_length": clip_audio_context,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
@@ -790,11 +808,11 @@ class MiniMaxH3MasterDirector:
                         cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
                     )
                     v_stream, _ = extract_streams_from_av_latent(cached_latent) if cached_latent else (None, None)
-                    tail_count = max(1, min(int(cached_frames.shape[0]), int(round(clip_tail_sec * frame_rate))))
+                    tail_count = max(1, min(int(cached_frames.shape[0]), 56))
                     cached_aud = cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
                     wf_c = cached_aud["waveform"]
                     sr_c = int(cached_aud.get("sample_rate", 48000))
-                    aud_samples_c = min(wf_c.shape[-1], max(1, int(round(clip_tail_sec * sr_c))))
+                    aud_samples_c = min(wf_c.shape[-1], max(1, int(round(56 / frame_rate * sr_c))))
                     cached_tail_aud = {"waveform": wf_c[..., -aud_samples_c:].clone(), "sample_rate": sr_c}
                     previous_tail = {
                         "last_frame": cached_frames[-1:].clone(),
@@ -975,11 +993,11 @@ class MiniMaxH3MasterDirector:
                 cache_error = str(c_err)
                 log.warning(f"Master Director: Could not cache clip {clip_id}: {c_err}")
 
-            # Extract tail for subsequent clip continuity using per-clip tail_seconds
-            tail_count = max(1, min(int(decoded_frames.shape[0]), int(round(clip_tail_sec * frame_rate))))
+            # Retain the maximum supported tail so the next shot chooses its own context.
+            tail_count = max(1, min(int(decoded_frames.shape[0]), 56))
             wf_d = decoded_audio["waveform"]
             sr_d = int(decoded_audio.get("sample_rate", 48000))
-            aud_samples_d = min(wf_d.shape[-1], max(1, int(round(clip_tail_sec * sr_d))))
+            aud_samples_d = min(wf_d.shape[-1], max(1, int(round(56 / frame_rate * sr_d))))
             tail_aud = {"waveform": wf_d[..., -aud_samples_d:].clone(), "sample_rate": sr_d}
             previous_tail = {
                 "last_frame": decoded_frames[-1:].clone(),

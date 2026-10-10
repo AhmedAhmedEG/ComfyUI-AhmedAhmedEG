@@ -124,3 +124,28 @@ def match_color_temperature_and_grade(
     # Blend correction into the opening frames
     out[:window] = out[:window] * (1.0 + ramp * (gain_tensor - 1.0))
     return out.clamp(0.0, 1.0)
+
+
+# Per-shot continuity policy, with legacy global configuration fallback.
+MODES = ("Independent (No Continuity)", "Motion Context (Chained)",
+         "Latent Carry (Pinned)", "FL2VA Tail Handoff")
+GRID = (5, 22, 39, 56)
+
+
+def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
+    mode = shot.get("continuity_mode", legacy_mode)
+    if mode not in MODES:
+        raise ValueError("Unknown shot continuity method.")
+    video = int(shot.get("context_length", legacy_frames))
+    if video not in GRID:
+        raise ValueError("Video context must be 5, 22, 39 or 56 frames.")
+    audio = int(shot.get("audio_context_length", video))
+    if audio not in (0, *GRID):
+        raise ValueError("Audio context must be off, 5, 22, 39 or 56 frames.")
+    if shot.get("continuity") is False or shot.get("locked") or shot.get("source"):
+        mode = MODES[0]
+    if mode == MODES[0]:
+        video = audio = 0
+    elif mode == MODES[3]:
+        video, audio = 1, 0
+    return {"mode": mode, "video_frames": video, "audio_frames": min(audio, video)}

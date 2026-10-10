@@ -39,7 +39,7 @@
         "unet_name": "MiniMax H3/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
         "weight_dtype": "default"
       },
-      "title": "FL2VA · Load Diffusion Model"
+      "title": "FL2VA \u00b7 Load Diffusion Model"
     },
     {
       "id": 2,
@@ -77,7 +77,7 @@
         "unet_name": "MiniMax H3/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
         "weight_dtype": "default"
       },
-      "title": "REF2VA · Load Diffusion Model"
+      "title": "REF2VA \u00b7 Load Diffusion Model"
     },
     {
       "id": 3,
@@ -116,7 +116,7 @@
         "type": "minimax",
         "device": "default"
       },
-      "title": "Text encoder · Load CLIP"
+      "title": "Text encoder \u00b7 Load CLIP"
     },
     {
       "id": 7,
@@ -151,7 +151,7 @@
       "widgets_values_named": {
         "vae_name": "MiniMax H3/minimax_h3_video_vae_fp16.safetensors"
       },
-      "title": "Video · Load VAE"
+      "title": "Video \u00b7 Load VAE"
     },
     {
       "id": 8,
@@ -186,7 +186,7 @@
       "widgets_values_named": {
         "vae_name": "MiniMax H3/minimax_h3_audio_vae_fp32.safetensors"
       },
-      "title": "Audio · Load VAE"
+      "title": "Audio \u00b7 Load VAE"
     },
     {
       "id": 4,
@@ -240,10 +240,7 @@
         12,
         3,
         0,
-        "fixed",
-        "Next shot",
-        "Independent (No Continuity)",
-        "22"
+        "fixed"
       ],
       "widgets_values_named": {
         "width": 960,
@@ -256,10 +253,7 @@
         "shift_video": 12,
         "shift_audio": 3,
         "seed": 0,
-        "control_after_generate": "fixed",
-        "continuity_mode": "Independent (No Continuity)",
-        "context_length": "22",
-        "generation_mode": "Next shot"
+        "control_after_generate": "fixed"
       }
     },
     {
@@ -271,7 +265,7 @@
       ],
       "size": [
         1280,
-        980
+        1180
       ],
       "flags": {},
       "order": 15,
@@ -426,11 +420,11 @@
         }
       ],
       "widgets_values": [
-        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
+        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
         "{}"
       ],
       "widgets_values_named": {
-        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true}], \"references\": []}",
+        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Shot 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your shot, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
         "builder_state": "{}"
       },
       "title": "MiniMax H3 Master Node"
@@ -502,7 +496,7 @@
         "use_int8_qk": true,
         "engine": "comfy_kitchen"
       },
-      "title": "FL2VA · H3 SLA Attention"
+      "title": "FL2VA \u00b7 H3 SLA Attention"
     },
     {
       "id": 12,
@@ -571,7 +565,7 @@
         "use_int8_qk": true,
         "engine": "comfy_kitchen"
       },
-      "title": "REF2VA · H3 SLA Attention"
+      "title": "REF2VA \u00b7 H3 SLA Attention"
     },
     {
       "id": 13,
@@ -620,7 +614,7 @@
         "lora_name": "MiniMax H3/minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
         "strength_model": 1
       },
-      "title": "REF2VA · Turbo LoRA"
+      "title": "REF2VA \u00b7 Turbo LoRA"
     },
     {
       "id": 14,
@@ -669,7 +663,7 @@
           ]
         }
       ],
-      "title": "REF2VA · Base / Turbo LoRA",
+      "title": "REF2VA \u00b7 Base / Turbo LoRA",
       "properties": {
         "cnr_id": "comfy-core",
         "ver": "0.33.0",
@@ -855,7 +849,7 @@
       },
       "widgets_values": [],
       "widgets_values_named": {},
-      "title": "Smart Preview · Latest clip / Full video"
+      "title": "Smart Preview \u00b7 Latest clip / Full video"
     },
     {
       "id": 22,
@@ -881,7 +875,7 @@
           ]
         }
       ],
-      "title": "Base model · sampling steps",
+      "title": "Base model \u00b7 sampling steps",
       "properties": {
         "cnr_id": "comfy-core",
         "Node name for S&R": "PrimitiveInt"
@@ -919,7 +913,7 @@
           ]
         }
       ],
-      "title": "Turbo LoRA · sampling steps",
+      "title": "Turbo LoRA \u00b7 sampling steps",
       "properties": {
         "cnr_id": "comfy-core",
         "Node name for S&R": "PrimitiveInt"

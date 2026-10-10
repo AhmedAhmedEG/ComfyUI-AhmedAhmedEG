@@ -27,9 +27,8 @@ class DocumentedControls(unittest.TestCase):
 
     def test_generation_mode_is_an_ordinary_visible_combo(self):
         schema = collect()['MiniMaxH3DirectorSettings']
-        mode = next(field for field in schema['inputs'] if field['name']=='generation_mode')
-        self.assertEqual(mode['choices'],['Next shot','All shots','Conditioning only'])
-        self.assertFalse(mode['connection'])
+        names = {field['name'] for field in schema['inputs']}
+        self.assertFalse(names & {'generation_mode', 'continuity_mode', 'context_length'})
         source = (Path(__file__).resolve().parent.parent/'web/js/minimax_director.js').read_text(encoding='utf8')
         self.assertEqual(set(re.findall(r'hideWidget\((\w+)\)',source)),
             {'timelineWidget','builderWidget','promptWidget','durationWidget'})

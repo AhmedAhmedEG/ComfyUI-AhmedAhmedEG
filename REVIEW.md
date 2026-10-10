@@ -212,3 +212,9 @@ Fixed Settings migration for named legacy arrays and current arrays missing the 
 ## Ruler and playhead alignment (1.1.3)
 
 The ruler fills the timeline horizon and ends at a labeled whole interval, including empty space after the final shot. Clips and scrubbing share its time scale. The playhead origin follows the rendered header width rather than the obsolete 130px offset; it reaches zero and the entire visible ruler remains scrubbable. Regression coverage verifies zero, interval endpoint, empty-space scrubbing and 155% graph zoom.
+
+## Discoverable panels and per-shot continuity (1.2.0)
+
+Replaced inline advanced controls with full-width bordered expandable sections, labeled fields, help text and grid alignment. Project tools, Prompt Forge, RefMods, shot model/anchor/grading and LoRA controls are discoverable through prominent headers; the editor scrolls vertically instead of clipping expanded tools. Generation mode is now an explicit Master toolbar control; Settings contains sampling/canvas only. Saved workflow migration moves the former global controls into connected Master state.
+
+Continuity method and video/audio frame contexts are per shot. Audio may be disabled independently and is capped to usable video context; latent carry also receives the selected audio pin/count and seam redraw. Timeline overlays show planned context borrowing, capped to authored predecessor availability; native frame rounding can change actual availability. Completed/cached shots retain the maximum supported 56-frame tail so successors choose their own context. Settings/starter schemas, manual sections and tests were updated. 118 backend tests and editor/preview/docs checks pass; no GPU generation was performed.

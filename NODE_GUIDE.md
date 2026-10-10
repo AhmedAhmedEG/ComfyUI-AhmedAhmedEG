@@ -22,7 +22,7 @@ Use ComfyUI's stock nodes around them:
 | Load CLIP, type `minimax` | `clip` |
 | Load VAE ×2 | Video VAE → `video_vae`; audio VAE → `audio_vae` |
 
-The starter connects Master `project_state` to **Smart Preview**. Latest clip / Full video and autoplay live in that separate player. Reference Pack is the only authoring source for references, with optional names. The starter also includes both H3 SLA Attention patches and the Boolean switch for REF2VA Turbo LoRA and automatic 25/8-step selection. Settings has one Generation mode: Next shot / All shots / Conditioning only. Raw / Structured is per shot.
+The starter connects Master `project_state` to **Smart Preview**. Latest clip / Full video and autoplay live in that separate player. Reference Pack is the only authoring source for references, with optional names. The starter also includes both H3 SLA Attention patches and the Boolean switch for REF2VA Turbo LoRA and automatic 25/8-step selection. Master has one Generation mode: Next shot / All shots / Conditioning only. Raw / Structured is per shot.
 
 ## Optional feature tools — fifteen types
 
@@ -80,4 +80,4 @@ or deprecated registrations are kept in the node library.
 
 ## Detailed technical manual
 
-The [offline documentation index](docs/index.html) links to all 23 node chapters. Start with [Getting Started](docs/getting-started.html), then [Architecture and data](docs/architecture.html). Each node chapter explains its algorithm, inputs and outputs, settings, examples, dependencies and limitations. [Director Settings](docs/nodes/director-settings.html) explains Generation mode and all continuity modes in detail.
+The [offline documentation index](docs/index.html) links to all 23 node chapters. Start with [Getting Started](docs/getting-started.html), then [Architecture and data](docs/architecture.html). Each node chapter explains its algorithm, inputs and outputs, settings, examples, dependencies and limitations. [Master Node](docs/nodes/master-node.html) explains Generation mode and all continuity modes in detail.
