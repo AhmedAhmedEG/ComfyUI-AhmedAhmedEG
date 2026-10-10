@@ -1881,6 +1881,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 }
 .mmx-time-tick.major::after { height: 10px; }
 .mmx-time-tick span { padding-left: 4px; }
+.mmx-time-tick.endpoint { width:0; }
+.mmx-time-tick.endpoint span { position:absolute; right:0; padding-left:0; padding-right:4px; }
 
 /* Editor finish: one node surface, readable controls, restrained violet accents. */
 .mmx-director-root {
@@ -3045,63 +3047,59 @@ function mountDirectorUI(node) {
     return `${pad(hh)}:${pad(mm)}:${pad(ss)}:${pad(ff)}`;
   };
 
-  // Draw 24px Time Ruler
+  // Share one time scale between clips, ruler and scrubbing. Round the visible
+  // horizon to a labeled interval, rather than stopping labels at the last shot.
+  const timelineGeometry = () => {
+    const origin = (rulerHeader.offsetWidth || 112) + 6;
+    const viewport = Math.max(1, (multitrackPanel.clientWidth || 930) - origin - 6);
+    const duration = timelineState.clips.reduce((sum, clip) => sum + (parseFloat(clip.duration) || 5), 0);
+    const nominalScale = 64 * zoomLevel;
+    const majorStep = nominalScale > 40 ? 1 : 2;
+    const width = Math.max(viewport, duration * nominalScale + 100);
+    const end = Math.max(majorStep, Math.ceil(width / nominalScale / majorStep) * majorStep);
+    return {origin, width, end, duration, majorStep, pxPerSec: width / end};
+  };
+
   const drawRuler = () => {
-    const totalClipsWidth = timelineState.clips.reduce((acc, c) => {
-      const dur = parseFloat(c.duration) || 5.0;
-      return acc + Math.max(32, Math.round(dur * 64 * zoomLevel)) + 4;
-    }, 0);
-    // Measure the viewport, not the ruler child, to avoid resize feedback.
-    const laneW = Math.max(1, (multitrackPanel.clientWidth || 930) - 130);
-    const w = Math.max(laneW, totalClipsWidth + 100);
-    rulerTicks.style.width = `${w}px`;
+    const {origin, width, end, majorStep, pxPerSec} = timelineGeometry();
+    rulerTicks.style.width = `${width}px`;
     rulerTicks.replaceChildren();
-
-    const totalDuration = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
-    const effectiveTotal = Math.max(totalDuration, 1.0);
-    const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (w / effectiveTotal);
-    multitrackPanel.style.setProperty("--mmx-grid-step", `${pxPerSec}px`);
-
-    const stepSec = pxPerSec > 80 ? 0.5 : (pxPerSec > 40 ? 1.0 : 2.0);
+    multitrackPanel.style.setProperty("--mmx-grid-step", `${majorStep * pxPerSec}px`);
+    // Keep every reference lane aligned with the same shot boundaries.
+    [shotsLane, imagesLane, videosLane, audiosLane].forEach(lane => {
+      [...lane.querySelectorAll('.mmx-subtrack-block')].forEach((block, index) => {
+        const clip = timelineState.clips[index];
+        if (clip) block.style.width = `${(parseFloat(clip.duration) || 5) * pxPerSec - 4}px`;
+      });
+    });
+    const stepSec = majorStep / 2;
     const ticks = document.createDocumentFragment();
-    for (let seconds = 0; seconds <= effectiveTotal; seconds += stepSec) {
-      const x = Math.round(seconds * pxPerSec);
-      if (x > w) break;
-      const major = Math.abs(seconds - Math.round(seconds)) < 0.01;
+    for (let index = 0; index <= Math.round(end / stepSec); index++) {
+      const seconds = index * stepSec;
+      const major = index % 2 === 0;
       const tick = document.createElement("div");
-      tick.className = `mmx-time-tick${major ? " major" : ""}`;
-      tick.style.left = `${x}px`;
+      tick.className = `mmx-time-tick${major ? " major" : ""}${seconds === end ? " endpoint" : ""}`;
+      tick.style.left = `${seconds * pxPerSec}px`;
       if (major) {
         const label = document.createElement("span");
-        label.textContent = `${Math.round(seconds)}s`;
+        label.textContent = `${seconds}s`;
         tick.appendChild(label);
       }
       ticks.appendChild(tick);
     }
     rulerTicks.appendChild(ticks);
-
-    // Update playhead needle position (offset by sticky header 124px + lane padding 6px = 130px)
-    const playheadX = Math.max(0, Math.min(w, playheadSeconds * pxPerSec));
-    playheadNeedle.style.left = `${130 + playheadX}px`;
+    const playheadX = Math.max(0, Math.min(width, playheadSeconds * pxPerSec));
+    playheadNeedle.style.left = `${origin + playheadX}px`;
     playheadNeedle.style.height = `${multitrackPanel.scrollHeight || 215}px`;
     timecodeBadge.textContent = formatTimecode(playheadSeconds, 24);
   };
 
-  // Ruler & Playhead scrub interaction (Premiere-style full timeline scrubbing)
   let isScrubbing = false;
   const updateScrubFromClientX = (clientX) => {
     const rect = rulerTicks.getBoundingClientRect();
-    // Convert screen pixels back to node coordinates at any graph/browser zoom.
-    const laneWidth = parseFloat(rulerTicks.style.width) || rect.width;
-    const x = Math.max(0, Math.min(laneWidth, (clientX - rect.left) * laneWidth / (rect.width || 1)));
-    const totalDuration = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
-    const effectiveTotal = Math.max(totalDuration, 1.0);
-    const totalClipsWidth = timelineState.clips.reduce((acc, c) => {
-      const dur = parseFloat(c.duration) || 5.0;
-      return acc + Math.max(32, Math.round(dur * 64 * zoomLevel)) + 4;
-    }, 0);
-    const pxPerSec = totalClipsWidth > 0 ? (totalClipsWidth / effectiveTotal) : (laneWidth / effectiveTotal);
-    playheadSeconds = Math.max(0, Math.min(totalDuration, x / pxPerSec));
+    const {width, end, pxPerSec} = timelineGeometry();
+    const x = Math.max(0, Math.min(width, (clientX - rect.left) * width / (rect.width || 1)));
+    playheadSeconds = Math.max(0, Math.min(end, x / pxPerSec));
     drawRuler();
   };
 
@@ -3358,7 +3356,7 @@ function mountDirectorUI(node) {
     // 2. Render Clips across all 4 Sub-Tracks
     timelineState.clips.forEach((clip, idx) => {
       const dur = parseFloat(clip.duration) || 5.0;
-      const baseWidth = Math.max(32, Math.round(dur * 64 * zoomLevel));
+      const baseWidth = dur * timelineGeometry().pxPerSec - 4;
       const isActive = clip.id === activeClipId;
       const isValidated = !!clip.validated;
 
@@ -3465,14 +3463,15 @@ function mountDirectorUI(node) {
         startX = e.clientX;
         startDuration = parseFloat(clip.duration) || 5.0;
         const scale = shotBlock.getBoundingClientRect().width / (shotBlock.offsetWidth || baseWidth) || 1;
+        const resizeScale = timelineGeometry().pxPerSec;
 
         const onMouseMove = (moveEvt) => {
           const deltaX = moveEvt.clientX - startX;
-          const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + deltaX / (scale * 64 * zoomLevel)) * 10) / 10));
+          const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + deltaX / (scale * resizeScale)) * 10) / 10));
           clip.duration = newDur;
           if (newDur !== startDuration) invalidateFrom(idx);
           durTag.textContent = `${newDur.toFixed(1)}s`;
-          const newWidth = Math.max(32, Math.round(newDur * 64 * zoomLevel));
+          const newWidth = newDur * resizeScale - 4;
 
           // Synchronously resize all 4 track blocks in real time!
           shotBlock.style.width = `${newWidth}px`;

@@ -208,3 +208,7 @@ The prompt editor no longer stretches to fill the node. Shot cards start at a re
 Added authored technical chapters for all 23 public nodes and an architecture chapter, with execution contracts, temporal/spatial math, cache/state lifecycles, practical examples, dependencies and provider-specific limitations. Schema tables remain a quick reference after the technical explanation. Offline links, anchors, navigation and rendered layout were checked.
 
 Fixed Settings migration for named legacy arrays and current arrays missing the seed control; group reference sizing previously ignored by conditioning; graph-only group tensors leaking into autosave/project JSON; pool-only original-canvas discovery; a removed upload-control variable breaking the locked-source inspector; locked-source edge resizing; and Prompt Forge pool metadata/context invalidation. Runtime and editor regressions cover these defects. All 114 backend tests pass. Generation mode is declared as an ordinary visible combo and appears in a fresh native frontend; the precise cause of the user screenshot missing it is not established.
+
+## Ruler and playhead alignment (1.1.3)
+
+The ruler fills the timeline horizon and ends at a labeled whole interval, including empty space after the final shot. Clips and scrubbing share its time scale. The playhead origin follows the rendered header width rather than the obsolete 130px offset; it reaches zero and the entire visible ruler remains scrubbable. Regression coverage verifies zero, interval endpoint, empty-space scrubbing and 155% graph zoom.
