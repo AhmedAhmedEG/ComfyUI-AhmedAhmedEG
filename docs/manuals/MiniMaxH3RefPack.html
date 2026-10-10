@@ -11,7 +11,7 @@ Load Image: Room  ─→ Pool A.image_2   image_2_name = Room
 Pool A.ref_pack ─→ Pool B.ref_pack_optional
 Load Audio: Voice ─→ Pool B.audio_1  audio_1_name = Voice
 Pool B.ref_pack ─→ Master.ref_pack</code></pre>
-<p>The pool can grow by chaining, but a single generated shot still has task/model reference limits. Pool capacity and per-shot conditioning capacity are different constraints. The editor discovers connected graph references without first running the entire generation pipeline; Sync Refs refreshes that view after changing loaders/names.</p>
+<p>The pool can grow by chaining, but a single generated shot still has task/model reference limits. Pool capacity and per-shot conditioning capacity are different constraints. The editor discovers connected graph references without first running the entire generation pipeline; Refresh pool beside the reference list refreshes that view after changing loaders/names.</p>
 <h2 id="pool-example-and-limits">Assigning and troubleshooting</h2>
 <ol><li>Connect two real images and give them useful names.</li><li>Choose REF2VA on a Master shot; select only the assets for that shot.</li><li>Read the shot's Picture-token labels and write a prompt using those positions.</li><li>For a different shot, choose its own subset. Changing the name helps identification but does not approve a take.</li></ol>
 <p>A newly installed loader may supply pixels successfully while its file metadata is not recognizable to the editor's graph-discovery code. In that case a missing thumbnail is different from missing execution data. Inspect the connected socket/loader and refresh references. Audio and video previews need actual resolvable source media; static placeholder rows must not be treated as evidence of a connected asset.</p>

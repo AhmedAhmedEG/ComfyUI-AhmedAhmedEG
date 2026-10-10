@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -38,7 +38,7 @@
         "MiniMaxH3Checkpoint",
         "MiniMaxH3ProjectVideo"
       ],
-      "extra": "<h2 id=\"editor\">Editing workspace</h2><p>The timeline comes first. Select a clip to edit its name and task mode, then write its prompt in the large left-hand area. Duration, seed, seed behavior and clip audio stay below the prompt. Drag the clip body to reorder, drag the right edge to resize, or use × / Delete Clip to remove it. Dropping outside cancels safely.</p><p>Reference Pack is the sole source of reference assets. Connect loaders to the pool and optionally name the assets. Assign actual pool items to the selected clip to reveal its prompt tokens. Empty reference tracks remain hidden; text-only mode has no reference picker.</p><h3>Controls on the right</h3><p>Continuity configures context from a preceding clip or a chosen video. Look holds model overrides, interior reference anchors and color grading. LoRAs contains adapters for the selected clip. Project holds the shared prompt, audio finishing and Files &amp; recovery. The toolbar Project settings button opens that same Project tab. These tabs use a bounded, independently scrolling panel, so their contents do not move the writing area. Help reveals additional explanations for each field; every field label remains visible without Help.</p><p>Generation mode stays above the timeline. Preview scope and autoplay belong to the separate Smart Preview. Canvas and sampling belong to Settings. Use Add video clip to put existing footage in the sequence; use Continue from video in Continuity to generate a new continuation without appending the source file.</p>",
+      "extra": "<h2 id=\"editor\">Editing workspace</h2><p>The timeline comes first. Select a clip to edit its name and task mode, then write its prompt in the large left-hand area. Duration, seed, seed behavior and clip audio stay below the prompt. Drag the clip body to reorder, drag the right edge to resize, or use × / Delete Clip to remove it. Dropping outside cancels safely.</p><p>Reference Pack is the sole source of reference assets. Connect loaders to the pool and optionally name the assets. Assign actual pool items to the selected clip to reveal its prompt tokens. Empty reference tracks remain hidden; text-only mode has no reference picker.</p><h3>Controls on the right</h3><p>Continuity configures context from a preceding clip or a chosen video. Look holds model overrides, interior reference anchors and color grading. LoRAs contains adapters for the selected clip. Project holds the shared prompt, audio finishing and Files &amp; recovery. Project configuration has one entry point: the Project tab. These tabs use a bounded, independently scrolling panel, so their contents do not move the writing area. Help reveals additional explanations for each field; every field label remains visible without Help.</p><p>Generation mode stays above the timeline. Preview scope and autoplay belong to the separate Smart Preview. Canvas and sampling belong to Settings. Use Add video clip to put existing footage in the sequence; use Continue from video in Continuity to generate a new continuation without appending the source file.</p>",
       "control_descriptions": {},
       "output_descriptions": [
         "Assembled RGB frames for the Output selection.",
@@ -389,7 +389,7 @@
       "steps": [
         "Connect reference media to the matching sockets.",
         "Chain pools through ref_pack_optional if more graph inputs are needed.",
-        "Connect ref_pack to Master ref_pack, press Sync Refs, and assign assets to the intended shot.",
+        "Connect ref_pack to Master ref_pack, use Refresh pool beside the reference list if upstream files or names have changed, and assign assets to the intended shot.",
         "Give connected references optional names such as Alice or Courtyard. Only connected items are listed; assign them to a shot to show their prompt tokens."
       ],
       "wiring": [
@@ -411,7 +411,7 @@
       ],
       "beginner": {
         "meaning": "This collects images, video frames, audio and reference bundles from graph connections into a shared shelf. The Master can choose items from that shelf for each shot.",
-        "first_use": "Connect media to the pool, then connect ref_pack to the Master’s ref_pack input. In the Master, click Sync Refs and assign the desired items to a shot. Adding media to the pool alone does not mean every shot will use it."
+        "first_use": "Connect media to the pool, then connect ref_pack to the Master’s ref_pack input. In the Master, use Refresh pool beside the reference list if upstream files or names have changed and assign the desired items to a shot. Adding media to the pool alone does not mean every shot will use it."
       }
     },
     "MiniMaxH3TailFromLatent": {

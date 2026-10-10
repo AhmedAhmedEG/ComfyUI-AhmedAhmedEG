@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.4.0** consolidates the MiniMax/video production features of
+Version **1.4.1** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -54,7 +54,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.4.0 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.4.1 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.
@@ -150,7 +150,7 @@ Install only the providers you use in ComfyUI's environment:
 
 ## Validation and license
 
-The 1.4.0 review passes **124 regression tests**, with editor, preview and documentation checks. The remote installation and starter graph contracts are verified. GPU sampling, actual optional model weights and RTX SDK execution remain unverified. Code consolidation does not establish visual quality or performance.
+The 1.4.1 review passes **124 regression tests**, with editor, preview and documentation checks. The remote installation and starter graph contracts are verified. GPU sampling, actual optional model weights and RTX SDK execution remain unverified. Code consolidation does not establish visual quality or performance.
 
 ```sh
 python -m unittest discover -s tests -v

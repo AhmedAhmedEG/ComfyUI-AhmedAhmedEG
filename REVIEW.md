@@ -239,3 +239,7 @@ Continuity method and video/audio frame contexts are per shot. Audio may be disa
 - Optional Help reveals longer explanations while control labels stay visible. Video continuation is the first field in its tab. Clip approval is now a keyboard-accessible button.
 - Updated beginner instructions that still pointed to Generation mode in Settings; rebuilt the per-node documentation and actual frontend captures.
 - Editor interactions, ordering/resize/drag cancellation, file continuation, serialization, language, tool navigation and single ownership checks pass. Preview suites, 124 backend regression tests and documentation/workflow contract checks pass.
+
+## 1.4.1 — toolbar ownership
+
+Removed the duplicate Project shortcut. Consolidated JSON and portable archive imports into one action and exports into one action with an Include media option in Project / Files & recovery. Moved the selected-clip eligibility filter beside Generation mode and upstream refresh beside the reference pool. Timeline navigation is a bordered strip with footage insertion, totals, timecode, zoom and language. No backend generation semantics changed. Editor regressions cover ownership and both export routes.
