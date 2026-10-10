@@ -63,7 +63,7 @@
       "behavior": [
         "Returns one configuration dictionary. This node does not sample or decode media.",
         "The Master uses this configuration as its baseline; active timeline resolution controls can override width and height.",
-        "When settings_optional is connected, incoming values take precedence over this node’s values."
+        "When settings_optional is connected, this node overrides the matching canvas and sampling values while preserving other incoming settings."
       ],
       "steps": [
         "Connect config to Master config.",
@@ -74,8 +74,8 @@
         "config → Master config"
       ],
       "notes": [
-        "The newly created node defaults to res_multistep, structured prompting and chained continuity. The starter intentionally uses different initial selections.",
-        "context_length choices are pixel-frame context lengths, despite the legacy tooltip mentioning latent frames.",
+        "A newly created node defaults to 1344 × 768, res_multistep and chained continuity. The starter uses 960 × 544, euler and Independent for the first test.",
+        "context_length choices are video-frame context lengths, unrelated to language-model context tokens.",
         "Changing export playback FPS uses Output Processing; the Master generation frame_rate must stay at 24."
       ],
       "related": [
@@ -839,7 +839,7 @@
         "MiniMaxH3MasterNode",
         "MiniMaxH3ProjectVideo"
       ],
-      "extra": "<h2 id=\"player-controls\">Player controls</h2><ul><li><b>Latest clip:</b> download only the newest completed take.</li><li><b>Full video:</b> explicitly request the completed sequence.</li><li><b>Autoplay:</b> play new media when the browser permits; native play controls remain available.</li><li><b>Refresh:</b> retry the current preview without generating another shot.</li><li><b>Save preview:</b> download the currently selected preview copy.</li></ul>",
+      "extra": "<figure><a href=\"../smart-preview.png\"><img class=\"editor-shot\" src=\"../smart-preview.png\" alt=\"Actual separate Smart Preview connected to Master project_state\"></a><figcaption>The separate player in the starter, before the first generated clip.</figcaption></figure><h2 id=\"player-controls\">Player controls</h2><ul><li><b>Latest clip:</b> download only the newest completed take.</li><li><b>Full video:</b> explicitly request the completed sequence.</li><li><b>Autoplay:</b> play new media when the browser permits; native play controls remain available.</li><li><b>Refresh:</b> retry the current preview without generating another shot.</li><li><b>Save preview:</b> download the currently selected preview copy.</li></ul>",
       "control_descriptions": {},
       "output_descriptions": [],
       "beginner": {

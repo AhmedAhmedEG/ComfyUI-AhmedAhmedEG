@@ -94,6 +94,14 @@ class RuntimeContracts(unittest.TestCase):
         options.update(kwargs)
         return self.node.execute(**options)
 
+    def test_hidden_execution_graph_is_not_used_as_prompt(self):
+        result = self.execute(
+            [{"id": "one", "type": "T2VA", "duration": 1., "prompt": ""}],
+            config={"project_id": "regression", "run_mode": "full_batch", "prompt": "walk"},
+            prompt={"private_graph_marker": {"class_type": "MiniMaxH3MasterNode"}},
+        )
+        self.assertEqual(result[5], "walk")
+
     def test_sampler_tensor_contract_and_metadata(self):
         tensor = torch.zeros((1, 24, 2, 2, 2))
         mask = torch.ones((1, 1, 2, 2, 2))

@@ -215,7 +215,9 @@ class MiniMaxH3MasterDirector:
         run_mode = str(kwargs.get("run_mode", cfg_dict.get("run_mode", "full_batch")))
         continuity_mode = str(kwargs.get("continuity_mode", cfg_dict.get("continuity_mode", "Motion Context (Chained)")))
         context_length = str(kwargs.get("context_length", cfg_dict.get("context_length", "22")))
-        prompt = str(kwargs.get("prompt", cfg_dict.get("prompt", "")))
+        prompt_value = kwargs.get("prompt", cfg_dict.get("prompt", ""))
+        # ComfyUI's hidden PROMPT is the execution graph, not user prompt text.
+        prompt = str(cfg_dict.get("prompt", "") if isinstance(prompt_value, dict) else prompt_value)
         mode = kwargs.get("mode", cfg_dict.get("mode", None))
         try:
             timeline = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data

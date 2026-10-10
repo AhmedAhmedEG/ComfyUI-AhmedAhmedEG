@@ -2055,6 +2055,10 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-reference-dialog::backdrop { background:#0009; }
 .mmx-reference-dialog img { max-width:80vw;max-height:75vh;display:block;object-fit:contain; }
 .mmx-director-root .mmx-track-row[hidden] { display:none; }
+
+.mmx-director-root .mmx-multitrack-panel { min-height:0; padding:0; border-radius:2px; background:#25272b; }
+.mmx-director-root .mmx-shot-top-bar .mmx-clip-mode-badge { display:none; }
+.mmx-director-root .mmx-clip-val-badge { font-size:11px!important; }
 `;
 
 function injectCSS() {
@@ -3391,7 +3395,7 @@ function mountDirectorUI(node) {
         valBadge.style.border = "1px solid rgba(16, 185, 129, 0.4)";
         valBadge.style.borderRadius = "3px";
         valBadge.style.padding = "1px 4px";
-        valBadge.textContent = "✓ Validated";
+        valBadge.textContent = "✓";
         valBadge.title = "Shot is validated (cached and skipped on re-render)";
         shotTopBar.appendChild(valBadge);
       }
@@ -3724,7 +3728,7 @@ function mountDirectorUI(node) {
     shotLabel.style.fontSize = "11px";
     shotLabel.style.color = "#94a3b8";
     const clipIdx = timelineState.clips.indexOf(activeClip) + 1;
-    shotLabel.textContent = `Shot ${clipIdx}:`;
+    shotLabel.textContent = "Shot:";
     titleWrap.appendChild(shotLabel);
 
     const nameInput = document.createElement("input");
