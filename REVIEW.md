@@ -243,3 +243,7 @@ Continuity method and video/audio frame contexts are per shot. Audio may be disa
 ## 1.4.1 — toolbar ownership
 
 Removed the duplicate Project shortcut. Consolidated JSON and portable archive imports into one action and exports into one action with an Include media option in Project / Files & recovery. Moved the selected-clip eligibility filter beside Generation mode and upstream refresh beside the reference pool. Timeline navigation is a bordered strip with footage insertion, totals, timecode, zoom and language. No backend generation semantics changed. Editor regressions cover ownership and both export routes.
+
+## 1.4.2 — project scope and fixed clip types
+
+Moved global Project configuration above the timeline into a wide, collapsible section with horizontal prompt/audio/file groups. The clip sidebar contains only Continuity, Look and LoRAs. The project DOM and expansion state survive clip changes and empty timelines. Removed in-place task-type editing; the existing Add Clip picker selects types before creation. Tests cover fixed types, clean new references and project ownership.

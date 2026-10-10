@@ -1,6 +1,15 @@
 // UI-only translations. Project fields, mode identifiers and user text stay canonical.
 const labels = {
   "Project tools": ["项目工具", "أدوات المشروع"],
+  "Project": ["项目", "المشروع"],
+  "All clips · shared prompt, audio & files": ["所有片段 · 共享提示词、音频和文件", "كل المقاطع · الوصف المشترك والصوت والملفات"],
+  "Audio finishing": ["音频处理", "معالجة الصوت"],
+  "Prompt defaults": ["提示词默认设置", "إعدادات الوصف المشتركة"],
+  "Refresh pool": ["刷新素材池", "تحديث المراجع"],
+  "Export project": ["导出项目", "تصدير المشروع"],
+  "Import project": ["导入项目", "استيراد المشروع"],
+  "Include media in export": ["导出时包含媒体", "تضمين الوسائط في التصدير"],
+  "Selected clips only": ["仅所选片段", "المقاطع المحددة فقط"],
   "Generate selected shots": ["生成所选镜头", "توليد اللقطات المحددة"],
   "Export with media": ["导出媒体包", "تصدير مع الوسائط"],
   "Import media pack": ["导入媒体包", "استيراد حزمة وسائط"],

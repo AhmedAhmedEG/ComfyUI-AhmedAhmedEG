@@ -85,9 +85,13 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(w.document.querySelector('.mmx-edit-main .mmx-textarea'),'Prompt remains mounted when tools change');
   chooseTool('Look').onkeydown({key:'ArrowRight',preventDefault(){}});
   assert.equal(chooseTool('LoRAs').getAttribute('aria-selected'),'true','Keyboard moves between tool tabs');
-  chooseTool('Project').click();
+  assert.equal(chooseTool('Project'),null,'Project is not a clip-specific tool');
   assert.equal(w.document.querySelectorAll('.mmx-section').length,5,'Project configuration has one surface');
-  assert(w.document.querySelector('[role=tabpanel][aria-labelledby$="project-panel-tab"] > .mmx-section-body'));
+  const globalProject=w.document.querySelector('.mmx-project-workspace');
+  assert.equal(globalProject.parentElement.className,'mmx-director-root');
+  assert(globalProject.compareDocumentPosition(w.document.querySelector('.mmx-multitrack-panel')) & w.Node.DOCUMENT_POSITION_FOLLOWING,'Project precedes the timeline');
+  assert.equal(globalProject.querySelectorAll('.mmx-project-group').length,2,'Shared prompt and audio have horizontal groups');
+  globalProject.open=true;
   const help=w.document.querySelector('.mmx-tools-heading button');help.click();
   assert(w.document.querySelector('.mmx-edit-tools').classList.contains('mmx-show-help'));
   help.click();assert.equal(help.getAttribute('aria-pressed'),'false');
@@ -113,6 +117,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(imported.source.filename,'minimax_assets/tail.mp4');
   assert.equal(imported.duration,60);
   timeline.value=JSON.stringify(initial);node.__mmxDirectorRefresh();
+  assert.strictEqual(w.document.querySelector('.mmx-project-workspace'),globalProject,'Clip changes keep the same project configuration DOM');
+  assert(globalProject.open,'Project expansion survives a clip refresh');
   const initialTags=[...w.document.querySelectorAll('.mmx-quick-tag-btn')].map(el=>el.textContent);
   assert(initialTags.some(text=>text.includes('Alice') && text.includes('<Picture 1>')));
   assert(!initialTags.some(text=>text.includes('<Video') || text.includes('<Audio') || text.includes('<Picture 2>')));
@@ -150,7 +156,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.deepStrictEqual(JSON.parse(timeline.value).clips[0].ref_ids,['image_1']);
   const language=w.document.querySelector('select[title="UI language"]');
   language.value='ar'; language.onchange();
-  assert(w.document.body.textContent.includes('أدوات المشروع'));
+  assert(w.document.querySelector('.mmx-project-workspace > summary').textContent.includes('المشروع'));
   assert(w.document.body.textContent.includes('Original user text'));
   language.value='en';language.onchange();
   w.confirm=()=>true;
@@ -207,6 +213,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(JSON.parse(timeline.value).clips[2].duration,5.5,'Resize accounts for 155% graph zoom');
   inspectorDelete().click(); inspectorDelete().click(); inspectorDelete().click();
   assert.equal(JSON.parse(timeline.value).clips.length,0,'The final shot can be deleted');
+  assert.strictEqual(editorRoot.querySelector('.mmx-project-workspace'),globalProject,'Global settings remain available without any clips');
+  assert(!editorRoot.querySelector('.mmx-edit-tools'),'No clip-specific controls are offered without a selected clip');
   node.__mmxDirectorRefresh();
   assert.equal(JSON.parse(timeline.value).clips.length,0,'Reload keeps an intentionally empty timeline');
   assert(editorRoot.textContent.includes('No clips.'));
@@ -214,7 +222,13 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const button=text=>[...w.document.querySelectorAll('button')].find(element=>element.textContent===text);
   assert(!editorRoot.textContent.includes('Prompt Forge'));
   assert(!editorRoot.textContent.includes('RefMod library'));
-  const clipMode=editorRoot.querySelector('.mmx-inspector-header select');clipMode.value='T2V';clipMode.onchange();
+  assert.equal(editorRoot.querySelector('.mmx-inspector-title select'),null,'Existing clip types cannot be edited');
+  editorRoot.querySelector('.mmx-add-clip-card').click();
+  w.document.querySelector('.mmx-type-modal-btn[data-type="T2V"]').click();
+  const newClip=JSON.parse(timeline.value).clips.at(-1);
+  assert.equal(newClip.type,'T2V');assert.deepStrictEqual(newClip.ref_ids,[],'New clips do not inherit incompatible references');
+  assert.equal(JSON.parse(timeline.value).clips[0].type,initial.clips[0].type,'Adding a new task type preserves the original clip');
+  assert(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('Text to Video'));
   assert(editorRoot.querySelector('.mmx-local-refs-pool').hidden,'Text-only clips do not offer references');
   assert.strictEqual(problems.length,0,problems.join('\n'));
   assert.equal(editorRoot.querySelector('.mmx-smart-preview'),null,'Preview is a separate node');

@@ -2198,9 +2198,25 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-generation-bar > label:not(.mmx-field) { border-left:1px solid #536473;padding-left:14px;font-size:13px!important;white-space:nowrap; }
 .mmx-director-root .mmx-local-refs-title { align-items:center;gap:8px;flex-wrap:wrap; }
 .mmx-director-root .mmx-local-refs-title button { margin-left:auto;font-size:12px!important;padding:4px 8px; }
-.mmx-director-root .mmx-export-options { display:flex!important;flex-wrap:wrap;align-items:center;gap:8px!important; }
+.mmx-director-root .mmx-export-options { display:flex!important;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px!important; }
 .mmx-director-root .mmx-export-options input { width:16px!important;min-width:16px;height:16px;accent-color:#7eafcf; }
 .mmx-director-root .mmx-export-options small { flex-basis:100%; }
+.mmx-director-root .mmx-project-workspace { border:1px solid #4b5966;border-radius:8px;background:#252b32; }
+.mmx-director-root .mmx-project-workspace > summary { display:flex;align-items:center;gap:14px;padding:12px 14px;font-weight:600;cursor:pointer;list-style:none; }
+.mmx-director-root .mmx-project-workspace > summary::after { content:'+';margin-left:auto;font-size:20px;color:#a9c5db; }
+.mmx-director-root .mmx-project-workspace[open] > summary::after { content:'−'; }
+.mmx-director-root .mmx-project-workspace > summary span { font-size:12px;font-weight:400;color:#b4c2cf; }
+.mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr);gap:16px;padding:14px;border-top:1px solid #4b5966; }
+.mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:auto;align-self:start; }
+.mmx-director-root .mmx-project-group { display:flex;flex-direction:column;gap:12px;min-width:0; }
+.mmx-director-root .mmx-project-group > h3 { font-size:13px;margin:0;color:#c6d8e7; }
+.mmx-director-root .mmx-clip-type-label { display:inline-flex;align-items:center;padding:5px 10px;border:1px solid #506477;border-radius:5px;background:#2b3a47;color:#cce0ef;font-size:13px; }
+.mmx-director-root .mmx-project-group textarea { min-height:96px;resize:vertical; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:1fr;max-height:260px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain; }
+.mmx-director-root .mmx-project-workspace .mmx-section-intro { grid-column:1/-1;margin:0; }
+.mmx-director-root .mmx-project-workspace small { display:block; }
+@container (max-width:900px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:repeat(2,minmax(0,1fr)); } .mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:1/-1; } }
+@container (max-width:600px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:1fr; } .mmx-project-workspace > summary span { display:none; } }
 
 `;
 
@@ -2823,7 +2839,8 @@ function mountDirectorUI(node) {
     section.append(body);
   };
   const projectTools = document.createElement("details");
-  const projectHeading = document.createElement("summary"); projectHeading.textContent = "Project tools";
+  const projectHeading = document.createElement("summary"); projectHeading.textContent = "Project";
+  const projectScope=document.createElement("span");projectScope.textContent="All clips · shared prompt, audio & files";projectHeading.append(projectScope);
   projectTools.appendChild(projectHeading);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
@@ -3003,10 +3020,18 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.1";
+  generationBar.dataset.version="1.4.2";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
   finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
+  projectTools.classList.add("mmx-project-workspace");
+  const projectBody=projectTools.querySelector(":scope > .mmx-section-body");
+  const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
+  const promptGroup=group("Prompt defaults",sharedPrompt.closest(".mmx-field"),sharedPolicy.closest(".mmx-field"));
+  const audioGroup=group("Audio finishing",fadeLabel,gainLabel);
+  const projectFiles=projectBody.querySelector("details");
+  projectBody.append(promptGroup,audioGroup,projectFiles);
+  root.append(projectTools);
 
 
   // 2. Multi-Track Timeline Panel (4 Sub-Tracks + Ruler)
@@ -3209,7 +3234,7 @@ function mountDirectorUI(node) {
       </div>
       <div class="mmx-modal-body">
         <div style="font-size: 11px; color: #94a3b8;">
-          Choose the generation mode for this clip. Each clip can independently utilize text, start/end frames, guide videos, or multi-modal character references:
+          Choose a clip type. It stays fixed after creation. To use another type, add a new clip.
         </div>
         <div class="mmx-type-modal-grid">
           <button class="mmx-type-modal-btn" data-type="T2V">
@@ -3832,22 +3857,21 @@ function mountDirectorUI(node) {
 
   // Render Active Clip Inspector (Directly below timeline track!)
   const renderInspector = () => {
-
+    sharedPrompt.value=timelineState.shared_prompt || "";fade.value=timelineState.audio_fade_ms ?? 15;
+    gain.checked=timelineState.audio_gain_match ?? true;sharedPolicy.value=timelineState.shared_prompt_policy || "prepend";
     inspector.innerHTML = "";
     const activeClip = timelineState.clips.find((c) => c.id === activeClipId) || timelineState.clips[0];
     if (!activeClip) {
       const empty = document.createElement("p"); empty.className = "mmx-empty-timeline";
       empty.textContent = "No clips. Click + Add Clip in the timeline to begin.";
-      projectTools.hidden=false;projectTools.open=true;
-      projectTools.removeAttribute("role");projectTools.removeAttribute("aria-labelledby");
-      inspector.append(empty,projectTools); return;
+      inspector.append(empty); return;
     }
 
-    // Header: Clip Name + Mode Dropdown + Duration + Auto-Tail
+    // Header: clip name and immutable task type.
     const header = document.createElement("div");
     header.className = "mmx-inspector-header";
 
-    // Clip Name Input & Mode Select
+    // Clip name and type chosen when it was created.
     const titleWrap = document.createElement("div");
     titleWrap.className = "mmx-inspector-title";
 
@@ -3876,9 +3900,8 @@ function mountDirectorUI(node) {
     };
     titleWrap.appendChild(nameInput);
 
-    // Mode Dropdown Selector (Unified: REF2V merged into REF2VA!)
-    const modeSelect = document.createElement("select");
-    modeSelect.className = "mmx-mode-select";
+    const clipTypeLabel = document.createElement("span");
+    clipTypeLabel.className = "mmx-clip-type-label";
     const modes = [
       { id: "T2V", label: "T2V (Text to Video)" },
       { id: "I2V", label: "I2V (Image to Video)" },
@@ -3889,19 +3912,11 @@ function mountDirectorUI(node) {
       { id: "RV2V", label: "RV2V (Reference Video Edit)" },
       { id: "Image Inpaint", label: "Image Inpaint (Single Image)" },
     ];
-    modes.forEach((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.label;
-      if (activeClip.type === m.id) opt.selected = true;
-      modeSelect.appendChild(opt);
-    });
-    modeSelect.onchange = () => {
-      activeClip.type = modeSelect.value;
-      syncState();
-      renderTimeline();
-    };
-    titleWrap.appendChild(modeSelect);
+    const displayType=({T2VA:"T2V",I2VA:"I2V",FL2VA:"FL2V",L2V:"L2VA",REF2V:"REF2VA"})[activeClip.type] || activeClip.type;
+    clipTypeLabel.textContent=modes.find(mode=>mode.id===displayType)?.label || activeClip.type;
+    clipTypeLabel.dataset.type=activeClip.type;
+    clipTypeLabel.title="Clip type is fixed. Use Add Clip to create a clip with a different type.";
+    titleWrap.appendChild(clipTypeLabel);
     header.appendChild(titleWrap);
 
     // Actions group in Inspector Header (Validated Toggle + Delete Clip)
@@ -3979,7 +3994,6 @@ function mountDirectorUI(node) {
     const shotSections = document.createElement("div");
     shotSections.className = "mmx-shot-sections";
     inspector.appendChild(shotSections);
-    modeSelect.disabled = !!activeClip.locked;
     const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Clip models, guides and grading";
     shotExtras.appendChild(extrasTitle); shotSections.appendChild(shotExtras);
     const modelOverride = document.createElement("input"); modelOverride.placeholder = "Named model override";
@@ -4727,9 +4741,9 @@ function mountDirectorUI(node) {
     const helpButton=document.createElement("button");helpButton.textContent="Help";helpButton.title="Show explanations for each control";
     helpButton.setAttribute("aria-pressed",String(showToolHelp));
     helpButton.onclick=()=>{showToolHelp=!showToolHelp;tools.classList.toggle("mmx-show-help",showToolHelp);helpButton.setAttribute("aria-pressed",String(showToolHelp));};toolHeading.append(helpButton);
-    const tabs=document.createElement("div");tabs.className="mmx-tool-tabs";tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Clip and project controls");
+    const tabs=document.createElement("div");tabs.className="mmx-tool-tabs";tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Clip controls");
     shotSections.className="mmx-shot-sections mmx-tool-content";
-    const panels=[["Continuity",continuityPanel],["Look",shotExtras],["LoRAs",loraPanel],["Project",projectTools]];
+    const panels=[["Continuity",continuityPanel],["Look",shotExtras],["LoRAs",loraPanel]];
     const canContinue=!continuityPanel.hidden;
     if(activeToolTab==="Continuity"&&!canContinue)activeToolTab="Look";
     const selectTool=label=>{
@@ -4740,11 +4754,8 @@ function mountDirectorUI(node) {
         button.setAttribute("aria-selected",String(button.dataset.tool===label));
         button.tabIndex=button.dataset.tool===label?0:-1;
       }
-      toolHeading.firstChild.nodeValue=label==="Project"?"Project settings":"Clip controls";
     };
 
-    sharedPrompt.value=timelineState.shared_prompt || "";fade.value=timelineState.audio_fade_ms ?? 15;
-    gain.checked=timelineState.audio_gain_match ?? true;sharedPolicy.value=timelineState.shared_prompt_policy || "prepend";
     for(const [label,panel] of panels){
       const button=document.createElement("button");button.textContent=label;button.type="button";
       button.dataset.tool=label;button.tabIndex=label===activeToolTab?0:-1;
