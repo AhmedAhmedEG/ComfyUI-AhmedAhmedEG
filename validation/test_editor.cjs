@@ -271,6 +271,35 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   mediaChoice.checked=false;await exportProject.onclick();
   assert.equal(calls.pop(),'/minimax_director/project/export');
   assert(!exportProject.disabled);w.api.fetchApi=previousFetch;
+  const nameInput=editorRoot.querySelector('.mmx-project-name-field input');
+  nameInput.value='My Named Film';nameInput.dispatchEvent(new w.Event('input'));
+  let savedBody;
+  w.app.graph.serialize=()=>({nodes:[{id:7,type:'MiniMaxH3MasterNode',widgets_values:[timeline.value,'{}']},{id:21,type:'LoadImage',widgets_values:['alice.png']}],links:[]});
+  const serverDocument={project_id:'editor',name:'My Named Film',revision:'revision_1',master_node_id:7,updated_at:1};
+  w.api.fetchApi=async(url,options={})=>{
+    if(url.endsWith('/save')){savedBody=JSON.parse(options.body);serverDocument.timeline={...savedBody.timeline,server_revision:'revision_1'};serverDocument.workflow=savedBody.workflow;}
+    return {ok:true,json:async()=>url.endsWith('/list')?{projects:[{...serverDocument,clip_count:1}]}:{project:serverDocument}};
+  };
+  await button('Save Project').onclick();
+  assert.equal(savedBody.name,'My Named Film');assert.equal(savedBody.timeline.project_id,'editor');
+  assert.equal(savedBody.workflow.nodes[1].widgets_values[0],'alice.png','Reference loader configuration stays in the saved workflow');
+  const savedTimeline=JSON.parse(timeline.value);
+  assert.equal(savedTimeline.project_name,'My Named Film','Ordinary workflow serialization retains the project name');
+  assert.equal(savedTimeline.server_revision,'revision_1');
+  assert.equal(editorRoot.querySelector('.mmx-server-project-status').textContent,'Saved On Server');
+  let openedWorkflow;
+  w.app.loadGraphData=async(...args)=>{openedWorkflow=args;return true;};
+  await button('Open Project').onclick();
+  const projectDialog=w.document.querySelector('[aria-label="Open Server Project"]');
+  assert(projectDialog);assert(projectDialog.querySelector('option').textContent.includes('My Named Film'));
+  await [...projectDialog.querySelectorAll('button')].find(el=>el.textContent==='Open Project').onclick();
+  assert.equal(JSON.parse(openedWorkflow[0].nodes[0].widgets_values_named.timeline_data).project_name,'My Named Film');
+  assert.equal(JSON.parse(openedWorkflow[0].nodes[0].widgets_values[0]).project_id,'editor','Reopening preserves cache identity');
+  assert(openedWorkflow[3].includes('My Named Film'),'Opened workflow has an identifiable title');
+  assert(!w.document.querySelector('[aria-label="Open Server Project"]'));
+  timeline.value=JSON.stringify(savedTimeline);node.__mmxDirectorRefresh();
+  assert.equal(nameInput.value,'My Named Film','Refreshing the editor retains its linked project');
+  w.api.fetchApi=previousFetch;
   const beforeReset=JSON.parse(timeline.value);button('Reset Timeline').onclick();
   const afterReset=JSON.parse(timeline.value);
   assert.equal(afterReset.clips.length,1);

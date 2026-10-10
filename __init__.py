@@ -19,7 +19,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.4.6"
+__version__ = "1.4.7"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -299,6 +299,36 @@ if getattr(PromptServer, "instance", None) is not None:
             return web.json_response({"error": str(exc)}, status=500)
         finally:
             if path and os.path.exists(path): os.unlink(path)
+
+    @routes.get("/minimax_director/project/list")
+    async def list_server_projects(request):
+        from .core.project_store import ServerProjectStore
+        return web.json_response({"projects": await asyncio.to_thread(ServerProjectStore().list)})
+
+    @routes.get("/minimax_director/project/load")
+    async def load_server_project(request):
+        from .core.project_store import ServerProjectStore
+        try:
+            document = await asyncio.to_thread(ServerProjectStore().load, request.query.get("project_id", ""))
+            return web.json_response({"project": document})
+        except FileNotFoundError:
+            return web.json_response({"error": "Saved project not found."}, status=404)
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+    @routes.post("/minimax_director/project/save")
+    async def save_server_project(request):
+        from .core.project_store import ServerProjectStore, ProjectConflict
+        try:
+            body = await request.json()
+            project = await asyncio.to_thread(ServerProjectStore().save,
+                body["project_id"], body["name"], body["timeline"], body["workflow"],
+                body["master_node_id"], body.get("expected_revision"))
+            return web.json_response({"project": project})
+        except ProjectConflict as exc:
+            return web.json_response({"error": str(exc)}, status=409)
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            return web.json_response({"error": str(exc)}, status=400)
 
     @routes.get("/minimax_director/project/recover")
     async def recover_project(request):

@@ -2230,6 +2230,14 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-project-workspace .mmx-export-options input { margin:0;flex-shrink:0; }
 .mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
 .mmx-director-root .mmx-project-workspace .mmx-section > summary { padding:12px 0 0; }
+.mmx-director-root .mmx-project-library { display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 0 14px;border-bottom:1px solid #414e5a; }
+.mmx-director-root .mmx-project-library .mmx-project-name-field { display:flex;flex-direction:row;align-items:center;gap:12px;flex:1;min-width:260px;padding:0;border:0;background:transparent; }
+.mmx-director-root .mmx-project-name-field input { flex:1;min-width:120px; }
+.mmx-director-root .mmx-project-library button { min-height:40px;padding:0 18px; }
+.mmx-director-root .mmx-server-project-status { flex-basis:100%;font-size:12px;color:#9fb5c7; }
+.mmx-server-project-list { width:100%;min-height:140px;padding:8px;background:#1d2229;color:#ecedf0;border:1px solid #596979;border-radius:5px; }
+.mmx-server-project-list option { padding:10px; }
+.mmx-server-project-dialog-actions { display:flex;justify-content:flex-end;gap:12px;margin-top:16px; }
 .mmx-director-root .mmx-shared-prompt { display:flex;flex-direction:column;gap:8px;flex-shrink:0;padding:0 0 14px;border-bottom:1px solid #414e5a; }
 .mmx-director-root .mmx-shared-prompt-header { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap; }
 .mmx-director-root .mmx-shared-prompt-header h3 { margin:0;font-size:14px;color:#d1e1ec; }
@@ -2350,6 +2358,13 @@ function mountDirectorUI(node) {
     ],
     refmods: [],
     available_refs: [],
+  };
+  let serverStatus=null, savedProjectSignature=null;
+  const projectSignature=()=>JSON.stringify({timeline:{...timelineState,server_revision:undefined},builder:builderState});
+  const updateServerStatus=()=>{
+    if(serverStatus)serverStatus.textContent=savedProjectSignature && savedProjectSignature===projectSignature()
+      ? "Saved On Server" : timelineState.server_revision ? "Server Project · Save Your Changes" : "Not Saved On Server";
+    if(serverStatus)projectScope.textContent=timelineState.project_name || 'All clips · audio & files';
   };
 
   let builderState = {
@@ -2662,9 +2677,10 @@ function mountDirectorUI(node) {
       clip.context_length ??= 22;
       clip.audio_context_length ??= clip.context_length;
     }
-    timelineState.project_id ||= node.id >= 0 ? String(node.id) : `project_${crypto.randomUUID()}`;
+    timelineState.project_id ||= `project_${crypto.randomUUID()}`;
     if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
     if (builderWidget) builderWidget.value = JSON.stringify(builderState);
+    updateServerStatus();
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
     if (app.graph && app.graph.setDirtyCanvas) app.graph.setDirtyCanvas(true, true);
   };
@@ -2868,6 +2884,87 @@ function mountDirectorUI(node) {
   const projectHeading = document.createElement("summary"); projectHeading.textContent = "Project";
   const projectScope=document.createElement("span");projectScope.textContent="All clips · audio & files";projectHeading.append(projectScope);
   projectTools.appendChild(projectHeading);
+  const library=document.createElement('div');library.className='mmx-project-library';
+  const projectName=document.createElement('input');projectName.type='text';projectName.maxLength=128;
+  projectName.placeholder='Name Your Project';projectName.value=timelineState.project_name || '';
+  projectName.setAttribute('aria-label','Project Name');
+  projectName.oninput=()=>{timelineState.project_name=projectName.value;syncState();};
+  const nameField=field('Project Name',projectName);nameField.classList.add('mmx-project-name-field');
+  const saveProject=document.createElement('button');saveProject.textContent='Save Project';
+  saveProject.title='Save the named timeline and workflow on this server. Latents stay in the existing server cache.';
+  saveProject.onclick=async()=>{
+    if(!projectName.value.trim()){projectName.focus();return;}
+    saveProject.disabled=true;
+    try{
+      timelineState.project_name=projectName.value.trim();syncState();
+      const graph=app.rootGraph || app.graph;
+      if(!graph?.serialize)throw new Error('ComfyUI workflow serialization is unavailable.');
+      const snapshot=JSON.parse(JSON.stringify({...timelineState,builder_state:builderState}));
+      const capturedSignature=projectSignature();
+      const result=await requestJson('/minimax_director/project/save',{
+        project_id:snapshot.project_id,name:snapshot.project_name,timeline:snapshot,
+        workflow:graph.serialize(),master_node_id:node.id,expected_revision:snapshot.server_revision || null});
+      if(timelineState.project_id===snapshot.project_id){
+        timelineState.server_revision=result.project.revision;savedProjectSignature=capturedSignature;syncState();
+      }
+    }catch(error){alert(error.message);}finally{saveProject.disabled=false;}
+  };
+  const openProject=document.createElement('button');openProject.textContent='Open Project';
+  openProject.title='Choose a named project saved on this server and reopen its workflow and cached results.';
+  openProject.onclick=async()=>{
+    openProject.disabled=true;
+    try{
+      const {projects}=await requestJson('/minimax_director/project/list');
+      if(node.__mmxDisposed)return;
+      node.__mmxProjectDialog?.remove();
+      const backdrop=document.createElement('div');backdrop.className='mmx-modal-backdrop';
+      node.__mmxProjectDialog=backdrop;
+      const panel=document.createElement('div');panel.className='mmx-modal-panel';panel.setAttribute('role','dialog');
+      panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Open Server Project');
+      const heading=document.createElement('h3');heading.textContent='Open Server Project';
+      const select=document.createElement('select');select.className='mmx-server-project-list';select.size=Math.min(8,Math.max(3,projects.length));
+      select.setAttribute('aria-label','Saved Projects');
+      for(const project of projects){const option=document.createElement('option');option.value=project.project_id;
+        option.textContent=`${project.name} · ${project.clip_count} Clips · ${new Date(project.updated_at*1000).toLocaleString()}`;select.append(option);}
+      if(projects.length)select.value=projects.some(p=>p.project_id===timelineState.project_id)?timelineState.project_id:projects[0].project_id;
+      const note=document.createElement('p');note.textContent=projects.length
+        ? 'Reopens the saved workflow. Media and large latent files stay on the server.' : 'No Saved Projects Yet. Enter a name and use Save Project.';
+      const actions=document.createElement('div');actions.className='mmx-server-project-dialog-actions';
+      const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>backdrop.remove();
+      const load=document.createElement('button');load.textContent='Open Project';load.disabled=!projects.length;
+      load.onclick=async()=>{
+        load.disabled=true;
+        try{
+          const {project}=await requestJson(`/minimax_director/project/load?project_id=${encodeURIComponent(select.value)}`);
+          const workflow=project.workflow;
+          const master=workflow?.nodes?.find(row=>String(row.id)===String(project.master_node_id));
+          if(!master || !app.loadGraphData)throw new Error('This saved project has no reopenable Master workflow.');
+          const timeline=JSON.stringify(project.timeline),builder=typeof project.timeline.builder_state==='string'
+            ? project.timeline.builder_state : JSON.stringify(project.timeline.builder_state || {});
+          master.widgets_values_named={...master.widgets_values_named,timeline_data:timeline,builder_state:builder};
+          master.widgets_values=[timeline,builder];
+          const filename=`MiniMax Project ${project.name.replace(/[\\/:*?"<>|]/g,'_')} ${project.project_id}.json`;
+          const opened=await app.loadGraphData(workflow,true,true,filename);
+          if(opened===false)throw new Error('ComfyUI could not open this project. Check the workflow loading error.');
+          backdrop.remove();
+        }catch(error){alert(error.message);load.disabled=false;}
+      };
+      backdrop.onkeydown=event=>{
+        if(event.key==='Escape')backdrop.remove();
+        if(event.key==='Tab'){
+          const controls=[select,cancel,load].filter(control=>!control.disabled);
+          const first=controls[0],last=controls.at(-1);
+          if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus();}
+          else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();}
+        }
+        event.stopPropagation();
+      };
+      backdrop.onclick=event=>{if(event.target===backdrop)backdrop.remove();};
+      actions.append(cancel,load);panel.append(heading,note,select,actions);backdrop.append(panel);document.body.append(backdrop);select.focus();
+    }catch(error){alert(error.message);}finally{openProject.disabled=false;}
+  };
+  serverStatus=document.createElement('span');serverStatus.className='mmx-server-project-status';serverStatus.setAttribute('role','status');updateServerStatus();
+  library.append(nameField,saveProject,openProject,serverStatus);projectTools.append(library);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];
@@ -3048,7 +3145,7 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.6";
+  generationBar.dataset.version="1.4.7";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
   finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
@@ -3894,6 +3991,7 @@ function mountDirectorUI(node) {
 
   // Render Active Clip Inspector (Directly below timeline track!)
   const renderInspector = () => {
+    projectName.value=timelineState.project_name || '';updateServerStatus();
     sharedPrompt.value=timelineState.shared_prompt || "";fade.value=timelineState.audio_fade_ms ?? 15;
     gain.checked=timelineState.audio_gain_match ?? true;sharedPolicy.value=timelineState.shared_prompt_policy || "prepend";
     inspector.innerHTML = "";
@@ -4968,6 +5066,7 @@ function mountDirectorUI(node) {
       for (const observers of node.__mmxRefObserverSets || []) observers.delete(node.__mmxRefObserver);
       node.__mmxRefObserverSets?.clear();
       cancelTimelineDrag?.();
+      node.__mmxProjectDialog?.remove();
 
       node.__mmxLocaleCleanup?.();
       api.removeEventListener("minimax_director/shot", node.__mmxShotListener);

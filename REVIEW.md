@@ -264,3 +264,8 @@ Renamed project actions in Title Case and ordered routine New/Import/Export oper
 ## 1.4.6 — export option placement
 
 Include Media now sits beside Export Project in one bordered control, rather than floating beneath the action grid. Export formats and behavior are unchanged.
+
+
+## 1.4.7 — named server projects
+
+Added a named server library with atomic metadata saves, full workflow restoration and revision conflict checks across sessions. Ordinary workflow files retain project names and cache IDs. Metadata is kept outside disposable cache directories, so deleting saved results does not delete the named project. New editor projects use UUIDs to avoid node-ID collisions between workflows. 131 backend regressions and editor checks pass.
