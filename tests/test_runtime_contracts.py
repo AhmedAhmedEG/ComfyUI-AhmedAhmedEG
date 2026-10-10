@@ -187,6 +187,25 @@ class RuntimeContracts(unittest.TestCase):
         result = self.execute(i2v_groups=group, prompt_text="\nbridge prompt\n\n")
         self.assertEqual(result[5], "bridge prompt")
 
+    def test_reference_group_size_reaches_native_conditioning(self):
+        from nodes.node_groups import MiniMaxH3DirectorGroupReferenceToVideo
+        group, = MiniMaxH3DirectorGroupReferenceToVideo().pack(
+            prompt="A person turns", duration_sec=1., ref_image_size="1536",
+            ref_image_1=torch.zeros((1, 32, 32, 3)))
+        result = self.execute(r2v_groups=group, timeline_data="{}", continuity_mode="Independent (No Continuity)")
+        native = next(kw for name, kw in self.native_calls if name == "MiniMaxH3ReferenceToVideo")
+        self.assertEqual(native["ref_image_size"], "1536")
+        self.assertNotIn("group", json.loads(result[9])["clips"][0])
+        saved = json.loads((__import__("pathlib").Path(self.temp.name)/"regression"/"autosave.json").read_text())
+        self.assertNotIn("group", saved["clips"][0])
+        self.assertIsNotNone(group["ref_images"]["ref_image_1"])
+
+    def test_original_canvas_uses_real_reference_pool_tensor_size(self):
+        from core.resolution import timeline_media_size
+        pack, = MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 128, 256, 3)))
+        with patch.dict(__import__("sys").modules, {"folder_paths": SimpleNamespace(get_input_directory=lambda: self.temp.name)}):
+            self.assertEqual(timeline_media_size({}, pack), (256, 128))
+
     def test_fallback_reference_aliases_are_deduplicated(self):
         pack, = MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 32, 32, 3)))
         self.execute(ref_pack=pack, timeline_data="{}", execution_mode="Conditioning Guide Output")

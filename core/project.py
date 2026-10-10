@@ -150,8 +150,20 @@ def read_portable(source, input_root, max_bytes=8 * 1024**3):
         return state
 
 
+def export_timeline_state(state):
+    """Export authoring state without graph-group tensor payloads.
+
+    Groups are rebuilt from connected nodes each execution; their IMAGE/AUDIO
+    objects must never enter autosave JSON or the project's UI state output.
+    """
+    result = dict(state)
+    result["clips"] = [{key: value for key, value in shot.items() if key != "group"}
+                       for shot in state.get("clips", [])]
+    return result
+
+
 def save_autosave(manager, state):
-    state = migrate_timeline(state)
+    state = migrate_timeline(export_timeline_state(state))
     path = Path(manager.project_dir) / "autosave.json"
     fd, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:

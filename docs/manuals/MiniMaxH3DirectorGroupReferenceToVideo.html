@@ -1,0 +1,15 @@
+<h2 id="reference-group-contract">An explicit REF2VA shot from cables</h2>
+<p>This advanced packer creates one reference-guided shot without using the Master’s pool-selection editor. Its output is MMX_DIR_GROUP with family r2v and kind r2v; the Master normalizes that task to REF2VA. Connect it to Master.r2v_groups or a Groups Combine node. You still need the REF2VA model, MiniMax CLIP and both VAEs at the Master.</p>
+<p><code>prompt</code> describes the action/reference role; <code>duration_sec</code> is requested visible length. <code>ref_image_size</code> chooses match, 1024, 1280, 1536 or max for the group's reference-image preparation policy. It is not the generated canvas; Director Settings still determines generation dimensions. Larger reference preparation can retain detail while increasing conditioning cost.</p>
+<h2 id="reference-group-slots">Image, video and audio slots</h2>
+<p><code>ref_image_1…ref_image_9</code> accept IMAGE references. Optional <code>ref_images</code> accepts the legacy REF_PACK dictionary of keyed image tensors; direct occupied image sockets overwrite matching dictionary keys. This legacy dictionary type is not MMX_REF_PACK from the ordinary Reference Pack (Pool). A cable type mismatch is therefore meaningful rather than a missing automatic conversion.</p>
+<p><code>ref_video_1</code> accepts a decoded frame batch, and <code>ref_audio_1</code> an AUDIO object. The group stores separate ref_images, ref_videos and ref_audios dictionaries. A video filename alone is not valid frame data. Native validation and duration/reference limits still apply in the Master. Audio references without usable visual references are not a supported way to request an audio-only generation pipeline.</p>
+<pre><code>Load Image (character) ─→ Group.ref_image_1
+Video loader frames ───→ Group.ref_video_1
+Audio loader AUDIO ────→ Group.ref_audio_1
+Group.group ───────────→ Master.r2v_groups
+REF2VA MODEL ──────────→ Master.ref2va_model</code></pre>
+<p>Write the prompt with tokens matching the supplied group's ordered references. Start with one image and one clear role before adding motion/audio examples. This packer does not discover extra references from a token string or a model name. The large source pool used by ordinary editor shots and this group's limited explicit inputs serve different authoring workflows.</p>
+<h2 id="reference-group-errors">Expected failures and debugging</h2>
+<p>If the task reports no visual references, inspect actual connected media, not whether the prompt mentions Picture 1. If a custom video loader outputs VIDEO rather than IMAGE, decode it to frames first. If a generated result ignores the desired reference role, simplify the prompt and inspect the resolved task conditioning. A correct graph connection demonstrates data flow, not a guarantee that a model will reproduce a pose or identity exactly.</p>
+<p class="source">Implementation: <a href="../../nodes/node_groups.py">reference group dictionary</a>, <a href="../../core/task_modes.py">reference limits</a>.</p>

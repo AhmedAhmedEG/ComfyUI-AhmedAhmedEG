@@ -41,6 +41,13 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.strictEqual(oldGraph.nodes[1].widgets_values[3],'ffmpeg');
   assert.strictEqual(oldGraph.nodes[1].widgets_values[4],'8-bit');
   w.extension.beforeConfigureGraph(oldGraph);assert.strictEqual(oldGraph.nodes[0].widgets_values.length,14);
+  const namedLegacy={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[...settingsValues],widgets_values_named:{run_mode:'clip_by_clip',execution_mode:'Conditioning Guide Output',seed:'18446744073709551615'}}]};
+  w.extension.beforeConfigureGraph(namedLegacy);
+  assert.equal(namedLegacy.nodes[0].widgets_values[11],'Conditioning only','Named legacy controls migrate without shifting prompt mode into generation mode');
+  assert.equal(namedLegacy.nodes[0].widgets_values_named.seed,'18446744073709551615');
+  const noSeedControl={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[1344,768,24,25,1,'euler','simple',12,3,0,'All shots','Independent (No Continuity)','22']}]};
+  w.extension.beforeConfigureGraph(noSeedControl);
+  assert.equal(noSeedControl.nodes[0].widgets_values[11],'All shots');
   function Exporter(){this.widgets=[{name:'quality',value:21},{name:'bit_depth',value:'10-bit'},{name:'encoder_backend',value:'pyav'},{name:'save_output',value:false},{name:'control_after_generate',value:'fixed',options:{serialize:false}},{name:'preview',value:'not_saved',serialize:false}];}
   Exporter.prototype.onSerialize=function(data){data.other_extension='preserved';};
   Exporter.prototype.onConfigure=function(){this.widgets[0].value='wrong positional value';};
@@ -156,6 +163,11 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.deepStrictEqual(split.map(shot=>[shot.source_start,shot.source_end]),[[3,6],[6,9]]);
   assert(split.every(shot=>shot.prompt==='Keep this action' && !shot.validated));
   assert(split.every(shot=>shot.ref_ids[0]==='image_1'));
+  sourceTimeline.value=JSON.stringify({...sourceState,clips:[{...sourceState.clips[0],locked:true}]});
+  sourceNode.__mmxDirectorRefresh();
+  const lockedRange=[...w.document.querySelectorAll('fieldset')].find(el=>el.querySelector('legend')?.textContent==='Source video range');
+  assert(lockedRange,'Locked source inspector renders without referencing a removed upload control');
+  assert([...lockedRange.querySelectorAll('input,button,select')].every(el=>el.disabled));
   sourceNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, language, draft review, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

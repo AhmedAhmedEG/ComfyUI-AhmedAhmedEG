@@ -1,0 +1,11 @@
+<h2 id="model-pack-lookup">Named per-shot model overrides</h2>
+<p>The node creates a dictionary mapping a name to an already loaded MODEL. Connect model_pack to the Master and choose the corresponding override on a shot. This is useful when some shots should use a differently patched compatible H3 model while the ordinary family sockets supply the baseline. It does not load a model from a name string.</p>
+<p><code>name</code> is trimmed and must not be blank. <code>model</code> is the actual loaded/patched model object. Optional <code>previous</code> copies earlier entries, then the current name overwrites an existing entry with the same key. Distinct names preserve multiple choices. Duplicate names are replacement operations, not separate menu entries.</p>
+<pre><code>REF2VA base ─→ Pack A.model; name = clean
+LoRA-patched REF2VA ─→ Pack B.model; name = turbo
+Pack A ─→ Pack B.previous
+Pack B ─→ Master.model_pack
+Shot model_override = turbo</code></pre>
+<p>A selected override must exist and match the shot task/conditioning. MODEL's general socket type does not validate its architecture. Graph evaluation can still load upstream models that build this pack; a dictionary of many model objects is not automatically a lazy model-loading catalog. The Master's family lazy-input logic avoids unnecessary family selection, but a model pack can retain additional loaded objects.</p>
+<p>Use the starter's stock Boolean model/steps switches for the simple base-versus-Turbo use case. Use Model Pack when explicit named choices per shot are necessary. Review cache reuse after changing an override or its upstream patch settings.</p>
+<p class="source">Implementation: <a href="../../nodes/node_project.py">ModelOverridePack.build</a>, <a href="../../nodes/node_director.py">per-shot override selection</a>.</p>

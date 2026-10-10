@@ -1,0 +1,10 @@
+<h2 id="advance-state-selection">Explicitly accepting a staged continuation state</h2>
+<p>Advance Staged Take chooses between two MMX_CONTINUATION objects: current and staged. With advance false it returns current; with advance true it returns staged. The output can feed Master.continuation. The node does not generate a take, copy its files, validate a timeline or mutate which server manifest entry is latest.</p>
+<pre><code>Checkpoint A.checkpoint ─→ current
+Checkpoint B.checkpoint ─→ staged
+advance = false  → use A
+advance = true   → use B
+output ─────────→ Master.continuation</code></pre>
+<p>Use it when you want an explicit graph gate before continuing from a newly reviewed take. Make sure A/B refer to the intended project and shot; a different continuation source can substantially change what the next shot follows. For a reproducible graph, prefer explicit take identities to two moving latest selectors.</p>
+<p>Both inputs are ordinary required inputs and the implementation does not declare lazy status. ComfyUI may evaluate both upstream checkpoint loaders even when advance is false. This is a state selector, not an execution blocker or model-memory switch. If the unused staged checkpoint is missing, its upstream loader can fail before selection.</p>
+<p class="source">Implementation: <a href="../../nodes/node_project.py">AdvanceCheckpoint.choose</a>.</p>

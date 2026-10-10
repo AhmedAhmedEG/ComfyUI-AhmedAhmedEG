@@ -48,7 +48,7 @@ try:
     from ..core.loras import resolve_lora_files, apply_loras
     from ..core.source_media import source_range, choose_audio
     from ..core.advanced_sampling import sample_selflift
-    from ..core.project import migrate_timeline, save_autosave
+    from ..core.project import migrate_timeline, save_autosave, export_timeline_state
     from ..core.references import load_reference, edit_images
 except ImportError:
     from core.sampling import sample_latent, native_outputs
@@ -57,7 +57,7 @@ except ImportError:
     from core.loras import resolve_lora_files, apply_loras
     from core.source_media import source_range, choose_audio
     from core.advanced_sampling import sample_selflift
-    from core.project import migrate_timeline, save_autosave
+    from core.project import migrate_timeline, save_autosave, export_timeline_state
     from core.references import load_reference, edit_images
 
 CATEGORY = "ComfyUI-AhmedAhmedEG"
@@ -232,7 +232,7 @@ class MiniMaxH3MasterDirector:
                     from core.resolution import plan_canvas, timeline_media_size
                 source_size = timeline.get("source_size")
                 if source_size is None and (timeline["resolution"].get("mode") == "original" or timeline["resolution"].get("aspect") == "auto"):
-                    source_size = timeline_media_size(timeline)
+                    source_size = timeline_media_size(timeline, ref_pack)
                 width, height = plan_canvas(timeline["resolution"], source_size)
         except (json.JSONDecodeError, TypeError) as exc:
             raise ValueError("Timeline contains invalid JSON.") from exc
@@ -715,6 +715,7 @@ class MiniMaxH3MasterDirector:
                 ref_video_audios=ref_video_audios,
                 refmod_items=refmod_items,
                 guide_frames=guide_frames,
+                ref_image_size=str(group.get("ref_image_size", "match") if group else "match"),
             )
 
             # Apply Semantic Bridge if wired
@@ -765,6 +766,7 @@ class MiniMaxH3MasterDirector:
                     "shift_audio": shift_audio, "selflift": selflift, "refine": refine,
                     "face_refine": face_refine, "semantic_bridge": semantic_bridge, "sigmas": sigmas,
                     "continuity_mode": continuity_mode, "context_length": context_length,
+                    "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "video_vae": video_vae, "audio_vae": audio_vae, "clip": clip},
@@ -1076,5 +1078,5 @@ class MiniMaxH3MasterDirector:
             float(frame_rate),
             int(final_frames.shape[0]),
             status_str,
-            json.dumps(timeline, ensure_ascii=False),
+            json.dumps(export_timeline_state(timeline), ensure_ascii=False),
         )

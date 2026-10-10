@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
+  "version": "1.1.2",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -84,7 +84,10 @@
       ],
       "extra": "",
       "control_descriptions": {
-        "context_length": "Continuity context length in pixel frames: 5, 22, 39 or 56. This is unrelated to language-model context tokens."
+        "context_length": "Continuity context length in pixel frames: 5, 22, 39 or 56. This is unrelated to language-model context tokens.",
+        "seed": "Baseline sampling-noise seed. Per-shot seed settings can override it; fixing the seed alone does not reproduce a take after changing other effective inputs.",
+        "generation_mode": "Read the Generation mode section above for scheduling, cache reuse and the external-sampler behavior of Conditioning only.",
+        "continuity_mode": "Read the Continuity section above for the separate Independent, Motion Context, Latent Carry and Tail Handoff algorithms."
       },
       "output_descriptions": [
         "Configuration consumed by the Master config input."
@@ -158,7 +161,10 @@
       ],
       "extra": "<p>Optional refine_model must be compatible. SIGMAS must be 1D, finite, nonnegative and nonincreasing, with ≥2 entries. More passes (1–20) cost compute and can drift.</p><div class=\"table-wrap\"></div><p>Supported checkpoint extensions: .safetensors, .sft, .pt, .pth. Loading validates architecture. Audio stays separate from visual latent enlargement.</p>",
       "control_descriptions": {
-        "backend": "global uses memory-aware refinement planning; sampler uses the native sampler path with explicit tiles."
+        "backend": "global uses memory-aware refinement planning; sampler uses the native sampler path with explicit tiles.",
+        "steps": "Number of refinement-stage sampling steps, separate from the Master first pass.",
+        "sampler": "Refinement-stage sampler, separate from the first-pass Director sampler.",
+        "scheduler": "Refinement-stage noise scheduler."
       },
       "output_descriptions": [
         "Latent refine/upscale stage configuration."
@@ -193,7 +199,11 @@
         "MiniMaxH3DirectorRefine"
       ],
       "extra": "<p>Tracks one face, samples native audiovisual crops and keeps the main audio. No detections means a reported skip; a missing detector is a setup error. Inherit or offset the shot seed; stitching fades edits near boundaries.</p><div class=\"table-wrap\"></div>",
-      "control_descriptions": {},
+      "control_descriptions": {
+        "steps": "Number of face-crop sampling steps, additional to the main video sample.",
+        "sampler": "Face-crop sampling algorithm.",
+        "scheduler": "Face-crop noise schedule."
+      },
       "output_descriptions": [
         "Tracked face-refinement configuration."
       ],
@@ -687,8 +697,8 @@
       "extra": "",
       "control_descriptions": {
         "backend": "transformers loads a complete local model directory; gguf loads a local GGUF file.",
-        "device": "CPU or CUDA placement for this local language model.",
-        "context_length": "Context size for the local model, unrelated to video continuity frames."
+        "device": "CPU or CUDA placement for the selected local LLM backend, not the H3 diffusion model.",
+        "context_length": "Language-model context budget in tokens; unrelated to H3 video-frame continuity context."
       },
       "output_descriptions": [
         "Loaded local prompt/vision provider pipeline."

@@ -202,3 +202,9 @@ Starter and consolidated graphs include both H3 SLA Attention patches and the ex
 ## Compact timeline and automatic Turbo steps (1.1.1)
 
 The prompt editor no longer stretches to fill the node. Shot cards start at a readable scale, include assigned image covers and show multiline prompt snippets. The starter flows left to right in topological order. A single Boolean selects both the REF2VA base/Turbo branch and 25/8 sampling steps through stock, collapsed model and integer selectors. Director Settings steps is a connected input. Both examples validate against the installed server. 109 backend tests and editor/preview/docs checks pass. A fresh native frontend renders Generation mode above Continuity mode; the reported missing control remains under investigation for saved or stale node definitions.
+
+## Technical documentation and control audit (1.1.2)
+
+Added authored technical chapters for all 23 public nodes and an architecture chapter, with execution contracts, temporal/spatial math, cache/state lifecycles, practical examples, dependencies and provider-specific limitations. Schema tables remain a quick reference after the technical explanation. Offline links, anchors, navigation and rendered layout were checked.
+
+Fixed Settings migration for named legacy arrays and current arrays missing the seed control; group reference sizing previously ignored by conditioning; graph-only group tensors leaking into autosave/project JSON; pool-only original-canvas discovery; a removed upload-control variable breaking the locked-source inspector; locked-source edge resizing; and Prompt Forge pool metadata/context invalidation. Runtime and editor regressions cover these defects. All 114 backend tests pass. Generation mode is declared as an ordinary visible combo and appears in a fresh native frontend; the precise cause of the user screenshot missing it is not established.

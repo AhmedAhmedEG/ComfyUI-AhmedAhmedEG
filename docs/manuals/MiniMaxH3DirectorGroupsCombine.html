@@ -1,0 +1,10 @@
+<h2 id="combine-order">Flattening groups in a predictable order</h2>
+<p>Groups Combine concatenates graph-authored shot packs into one ordered list. It does not render, blend images or combine MP4 files. Optional group_1…group_10 all accept MMX_DIR_GROUP. A value can be a single group dictionary or a nested list/tuple of groups. The normalizer recursively flattens dictionaries into the result, skipping unsupported values.</p>
+<p>Ordering follows socket number: group_1 before group_2 and so on, preserving each list's internal order. Spatial placement on the ComfyUI canvas does not change this execution order. Empty sockets are skipped. A completely empty result raises an error asking you to connect at least one group.</p>
+<pre><code>Group A (single shot) ─→ group_1
+Combined B/C list ────→ group_2
+Group D ──────────────→ group_4
+result = [A, B, C, D]</code></pre>
+<p>Connect the combined output to the appropriate Master group input. Mixing keyframe/reference groups does not remove their per-shot family requirements: both models may be needed across the list. Choose the Master generation scheduling and continuity deliberately. This node's sole output contains authoring objects; you cannot feed it directly to a native video saver.</p>
+<p>For long graph-authored sequences, chain combiners rather than inventing extra group sockets. Keep labels such as “Shots 1–4” on your group nodes, and validate the exported workflow before rendering. If shots arrive in the wrong order, inspect the numbered ports; moving boxes visually is not a reorder operation.</p>
+<p class="source">Implementation: <a href="../../nodes/node_groups.py">_normalize_group and combine</a>.</p>

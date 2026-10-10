@@ -1,0 +1,14 @@
+<h2 id="apply-gate">Review before changing authoring state</h2>
+<p>This node takes a timeline STRING and a validated MMX_PROMPT_DRAFT, then either returns the unchanged timeline or a new authored timeline. <code>apply=false</code> is a no-op gate. <code>apply=true</code> checks that the draft's context_key matches the supplied timeline, reparses its proposed shots and applies the chosen policy. It does not run diffusion or approve completed takes.</p>
+<p>The explicit gate is useful in graph-based automation: generate a draft, inspect the review JSON, then deliberately enable application. A stale context error means that the timeline changed since drafting; obtain/review a fresh draft rather than deleting its fingerprint field.</p>
+<h2 id="draft-replace-append">Replace and Append</h2>
+<p><code>policy=replace</code> uses the draft as the new ordered shot list. Where a draft position corresponds to an existing shot, the implementation deep-copies that shot's stored properties, then replaces allowed drafted fields. References/model overrides can therefore survive a prompt rewrite, while the shot is marked unvalidated because its effective generation instructions changed. If the draft has fewer shots, the resulting authored list has fewer entries.</p>
+<p><code>policy=append</code> retains the current list and appends newly created proposed shots. New entries receive IDs/names where needed and are selected but unvalidated. Appending text does not automatically assign Reference Pack items to those new shots.</p>
+<pre><code>timeline A + draft for A + apply=false → unchanged A
+timeline A + draft for A + Replace    → proposed list, unvalidated
+timeline A + draft for A + Append     → A followed by proposed shots
+timeline B + draft for A              → stale-context error</code></pre>
+<h2 id="apply-output">Using the resulting STRING safely in a graph</h2>
+<p>The output is serialized timeline authoring JSON. Feed it to a compatible authoring/import path or connect it to the intended advanced timeline input. A STRING output is not proof that a node can accept arbitrary JSON: check the receiving node's contract. The ordinary Master editor already manages its timeline_data widget, so avoid accidental competing storage/edit paths.</p>
+<p>Review task-family changes as well as prose. Replacing T2VA with REF2VA creates a different model/reference requirement even when existing fields survive. The parser rejects unsupported draft fields instead of letting a language model alter assets or approval. Inspect the new sequence and reference assignments before rendering a long batch.</p>
+<p class="source">Implementation: <a href="../../nodes/node_forge.py">apply gate</a>, <a href="../../core/forge.py">context verification and state construction</a>.</p>

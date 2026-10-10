@@ -3461,6 +3461,7 @@ function mountDirectorUI(node) {
       rightHandle.onmousedown = (e) => {
         e.stopPropagation();
         e.preventDefault();
+        if (clip.locked) return;
         startX = e.clientX;
         startDuration = parseFloat(clip.duration) || 5.0;
         const scale = shotBlock.getBoundingClientRect().width / (shotBlock.offsetWidth || baseWidth) || 1;
@@ -4016,7 +4017,7 @@ function mountDirectorUI(node) {
         activeClip.validated = false; timelineState.clips.splice(index+1,1); syncState(); renderTimeline();
       }; sourcePanel.appendChild(merge);
 
-      if (activeClip.locked) for (const control of sourcePanel.querySelectorAll("input,button")) control.disabled = control !== pickFrame;
+      if (activeClip.locked) for (const control of sourcePanel.querySelectorAll("input,button,select")) control.disabled = true;
     }
 
     const loraPanel = document.createElement("details");
@@ -4839,16 +4840,23 @@ app.registerExtension({
       if (node.type === "MiniMaxH3MasterDirector") node.type = "MiniMaxH3MasterNode";
       // Earlier examples omitted ComfyUI's workflow-only seed control.
       // Preserve the seed and all subsequent Settings fields during import.
-      if (node.type === "MiniMaxH3DirectorSettings" && Array.isArray(node.widgets_values)
-          && node.widgets_values.length === 16 && !node.widgets_values_named) {
-        node.widgets_values.splice(10, 0, "fixed");
-      }
-      if (node.type === "MiniMaxH3DirectorSettings" && Array.isArray(node.widgets_values) && node.widgets_values.length === 17) {
-        const old = node.widgets_values, mode = old[11] === "Conditioning Guide Output" ? "Conditioning only" : old[13] === "full_batch" ? "All shots" : "Next shot";
-        node.widgets_values = [...old.slice(0,11), mode, old[14], old[15]];
-        if (node.widgets_values_named) {
-          node.widgets_values_named.generation_mode = mode;
-          for (const key of ["execution_mode","run_mode","prompt_mode","preview_mode"]) delete node.widgets_values_named[key];
+      if (node.type === "MiniMaxH3DirectorSettings" && Array.isArray(node.widgets_values)) {
+        const base = ["width","height","frame_rate","steps","cfg","sampler","scheduler","shift_video","shift_audio","seed"];
+        const current = [...base,"control_after_generate","generation_mode","continuity_mode","context_length"];
+        const legacy = [...base,"control_after_generate","execution_mode","prompt_mode","run_mode","continuity_mode","context_length","preview_mode"];
+        const count = node.widgets_values.length;
+        const fields = count === 17 ? legacy : count === 16 ? legacy.filter(key=>key!=="control_after_generate")
+          : count === 14 ? current : count === 13 ? current.filter(key=>key!=="control_after_generate") : null;
+        if (fields) {
+          const values = Object.fromEntries(fields.map((key,index)=>[key,node.widgets_values[index]]));
+          Object.assign(values,node.widgets_values_named || {});
+          values.control_after_generate ||= "fixed";
+          if (!["Next shot","All shots","Conditioning only"].includes(values.generation_mode)) {
+            values.generation_mode = values.execution_mode === "Conditioning Guide Output" ? "Conditioning only"
+              : values.run_mode === "full_batch" ? "All shots" : "Next shot";
+          }
+          node.widgets_values = current.map(key=>values[key]);
+          node.widgets_values_named = Object.fromEntries(current.map(key=>[key,values[key]]));
         }
       }
       if (node.type === "MiniMaxH3VideoCombine" && Array.isArray(node.widgets_values)

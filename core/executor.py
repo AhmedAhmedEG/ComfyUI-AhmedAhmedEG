@@ -92,6 +92,7 @@ class MasterDirectorExecutor:
         ref_video_audios: Optional[Dict[str, Any]] = None,
         ref_audios: Optional[Dict[str, Any]] = None,
         refmod_items: Optional[List[Dict[str, Any]]] = None,
+        ref_image_size: str = "match",
     ) -> Tuple[Any, Any, str]:
         """Generate positive conditioning and empty AV latent using official H3 native nodes."""
         canon = normalize_mode(mode)
@@ -209,7 +210,7 @@ class MasterDirectorExecutor:
             width=width,
             height=height,
             length=frame_count,
-            ref_image_size="match",
+            ref_image_size=ref_image_size,
             vae=vae,
             audio_vae=audio_vae,
             ref_images=ref_images or {},

@@ -1,0 +1,19 @@
+<h2 id="local-model-role">Load an LLM provider, not the video model</h2>
+<p>Local Prompt / Vision Model loads a separate language/vision model from the ComfyUI server's models/LLM directory and returns a callable MMX_LLM_PIPELINE. Connect it to Prompt Forge.generator with backend local. It is unrelated to the MiniMax diffusion MODEL, CLIP text encoder or audiovisual VAEs. This node does not download missing weights automatically.</p>
+<p><code>model_name</code> selects an existing file/directory discovered under that model root. The provider checks that the resolved path remains inside the model folder and exists. <code>backend=transformers</code> expects a complete local Transformers model directory, tokenizer and necessary processor/config files. <code>gguf</code> expects a compatible GGUF model file through llama-cpp-python. Selecting the wrong backend for a file type fails rather than transparently converting weights.</p>
+<h2 id="local-hardware">Device and context budget</h2>
+<p><code>device=cpu</code> keeps the supported model inference on CPU; cuda uses GPU support provided by the backend. For GGUF, the adapter selects CPU layers or requested GPU offload through its runtime; CUDA selection still requires a build with the relevant support. A local prompt model can compete with H3 for GPU memory even though it serves a different purpose.</p>
+<p><code>context_length</code> is the LLM context budget, measured in tokens and used by the backend where applicable. It is entirely different from Director Settings' 5/22/39/56 video-frame context. Increasing it can increase memory use; it does not lengthen the video. Prompt Forge separately controls requested shot_count and its generation-token budget.</p>
+<h2 id="local-vision">Vision mode and projection files</h2>
+<p><code>vision=true</code> chooses the vision-capable provider path. Transformers uses an image-text model and processor; the local GGUF path uses its implemented Llava-style handler. <code>projection</code> names the compatible local vision-projection file needed by that GGUF handler. It must exist inside models/LLM. A projection from an unrelated model architecture is not interchangeable.</p>
+<p>With vision false, the Transformers text path rejects images rather than pretending it saw them. With vision true, Prompt Forge's encoded image inputs are decoded/processed by the provider. The node's checkbox cannot transform an arbitrary text-only checkpoint into a vision model. Verify the model architecture and backend support before assigning reference-image analysis to it.</p>
+<h2 id="local-cache-and-dependencies">Dependencies, caching and a small test</h2>
+<p>Transformers loading needs the installed transformers/accelerate stack; GGUF needs llama-cpp-python and compatible runtime support. Loading uses local_files_only on the Transformers paths. Provider caching keys include path, backend, vision/device/projection/context settings and model modification time; generation is serialized with a lock to avoid concurrent unsafe use of a cached provider.</p>
+<pre><code>Local Prompt Model:
+  backend = gguf or transformers matching installed weights
+  vision = false for a text-only draft
+  device = cpu initially if GPU memory is constrained
+pipeline ─→ Prompt Forge.generator
+Prompt Forge.backend = local</code></pre>
+<p>First request one short text-only draft. Then test vision with one real image and a compatible model before asking for a large shot list. Distinguish an unavailable backend package, an incomplete model directory, a wrong projection and an output-JSON parsing error; they require different fixes and do not require rerunning the H3 sampler.</p>
+<p class="source">Implementation: <a href="../../nodes/node_forge.py">loader node</a>, <a href="../../core/local_llm.py">local providers/cache</a>.</p>

@@ -24,7 +24,8 @@ for(const relative of manifest){
  }
  if(relative.startsWith('nodes/')){
   assert(d.querySelector('h1'));
-  for(const id of ['in-plain-language','connections','how-it-works','how-to-use-it','outputs','limits-and-troubleshooting'])assert(d.getElementById(id),relative+' needs '+id);
+  for(const id of ['in-plain-language','connections','execution-summary','how-to-use-it','outputs','limits-and-troubleshooting'])assert(d.getElementById(id),relative+' needs '+id);
+  assert(d.querySelectorAll('h2').length>=7,relative+' needs substantive technical sections');
   assert.equal(d.querySelectorAll('nav a[aria-current=page]').length,1);
   assert(d.querySelector('table tbody tr'));
  }

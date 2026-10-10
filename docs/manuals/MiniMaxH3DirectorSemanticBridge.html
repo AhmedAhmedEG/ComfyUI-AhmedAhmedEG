@@ -1,0 +1,15 @@
+<h2 id="bridge-operation">An embedding adapter, not prompt generation</h2>
+<p>Semantic Bridge modifies native text-conditioning embeddings after the H3 task builder has created them and before sampling. It does not rewrite the visible prompt, translate a reference filename, load an LLM or upscale images. Connect its configuration output to Master.semantic_bridge only when you have compatible trained adapter weights.</p>
+<p>The implemented student network is 5120 → 512 → 512 → 5120, with SiLU activations between linear layers. It expects six tensors: fc1/fc2/fc3 weights and biases. Files are discovered under models/semantic_bridge with safetensors, pt or pth extensions; a generic LoRA or arbitrary neural-network checkpoint does not fit this architecture.</p>
+<h2 id="bridge-equation">Exact residual blend and parameter meaning</h2>
+<pre><code>H = original embedding, converted to float32
+x = H / RMS(H)
+S = student(x)
+S' = S × ||H|| / ||S||       when magnitude_match is enabled
+C = H + alpha × (S' − H)
+return C in H's original dtype and device</code></pre>
+<p><code>adapter</code> identifies the student weights. <code>alpha</code> interpolates between original and student-derived conditioning: zero leaves H unchanged, 0.15 applies a modest residual mix, and one fully selects the student result. <code>magnitude_match</code> matches vector norms before mixing so the adapter changes direction/content without automatically producing an arbitrary scale change. It is not CFG or a probability of using the adapter.</p>
+<p>The loader caches at most a small number of students using path, modification time and file size. Conditioning metadata is copied and marked mmx_semantic_bridge. A missing/unresolvable adapter or a rewrite failure can leave conditioning unchanged and log a warning; merely connecting the node does not prove that a valid student executed. A placeholder saying to install weights is not an actual adapter selection.</p>
+<h2 id="bridge-experiment">How to evaluate it</h2>
+<p>Keep a fixed baseline shot, seed, model and references. Generate with the bridge disconnected, then with verified adapter weights and alpha 0.15. Compare prompt adherence and artifacts. If there is no change, inspect the server warning log and the adapter architecture before increasing alpha. Do not infer universal quality improvements from one favorable example. This stage is optional and can make conditioning worse when the student is mismatched to the task/model.</p>
+<p class="source">Implementation and exact network: <a href="../../nodes/node_semantic_bridge.py">node_semantic_bridge.py</a>.</p>

@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.1.1** consolidates the MiniMax/video production features of
+Version **1.1.2** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -27,7 +27,7 @@ nodes. The two core nodes are in `ComfyUI-AhmedAhmedEG/Start here`.
 reference page with its behavior, connections, usage steps, exact input/control
 schema, outputs and limitations. The site works locally with no external assets;
 keep the docs folder together. The starter is downloadable from Getting Started.
-Rebuild with `python tools/build_user_guide.py`.
+Read [Architecture and data](docs/architecture.html) for execution stages, cable types, temporal math, caching and memory. Each node page includes a detailed technical chapter, examples, dependencies and limitations, followed by its schema reference. Authored chapters live in `docs/manuals/`; rebuild the offline HTML with `python tools/build_user_guide.py`.
 Saved UI workflows using the former Master Director type migrate on import.
 API prompts should use `MiniMaxH3MasterNode` as their `class_type`.
 
@@ -51,7 +51,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.1.1 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.1.2 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.
@@ -147,10 +147,7 @@ Install only the providers you use in ComfyUI's environment:
 
 ## Validation and license
 
-The 2026-10-09 review passes **96 regression tests**, **14 real CPU PyTorch/PyAV
-tests**, and an editor DOM integration scenario. GPU sampling, actual optional
-model weights, RTX SDK execution and the remote ComfyUI deployment remain
-unverified. Code consolidation does not establish visual quality or performance.
+The 1.1.2 review passes **114 regression tests**, with editor, preview and documentation checks. The remote installation and starter graph contracts are verified. GPU sampling, actual optional model weights and RTX SDK execution remain unverified. Code consolidation does not establish visual quality or performance.
 
 ```sh
 python -m unittest discover -s tests -v

@@ -3,7 +3,7 @@ import math
 from .config import calculate_dimensions_for_aspect_and_mp, snap_to_multiple
 
 
-def timeline_media_size(timeline):
+def timeline_media_size(timeline, ref_pack=None):
     from .media_io import resolve_input_path
     import folder_paths
     root = folder_paths.get_input_directory()
@@ -22,6 +22,13 @@ def timeline_media_size(timeline):
                 if container.streams.video:
                     stream = container.streams.video[0]
                     return stream.width, stream.height
+    # Graph-supplied pool tensors are authoritative even when a loader has no
+    # file provenance recognizable by the editor.
+    for row in (ref_pack or {}).get("refs", []):
+        if row.get("type") in ("image", "video"):
+            media = row.get("data")
+            if getattr(media, "ndim", 0) == 4 and media.shape[0] > 0:
+                return int(media.shape[2]), int(media.shape[1])
     return None
 
 

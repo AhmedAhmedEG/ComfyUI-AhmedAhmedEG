@@ -1,0 +1,16 @@
+<h2 id="checkpoint-meaning">A saved generated take, including its working state</h2>
+<p>A checkpoint here is a cached take from this pack, not a diffusion-model weight file. The node loads decoded frames, audio and the sampled H3 latent. Its continuation output also records project_id, clip_id and generation/take identity. Connect checkpoint to Master.continuation when deliberately continuing a selected result, or use the separate outputs for inspection/export.</p>
+<p><code>project_id</code> chooses the server-side project cache. <code>clip_id</code> chooses a shot within that project. <code>take_id=latest</code> loads the shot's current manifest entry. A specific take_id looks up the recorded take and verifies that it belongs to the requested shot. It does not search another project merely because an identically named file exists.</p>
+<h2 id="checkpoint-reload">Change detection and completeness</h2>
+<p>For latest, IS_CHANGED tracks the cached latent file's modification time so a newer take can trigger reevaluation. A specific take uses that explicit identity. The loader requires readable latent, frames and audio; it raises an error for a missing/incomplete checkpoint. Loading a workflow JSON on another server cannot restore these files automatically.</p>
+<pre><code>Load Take Checkpoint
+  project_id = my_scene
+  clip_id    = clip_1
+  take_id    = latest
+checkpoint ─→ Master.continuation
+frames ─────→ image/video inspection
+audio ──────→ audio inspection
+latent ─────→ Tail From Latent or compatible advanced sampling graph</code></pre>
+<p>Save the take identity when reproducibility matters. Latest is convenient during iteration, but it intentionally changes when another take becomes current. A saved-take selector and the Master’s validated flag are separate concepts: selection chooses a take; validation requests reuse only when effective inputs/fingerprints are compatible.</p>
+<p>The checkpoint remains server-side tensor/cache state. A preview MP4 has neither the complete latent nor its continuation masks and cannot stand in for a checkpoint. Keep the cache when moving/restoring projects that depend on continuation.</p>
+<p class="source">Implementation: <a href="../../nodes/node_project.py">Checkpoint.load and IS_CHANGED</a>, <a href="../../core/cache_manager.py">manifest/take storage</a>.</p>

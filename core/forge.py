@@ -9,9 +9,22 @@ import uuid
 from .project import migrate_timeline
 
 
+def reference_context(timeline):
+    """Include real pool metadata without embedding tensors or preview URLs."""
+    rows = {}
+    for source in (timeline.get("references", []), timeline.get("available_refs", [])):
+        for row in source:
+            if not isinstance(row, dict) or not row.get("id"):
+                continue
+            rows[row["id"]] = {key: row.get(key) for key in
+                ("id", "type", "name", "role", "description", "filename", "subfolder", "folder_type")}
+    return list(rows.values())
+
+
 def context_key(timeline):
     value = copy.deepcopy(timeline)
     value.pop("available_refs", None)
+    value["reference_context"] = reference_context(timeline)
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
@@ -48,7 +61,7 @@ def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="ht
     count = int(count)
     if not 1 <= count <= 100: raise ValueError("Draft shot count must be between 1 and 100.")
     state = migrate_timeline(timeline)
-    refs = [{key: row.get(key) for key in ("id", "type", "role", "description")} for row in state.get("references", [])]
+    refs = reference_context(state)
     refs.extend({"id": f"RefMod {row.get('slot')}", "type": "refmod", "description": row.get("description", "")} for row in state.get("refmods", []) if row.get("enabled", True))
     system = ("Draft MiniMax H3 video shots. Return only JSON: {\"shots\":[{\"prompt\":\"...\",\"duration\":5,\"type\":\"T2V\"}]}. "
         "Preserve identities, reference descriptions, existing context and requested retention. "

@@ -27,6 +27,9 @@ def section(title, content, anchor=None):
 
 def build():
     data = json.loads((DOCS / 'guide_content.json').read_text(encoding='utf-8'))
+    manuals = DOCS / 'manuals'
+    def technical_manual(path):
+        return path.read_text(encoding='utf-8').replace('<table>', '<div class="table-wrap"><table>').replace('</table>', '</table></div>')
     schema = json.loads(subprocess.check_output([sys.executable, "-X", "utf8", str(ROOT/'tools/documentation_schema.py')], cwd=ROOT).decode('utf-8'))
     assert set(data['nodes']) == set(schema), 'Every public node needs exactly one documentation page'
     template = (DOCS / 'documentation_template.html').read_text(encoding='utf-8')
@@ -40,7 +43,7 @@ def build():
 
     def nav(current, prefix):
         output = ''
-        for target, title in [('index.html','Documentation index'),('getting-started.html','Getting started')]:
+        for target, title in [('index.html','Documentation index'),('getting-started.html','Getting started'),('architecture.html','Architecture and data')]:
             active = ' aria-current="page"' if current == target else ''
             output += f'<a href="{prefix}{target}"{active}>{title}</a>'
         for group in groups:
@@ -65,7 +68,7 @@ def build():
         generated[path] = result
 
     overview = '<div class="eyebrow">Node pack reference</div><h1>ComfyUI-AhmedAhmedEG</h1><p class="lead">MiniMax H3 generation, shot continuity, references, refinement and export. Start with one working shot, then look up the node you need.</p>'
-    overview += '<div class="actions"><a class="button primary" href="getting-started.html">Getting started →</a><a class="button" href="nodes/master-node.html">Master Node reference</a></div>'
+    overview += '<div class="actions"><a class="button primary" href="getting-started.html">Getting started →</a><a class="button" href="architecture.html">Architecture and data</a><a class="button" href="nodes/director-settings.html">Generation and continuity explained</a></div>'
     overview += '<div class="callout">The basic workflow uses four nodes from this pack: <b>Master Node</b>, <b>Director Settings</b>, <b>Reference Pack</b> and <b>Smart Preview</b>. Model loaders and ordinary video saving use stock ComfyUI nodes.</div>'
     overview += section('Documentation index','<p>Every node has its own page with behavior, wiring, a usage example, inputs, settings, outputs and limitations.</p>')
     for group in groups:
@@ -104,13 +107,14 @@ Soft footsteps and birds outside.</code></pre><div class="callout success"><b>Ex
     start+=section('Common first-run problems','<ul><li><b>UNKNOWN node:</b> update/restart the pack, refresh ComfyUI and load the current starter. Older graphs can contain removed wrapper nodes.</li><li><b>Missing model/input:</b> check the family model, minimax CLIP, both VAEs and the assigned references.</li><li><b>Out of memory:</b> shorten the shot or lower resolution before adding optional quality stages. Large text encoders also use memory.</li><li><b>No preview:</b> generate a completed take first. Workflows do not contain saved cache tensors; those stay on the server.</li></ul>')
     start+=section('Words you will meet','''<div class="table-wrap"><table><thead><tr><th>Word</th><th>Meaning</th></tr></thead><tbody><tr><td>Prompt</td><td>Your written instructions: action, appearance, camera movement and sound.</td></tr><tr><td>Model / checkpoint file</td><td>A trained AI file on the ComfyUI server. Selecting it does not download it.</td></tr><tr><td>Shot / clip</td><td>One short piece of the sequence. This editor uses “shot” for its timeline clips.</td></tr><tr><td>Take</td><td>One generated version of a shot. A new attempt can produce another take.</td></tr><tr><td>Frames / IMAGE</td><td>Individual pictures in order. IMAGE can carry a batch of many pictures.</td></tr><tr><td>fps</td><td>Frames per second. H3 generation uses 24; 24 pictures make roughly one second.</td></tr><tr><td>Latent</td><td>Compressed working data used by the AI. A decoder turns it into pictures and sound.</td></tr><tr><td>VAE</td><td>The encoder/decoder that converts between visible or audible media and compressed data.</td></tr><tr><td>Seed</td><td>The starting random number. Keep it fixed when comparing settings.</td></tr><tr><td>Steps</td><td>How many sampling iterations generation takes. More steps usually take longer and do not guarantee a better result.</td></tr><tr><td>CFG</td><td>A sampling control for guidance from the prompt. Keep the H3 starter value of 1 initially.</td></tr><tr><td>Reference</td><td>A picture, video or sound you ask the AI to follow.</td></tr><tr><td>Continuity</td><td>Using the end of the previous shot to help the next shot continue it.</td></tr><tr><td>Cache / validated</td><td>Stored completed results / a shot marked approved for reuse. Changed inputs can still require regeneration.</td></tr><tr><td>T2V / I2V / FL2V</td><td>Text-to-video / image-to-video / first-and-last-frame-to-video. Choose T2V for a written description alone.</td></tr><tr><td>REF2VA / V2V / RV2V</td><td>Reference-guided video and audio / video editing / reference video editing. These need the REF2VA model.</td></tr><tr><td>Denoise</td><td>How much a refinement pass may alter an existing result. A higher setting can change its content more.</td></tr><tr><td>LoRA</td><td>A small additional model file that modifies a base model, often for a style or subject. It is optional.</td></tr><tr><td>RefMod</td><td>A reference model/bundle treated as a reference asset, rather than a LoRA patch.</td></tr><tr><td>Sampler / scheduler</td><td>The method and sequence of noise levels used during generation. Keep euler/simple to begin.</td></tr><tr><td>Upscale</td><td>Increase the picture dimensions. Enlarging does not guarantee newly correct details.</td></tr><tr><td>Config / pack</td><td>A bundle of instructions or assets passed through a socket; it is not finished media.</td></tr></tbody></table></div><p><b>You do not need all 23 custom nodes.</b> Start with the four pack nodes in the starter. Visit another node’s page when you need the specific job it performs; each page now begins with a plain-language explanation and a first-use example.</p>''')
     page('getting-started.html','Getting started','Load the starter, select models, generate, review and save your first H3 shot.',start)
+    page('architecture.html','Architecture and data','Data types, execution stages, temporal math, caches, memory and project state.',technical_manual(manuals/'architecture.html'))
 
     def input_rows(key, fields):
         rows=[]
         node=data['nodes'][key]
         for field in fields:
             name=field['name']
-            description=node['control_descriptions'].get(name) or data['control_descriptions'].get(name) or field['description']
+            description=node['control_descriptions'].get(name) or field['description'] or data['control_descriptions'].get(name)
             assert description, (key,name)
             default=field['default']
             if field['connection']: default_text='Connection'
@@ -136,7 +140,10 @@ Soft footsteps and birds outside.</code></pre><div class="callout success"><b>Ex
         if key in ('MiniMaxH3MasterNode','MiniMaxH3DirectorSettings'):
             body+='<a href="../starter-workflow.png"><img class="editor-shot" src="../starter-workflow.png" alt="Actual connected starter workflow in ComfyUI"></a><p class="caption">This node in the starter workflow. '+('<a href="../getting-started.html#read-the-actual-starter-workflow">Read what every box does</a>')+'.</p>'
         body+=section('Connections','<pre><code>'+esc('\n'.join(node['wiring']))+'</code></pre>')
-        body+=section('How it works',items(node['behavior']))
+        manual_path = manuals / (key + '.html')
+        assert manual_path.is_file(), f'Missing technical manual: {key}'
+        body += technical_manual(manual_path)
+        body+=section('Execution summary',items(node['behavior']))
         body+=section('How to use it',items(node['steps'],True))
         ports=[field for field in spec['inputs'] if field['connection']]
         controls=[field for field in spec['inputs'] if not field['connection'] and field['name'] not in ('timeline_data','builder_state')]

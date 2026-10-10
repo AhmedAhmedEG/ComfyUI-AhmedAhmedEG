@@ -124,6 +124,18 @@ class Consolidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "context changed"):
             apply_draft(state, draft)
 
+    def test_forge_sees_named_pool_references_and_rejects_changed_pool(self):
+        seen = []
+        def provider(messages, **kwargs):
+            seen.extend(messages)
+            return '{"shots":[{"prompt":"Alice turns","duration":5,"type":"REF2VA"}]}'
+        state = {"clips":[], "available_refs":[{"id":"image_1", "name":"Alice", "type":"image", "filename":"alice.png"}]}
+        draft = draft_prompts(state, "One shot", backend="local", generator=provider)
+        self.assertIn("Alice", seen[0]["content"])
+        state["available_refs"][0]["filename"] = "someone_else.png"
+        with self.assertRaisesRegex(ValueError,"context changed"):
+            apply_draft(state,draft)
+
     def test_failed_cache_commit_does_not_replace_a_previous_take(self):
         from unittest.mock import patch
         from core.cache_manager import ProjectCacheManager

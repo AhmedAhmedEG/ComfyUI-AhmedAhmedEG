@@ -77,3 +77,7 @@ require you to add a separate node for each action.
 
 Load the new starter instead of the previous wrapper-based template. No alternate
 or deprecated registrations are kept in the node library.
+
+## Detailed technical manual
+
+The [offline documentation index](docs/index.html) links to all 23 node chapters. Start with [Getting Started](docs/getting-started.html), then [Architecture and data](docs/architecture.html). Each node chapter explains its algorithm, inputs and outputs, settings, examples, dependencies and limitations. [Director Settings](docs/nodes/director-settings.html) explains Generation mode and all continuity modes in detail.

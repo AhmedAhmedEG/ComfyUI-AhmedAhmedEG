@@ -1,0 +1,13 @@
+<h2 id="tail-decoding">Decode the sampled AV state before slicing its end</h2>
+<p>This utility consumes a sampled H3 LATENT and the correct video/audio VAEs, decodes its streams, then returns only the requested ending range. It is useful in advanced continuation/reference graphs. It does not extract a tail from a path to an MP4 and does not produce new motion.</p>
+<p><code>samples</code> is the latent dictionary with audiovisual samples. <code>vae</code> is the video VAE; optional <code>video_vae</code> is an alias that takes precedence when connected. <code>audio_vae</code> decodes the audio latent. The required video decoder must match the H3 latent representation. The unpacker supports the native NestedTensor or compatible tuple/list representation and can provide a silent audio stream for a video-only fallback.</p>
+<h2 id="tail-time-alignment">Seconds, aligned frame counts and audio samples</h2>
+<p><code>tail_seconds</code> is converted at 24 fps and limited by the available decoded frames. With <code>align_to_h3_grid=true</code>, the count is snapped to the nearest 5 + 17k value, then aligned down if that would exceed the source. With false, it uses the requested integer frame count. The returned duration_seconds is the actual count / 24, not necessarily your requested decimal duration.</p>
+<p>A 0.5-second request is 12 frames before alignment. The nearest supported H3 count is 5 rather than 22, so the aligned result can be about 0.208 seconds. Inspect frame_count/duration_seconds instead of assuming “0.5” means exactly half a second of model context. Audio is sliced from its end using actual duration × sample_rate.</p>
+<p><code>ref_video</code> is an IMAGE frame batch; <code>ref_video_audio</code> is AUDIO; <code>last_frame</code> is a one-frame IMAGE batch; the INT/FLOAT outputs report actual time. Route them into a reference/group workflow or inspect them separately. The full latent is decoded before slicing, so this utility is not a streaming memory shortcut for extremely long takes.</p>
+<pre><code>Master.latent ─→ Tail.samples
+H3 video VAE ─→ Tail.vae
+H3 audio VAE ─→ Tail.audio_vae
+Tail.last_frame ─→ next keyframe group.first_frame</code></pre>
+<p>Do not connect the Master's Conditioning-only latent and expect a meaningful completed tail: that output has not been internally sampled. An ordinary RGB upscaler also cannot act as the VAE input.</p>
+<p class="source">Implementation: <a href="../../nodes/node_tail_extract.py">extract</a>, <a href="../../core/config.py">frame alignment</a>, <a href="../../core/continuity.py">AV unpacking</a>.</p>
