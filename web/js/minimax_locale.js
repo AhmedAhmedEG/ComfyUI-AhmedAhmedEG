@@ -9,7 +9,7 @@ const labels = {
   "Refresh pool": ["刷新素材池", "تحديث المراجع"],
   "Export Project": ["导出项目", "تصدير المشروع"],
   "Import Project": ["导入项目", "استيراد المشروع"],
-  "Include Media In Export": ["导出时包含媒体", "تضمين الوسائط في التصدير"],
+  "Include Media": ["导出时包含媒体", "تضمين الوسائط في التصدير"],
   "Selected clips only": ["仅所选片段", "المقاطع المحددة فقط"],
   "Generate selected shots": ["生成所选镜头", "توليد اللقطات المحددة"],
   "Export with media": ["导出媒体包", "تصدير مع الوسائط"],

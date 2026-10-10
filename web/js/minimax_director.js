@@ -2223,7 +2223,11 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-project-workspace button.mmx-project-danger { background:#3b2329;border-color:#bf5967;color:#ffd0d6;box-shadow:0 0 12px #e45c6d2b,inset 0 0 10px #e45c6d0d; }
 .mmx-director-root .mmx-project-workspace button.mmx-project-danger:hover { background:#512932;border-color:#f0808d;box-shadow:0 0 16px #e45c6d55; }
 .mmx-director-root .mmx-project-workspace small { display:none; }
-.mmx-director-root .mmx-project-workspace .mmx-export-options { padding:4px 0;border:0;background:transparent;font-size:12px; }
+.mmx-director-root .mmx-project-workspace .mmx-export-control { display:flex;align-items:stretch;min-height:40px;border:1px solid #596979;border-radius:5px;background:#344353;overflow:hidden; }
+.mmx-director-root .mmx-project-workspace .mmx-export-control button { flex:1;min-width:0;border:0;border-radius:0;background:transparent; }
+.mmx-director-root .mmx-project-workspace .mmx-export-control button:hover { background:#405267; }
+.mmx-director-root .mmx-project-workspace .mmx-export-options { display:flex;flex-direction:row;align-items:center;justify-content:center;gap:7px;margin:0;padding:0 10px;border:0;border-left:1px solid #596979;border-radius:0;background:transparent;font-size:12px;white-space:nowrap;cursor:pointer; }
+.mmx-director-root .mmx-project-workspace .mmx-export-options input { margin:0;flex-shrink:0; }
 .mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
 .mmx-director-root .mmx-project-workspace .mmx-section > summary { padding:12px 0 0; }
 .mmx-director-root .mmx-shared-prompt { display:flex;flex-direction:column;gap:8px;flex-shrink:0;padding:0 0 14px;border-bottom:1px solid #414e5a; }
@@ -2851,7 +2855,10 @@ function mountDirectorUI(node) {
         const card=document.createElement("div");card.className="mmx-field";
         const help=document.createElement("small");help.textContent=button.title || "Clear the current timeline after confirmation.";
         card.append(button,help);actions.append(card);
-        if(button===exportBtn)card.append(body.querySelector('.mmx-export-options'));
+        if(button===exportBtn){
+          const exportControl=document.createElement('div');exportControl.className='mmx-export-control';
+          exportControl.append(button,body.querySelector('.mmx-export-options'));card.prepend(exportControl);
+        }
       }
       files.append(actions);body.append(files);
     }
@@ -2891,7 +2898,7 @@ function mountDirectorUI(node) {
         if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
         builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state || builderState;activeClipId=timelineState.clips?.[0]?.id; refreshFileRefs(); syncState(); renderTimeline();
   };
-  const exportOptions=field("Include Media In Export",includeMedia,"On: portable archive with source/reference files. Off: lightweight JSON that points to existing files.");exportOptions.classList.add("mmx-export-options");
+  const exportOptions=field("Include Media",includeMedia,"On: portable archive with source/reference files. Off: lightweight JSON that points to existing files.");exportOptions.classList.add("mmx-export-options");exportOptions.prepend(includeMedia);exportOptions.title="Include source and reference files in the exported project.";
   projectTools.append(exportBtn,importBtn,exportOptions);
   addProjectAction("Restore Last Autosave", async () => {
     const result = await requestJson(`/minimax_director/project/recover?project_id=${encodeURIComponent(timelineState.project_id || "default_director")}`);
@@ -3041,7 +3048,7 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.5";
+  generationBar.dataset.version="1.4.6";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
   finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");

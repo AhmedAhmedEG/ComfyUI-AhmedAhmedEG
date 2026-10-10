@@ -258,6 +258,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal([...filesPanel.querySelectorAll('button')].filter(el=>el.textContent==='Export Project').length,1);
   assert.equal([...filesPanel.querySelectorAll('button')].filter(el=>el.textContent==='Import Project').length,1);
   assert(filesPanel.querySelector('.mmx-export-media'),'Export format is configured at its sole action');
+  assert(filesPanel.querySelector('.mmx-export-control button')===button('Export Project'),'Media option shares the export control');
+  assert(filesPanel.querySelector('.mmx-export-control .mmx-export-options input')===filesPanel.querySelector('.mmx-export-media'),'Checkbox is attached beside Export Project');
   assert(!editorRoot.textContent.includes('Export with media') && !editorRoot.textContent.includes('Import media pack'));
   const previousFetch=w.api.fetchApi, calls=[];
   w.URL.createObjectURL=()=> 'blob:test';w.URL.revokeObjectURL=()=>{};

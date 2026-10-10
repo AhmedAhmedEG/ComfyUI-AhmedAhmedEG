@@ -259,3 +259,8 @@ Moved the single shared prompt textarea and its placement selector immediately b
 ## 1.4.5 — clear project action labels
 
 Renamed project actions in Title Case and ordered routine New/Import/Export operations before Restore/Reset/Delete. Reset Timeline and Delete Saved Results have red borders and a gentle red glow; the reset emoji is removed. Recovery is named Restore Last Autosave and its tooltip explains that snapshots are written after generated clips, not every UI edit. Cache deletion help now discloses autosave removal. Action order and declined deletion are covered by editor checks.
+
+
+## 1.4.6 — export option placement
+
+Include Media now sits beside Export Project in one bordered control, rather than floating beneath the action grid. Export formats and behavior are unchanged.
