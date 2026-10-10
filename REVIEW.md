@@ -229,3 +229,13 @@ Continuity method and video/audio frame contexts are per shot. Audio may be disa
 - Bordered timeline, clip terminology and described Files & recovery cards replace ambiguous unlabeled project actions. Separate Smart Preview remains the starter output.
 - Removed premature model validation that blocked timeline Conditioning only and source passthrough; generated clips still validate their required family model.
 - Validation: 124 backend tests, editor interaction/migration/file-continuation checks, both preview suites, offline documentation links and workflow contracts pass. Real installed frontend inspected through an isolated read-only proxy. New video continuation sampling has mock pipeline coverage; GPU quality has not been benchmarked.
+
+
+## 1.4.0 — timeline editing workspace
+
+- Split the inspector into a primary writing area and a bounded tool panel. Prompt, duration, seed and audio do not move when advanced panels change.
+- Added Continuity, Look, LoRAs and Project tabs with keyboard navigation, ARIA state and independent scrolling. The toolbar opens the same Project configuration surface.
+- Increased control/text sizing and contrast, simplified surfaces, aligned controls and introduced a restrained blue accent for selection.
+- Optional Help reveals longer explanations while control labels stay visible. Video continuation is the first field in its tab. Clip approval is now a keyboard-accessible button.
+- Updated beginner instructions that still pointed to Generation mode in Settings; rebuilt the per-node documentation and actual frontend captures.
+- Editor interactions, ordering/resize/drag cancellation, file continuation, serialization, language, tool navigation and single ownership checks pass. Preview suites, 124 backend regression tests and documentation/workflow contract checks pass.
