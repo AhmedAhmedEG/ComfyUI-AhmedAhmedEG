@@ -71,6 +71,9 @@ def asset_fields(state):
         if ref.get("filename"):
             yield ref, "filename"
     for owner in [state, *state.get("clips", [])]:
+        continuation = owner.get("continuation_source")
+        if isinstance(continuation, dict) and continuation.get("filename"):
+            yield continuation, "filename"
         source = owner.get("source")
         if isinstance(source, str):
             owner["source"] = source = {"filename": source}

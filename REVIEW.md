@@ -218,3 +218,14 @@ The ruler fills the timeline horizon and ends at a labeled whole interval, inclu
 Replaced inline advanced controls with full-width bordered expandable sections, labeled fields, help text and grid alignment. Project tools, Prompt Forge, RefMods, shot model/anchor/grading and LoRA controls are discoverable through prominent headers; the editor scrolls vertically instead of clipping expanded tools. Generation mode is now an explicit Master toolbar control; Settings contains sampling/canvas only. Saved workflow migration moves the former global controls into connected Master state.
 
 Continuity method and video/audio frame contexts are per shot. Audio may be disabled independently and is capped to usable video context; latent carry also receives the selected audio pin/count and seam redraw. Timeline overlays show planned context borrowing, capped to authored predecessor availability; native frame rounding can change actual availability. Completed/cached shots retain the maximum supported 56-frame tail so successors choose their own context. Settings/starter schemas, manual sections and tests were updated. 118 backend tests and editor/preview/docs checks pass; no GPU generation was performed.
+
+
+## 1.3.0 — one configuration owner and timeline video continuation
+
+- Removed embedded Prompt Forge/RefMod configuration and exporter/checkpoint creation actions from the Master. External nodes retain their algorithms and APIs.
+- Moved canvas policy to Settings; saved UI timelines migrate previous canvas policies into connected Settings. Updated both example workflows and Settings sizing.
+- Master toolbar imports existing video as a locked source clip. Generated clips accept an explicit continuation video in their Continuity section; only the last 56 frames worth is decoded, and source context is excluded from output. External Latent Carry never trims unrelated predecessor output. Portable projects include continuation files.
+- Mode-specific reference rows/tokens match backend consumption; T2V ignores inactive assignments and keyframe modes ignore non-image assignments. Pool RefMods are consumed only by assigned reference-mode clips.
+- Bordered timeline, clip terminology and described Files & recovery cards replace ambiguous unlabeled project actions. Separate Smart Preview remains the starter output.
+- Removed premature model validation that blocked timeline Conditioning only and source passthrough; generated clips still validate their required family model.
+- Validation: 124 backend tests, editor interaction/migration/file-continuation checks, both preview suites, offline documentation links and workflow contracts pass. Real installed frontend inspected through an isolated read-only proxy. New video continuation sampling has mock pipeline coverage; GPU quality has not been benchmarked.

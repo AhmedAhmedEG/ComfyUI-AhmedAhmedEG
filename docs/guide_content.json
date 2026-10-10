@@ -1,9 +1,9 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
-      "summary": "Authors and generates a timeline of MiniMax H3 shots with video and audio.",
+      "summary": "Authors and generates a timeline of MiniMax H3 clips with video and audio.",
       "when": "Use this as the centre of a normal workflow.",
       "behavior": [
         "Reads the timeline, settings and each shot’s media assignments. Resolves a model family and prompt for each shot.",
@@ -62,7 +62,7 @@
       "when": "Use this in every ordinary starter workflow.",
       "behavior": [
         "Returns one configuration dictionary. This node does not sample or decode media.",
-        "The Master uses this configuration as its baseline; active timeline resolution controls can override width and height.",
+        "The Master uses this configuration as its baseline; canvas_policy chooses how width and height are resolved here.",
         "When settings_optional is connected, this node overrides the matching canvas and sampling values while preserving other incoming settings."
       ],
       "steps": [
@@ -174,7 +174,7 @@
     },
     "MiniMaxH3DirectorFaceRefine": {
       "summary": "Configures detection, tracking and refinement of one face in decoded video.",
-      "when": "Use it when one face needs repair while retaining the main shot and audio.",
+      "when": "Use it when one face needs repair while retaining the main clip and audio.",
       "behavior": [
         "Selects an initial largest or centre-most face and tracks it across frames.",
         "Samples face crops with native H3 audiovisual conditioning, then pastes the refined pixels using the chosen region, feathering, colour match and blend.",
@@ -278,7 +278,7 @@
       }
     },
     "MiniMaxH3DirectorGroupImageToVideo": {
-      "summary": "Packs one text/keyframe shot for the Master from graph inputs.",
+      "summary": "Packs one text/keyframe clip for the Master from graph inputs.",
       "when": "Use it when another graph provides a prompt or endpoint images.",
       "behavior": [
         "With no endpoint images it creates a text shot. first_frame creates I2V; both endpoints create FL2V; last_frame alone creates L2V.",
@@ -311,8 +311,8 @@
       }
     },
     "MiniMaxH3DirectorGroupReferenceToVideo": {
-      "summary": "Packs one REF2VA shot with graph-supplied images, video frames and audio.",
-      "when": "Use it for a reference-driven graph-authored shot.",
+      "summary": "Packs one REF2VA clip with graph-supplied images, video frames and audio.",
+      "when": "Use it for a reference-driven graph-authored clip.",
       "behavior": [
         "Collects connected image slots, a video-frame batch and audio into one reference-family group.",
         "Prompt, duration and reference image-size policy are preserved for Master execution."
@@ -346,8 +346,8 @@
       }
     },
     "MiniMaxH3DirectorGroupsCombine": {
-      "summary": "Flattens connected shot groups into a single ordered group list.",
-      "when": "Use it to put several graph-authored shots into one Master group input.",
+      "summary": "Flattens connected clip groups into a single ordered group list.",
+      "when": "Use it to put several graph-authored clips into one Master group input.",
       "behavior": [
         "Reads group_1 through group_10 in numeric order. Each input may contain one group or a list; lists are flattened.",
         "Fails when no group is connected. This is shot-data assembly, not frame or video concatenation."
@@ -379,7 +379,7 @@
       }
     },
     "MiniMaxH3RefPack": {
-      "summary": "Pools graph-supplied references for local selection on individual Master shots.",
+      "summary": "Pools graph-supplied references for local selection on individual Master clips.",
       "when": "Use it when references come from other nodes; ordinary uploaded references can use the Master directly.",
       "behavior": [
         "Adds up to four image inputs, two video-frame batches, two audio inputs and two RefMod names per pack.",
@@ -491,8 +491,8 @@
       }
     },
     "MiniMaxH3ModelOverridePack": {
-      "summary": "Registers named model overrides for individual shots.",
-      "when": "Use it when shots need compatible models different from the main family models.",
+      "summary": "Registers named model overrides for individual clips.",
+      "when": "Use it when clips need compatible models different from the main family models.",
       "behavior": [
         "Copies previous entries, then adds the stripped name and MODEL.",
         "Using the same name replaces that entry. The Master resolves a shot’s model_override by that name."
@@ -526,7 +526,7 @@
     },
     "MiniMaxH3Checkpoint": {
       "summary": "Loads a complete saved take from a project’s server-side cache.",
-      "when": "Use it to resume or branch from an already completed shot.",
+      "when": "Use it to resume or branch from an already completed clip.",
       "behavior": [
         "latest selects the current take for clip_id. An explicit take UUID selects that historical generation from the manifest.",
         "Loads the saved latent, decoded frames and audio. Fails if any required artifact is missing or unreadable.",
@@ -596,7 +596,7 @@
     },
     "MiniMaxH3PromptForge": {
       "summary": "Asks a local or server-accessible language model for a structured prompt draft.",
-      "when": "Use it to draft several shots before manually accepting them.",
+      "when": "Use it to draft several clips before manually accepting them.",
       "behavior": [
         "Reads the timeline snapshot and instruction, requests shot_count draft shots, and records the source context.",
         "Optional images are encoded for a provider that supports vision. No video generation occurs.",
@@ -707,8 +707,8 @@
       }
     },
     "MiniMaxH3ProjectVideo": {
-      "summary": "Exports cached project shots one at a time and assembles a native VIDEO file.",
-      "when": "Use it for individual-shot export or rebuilding a saved sequence without resampling.",
+      "summary": "Exports cached project clips one at a time and assembles a native VIDEO file.",
+      "when": "Use it for individual-clip export or rebuilding a saved sequence without resampling.",
       "behavior": [
         "Reads the project ID from timeline first, otherwise from the project_id widget. Iterates shots in timeline order, optionally only selected shots.",
         "final uses cached final frames; pre_refine uses the saved first-pass frames; original_source decodes source ranges. Locked shots use their sources.",
@@ -824,7 +824,7 @@
       }
     },
     "MiniMaxH3SmartPreview": {
-      "summary": "Plays completed cached shots in a separate node, with Latest clip and Full video scopes.",
+      "summary": "Plays completed cached clips in a separate node, with Latest clip and Full video scopes.",
       "when": "Connect this at the end of the starter instead of a video-saving node.",
       "behavior": [
         "Reads the Master’s project_state output to identify completed cached takes. It does not generate video or combine the full movie on every run.",
@@ -974,6 +974,9 @@
     "audio_1_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
     "audio_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
     "refmod_1_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
-    "refmod_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change."
+    "refmod_2_name": "Optional friendly name shown in the Master’s reference shelf and prompt token buttons. Stable IDs and token syntax do not change.",
+    "canvas_policy": "The sole canvas policy: manual uses width/height; original follows usable media dimensions; auto uses megapixels and aspect.",
+    "canvas_megapixels": "Target pixel count in millions for auto canvas only.",
+    "canvas_aspect": "Aspect ratio for auto canvas only; auto derives it from source media."
   }
 }

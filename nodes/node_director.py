@@ -180,19 +180,8 @@ class MiniMaxH3MasterDirector:
         record_graph_provenance(kwargs.get("prompt"), unique_id,
             model=model, fl2va_model=fl2va_model, ref2va_model=ref2va_model,
             clip=clip, video_vae=video_vae, audio_vae=audio_vae)
-        # Extract execution mode first to determine if diffusion models are required
-        cfg_dict = config if config and isinstance(config, dict) else {}
-        exec_mode = str(
-            kwargs.get("execution_mode")
-            or cfg_dict.get("execution_mode")
-            or "Full Generation"
-        )
-        if exec_mode != "Conditioning Guide Output" and model is None and fl2va_model is None and ref2va_model is None and not model_pack:
-            raise ValueError(
-                "MiniMaxH3MasterDirector requires at least one diffusion model input. "
-                "Please connect 'model', 'fl2va_model', or 'ref2va_model'."
-            )
-
+        # Validate model availability per generated clip after reading the
+        # timeline's Generation mode. Source passthrough needs no diffusion model.
         # Extract settings from config with sensible defaults or legacy kwargs
         cfg_dict = config if config and isinstance(config, dict) else {}
         width = int(kwargs.get("width", cfg_dict.get("width", 1344)))
@@ -231,15 +220,16 @@ class MiniMaxH3MasterDirector:
                     raise ValueError("Unknown timeline generation mode.")
                 execution_mode = "Conditioning Guide Output" if generation == "Conditioning only" else "All-in-One Generation"
                 run_mode = "full_batch" if generation == "All shots" else "clip_by_clip"
-            if timeline.get("resolution"):
+            resolution = cfg_dict.get("resolution") or timeline.get("resolution")
+            if resolution:
                 try:
                     from ..core.resolution import plan_canvas, timeline_media_size
                 except ImportError:
                     from core.resolution import plan_canvas, timeline_media_size
                 source_size = timeline.get("source_size")
-                if source_size is None and (timeline["resolution"].get("mode") == "original" or timeline["resolution"].get("aspect") == "auto"):
+                if source_size is None and (resolution.get("mode") == "original" or resolution.get("aspect") == "auto"):
                     source_size = timeline_media_size(timeline, ref_pack)
-                width, height = plan_canvas(timeline["resolution"], source_size)
+                width, height = plan_canvas(resolution, source_size)
         except (json.JSONDecodeError, TypeError) as exc:
             raise ValueError("Timeline contains invalid JSON.") from exc
 
@@ -260,16 +250,23 @@ class MiniMaxH3MasterDirector:
             slot_counter = 1
             for r in ref_pack.get("refs", []):
                 if isinstance(r, dict) and r.get("type") == "refmod":
+                    current_slot = slot_counter
+                    slot_counter += 1
+                    if "clips" in timeline and not any(
+                        normalize_mode(item.get("type", "T2V")) in ("REF2VA", "V2V", "RV2V")
+                        and r.get("id") in [*timeline.get("shared_ref_ids", []), *item.get("ref_ids", [])]
+                        for item in timeline["clips"]
+                    ):
+                        continue
                     mod_data = r.get("data")
                     if mod_data and str(mod_data).strip().lower() != "none":
                         refmod_rows.append({
-                            "slot": slot_counter,
+                            "slot": current_slot,
                             "name": str(mod_data).strip(),
-                            "description": r.get("name", f"RefMod {slot_counter}"),
+                            "description": r.get("name", f"RefMod {current_slot}"),
                             "strength": 1.0,
                             "enabled": True,
                         })
-                        slot_counter += 1
 
         refmod_items = process_refmod_rows(refmod_rows, strict=execution_mode != "Conditioning Guide Output") if refmod_rows else []
         # If files were not loaded from disk (e.g. mock or missing file), preserve metadata for tag translation
@@ -440,6 +437,27 @@ class MiniMaxH3MasterDirector:
 
             # Map clip_type to canonical MiniMax mode (unifying REF2V into REF2VA)
             canon_mode = normalize_mode(clip_type)
+            selected_mods = {str(ref_pool[rid].get("data", "")).strip() for rid in clip_ref_ids
+                             if rid in ref_pool and ref_pool[rid].get("type") == "refmod"}
+            clip_refmod_items = [item for item in refmod_items if
+                                canon_mode in ("REF2VA", "V2V", "RV2V") and
+                                (timeline.get("refmods") or item.get("name") in selected_mods
+                                 or item.get("path") in selected_mods)]
+            if clip_item.get("continuation_source"):
+                if canon_mode in ("V2V", "RV2V", MODE_INPAINT) or clip_item.get("locked"):
+                    raise ValueError("Continue from video is for generated clips, not source edits or image inpaint.")
+                try:
+                    from ..core.source_media import continuation_range
+                except ImportError:
+                    from core.source_media import continuation_range
+                carried = continuation_range(clip_item, width, height)
+                frames = carried["frames"]
+                if frames.shape[0] < 1:
+                    raise ValueError("Continuation video has no usable ending frames.")
+                previous_tail = {"last_frame": frames[-1:], "tail_frames": frames,
+                                 "tail_audio": carried["audio"], "tail_latent": None}
+                previous_av = None
+                previous_fingerprint = fingerprint_value([frames, carried["audio"]])
             if canon_mode == MODE_INPAINT:
                 clip_continuity = False
                 clip_dur = 5 / FPS
@@ -453,7 +471,7 @@ class MiniMaxH3MasterDirector:
                 clip_active_model = (model_pack or {}).get(clip_item["model_override"])
                 if clip_active_model is None:
                     raise ValueError(f"Unknown shot model override: {clip_item['model_override']}")
-            if execution_mode != "Conditioning Guide Output" and clip_active_model is None:
+            if execution_mode != "Conditioning Guide Output" and clip_active_model is None and not clip_item.get("locked"):
                 needed_type = "fl2va_model" if canon_mode in ("FL2VA", "I2VA", "L2VA", "T2VA") else "ref2va_model"
                 raise ValueError(
                     f"MiniMaxH3MasterDirector: Shot {clip_idx + 1} ({clip_type} -> {canon_mode}) requires a model, "
@@ -467,9 +485,16 @@ class MiniMaxH3MasterDirector:
             local_video_audios = {}
             seen_refs = set()
             for rid in clip_ref_ids:
+                if canon_mode == "T2VA":
+                    continue
                 robj = ref_pool.get(rid)
                 if not robj:
                     raise ValueError(f"Shot {clip_idx + 1}: reference {rid!r} is not connected.")
+                # Preserve assignments when switching modes, but only consume
+                # media that belongs to the current mode's reference controls.
+                if canon_mode == "T2VA" or (canon_mode in ("I2VA", "L2VA", "FL2VA", MODE_INPAINT)
+                                           and robj.get("type") != "image"):
+                    continue
                 if robj.get("file_reference"):
                     if rid not in file_reference_cache:
                         import folder_paths
@@ -623,13 +648,13 @@ class MiniMaxH3MasterDirector:
                 from core.task_modes import validate_mode_assets
             if canon_mode in ("REF2VA", "V2V", "RV2V"):
                 validate_mode_assets(canon_mode,
-                    images=list(ref_images.values()) + [m for m in refmod_items if m.get("kind") == "image"],
-                    videos=list(ref_videos.values()) + [m for m in refmod_items if m.get("kind") == "video"],
-                    audios=list(ref_audios.values()) + [m for m in refmod_items if m.get("kind") == "audio"],
+                    images=list(ref_images.values()) + [m for m in clip_refmod_items if m.get("kind") == "image"],
+                    videos=list(ref_videos.values()) + [m for m in clip_refmod_items if m.get("kind") == "video"],
+                    audios=list(ref_audios.values()) + [m for m in clip_refmod_items if m.get("kind") == "audio"],
                     raise_on_error=True)
 
             # Build prompt (supporting per-clip structured prompts or raw prompts)
-            tag_map = build_refmod_tag_map(refmod_items, len(ref_images), len(ref_videos), len(ref_audios))
+            tag_map = build_refmod_tag_map(clip_refmod_items, len(ref_images), len(ref_videos), len(ref_audios))
             clip_prompt_mode = clip_item.get("prompt_mode", prompt_mode)
             clip_structured = clip_item.get("structured_prompt")
 
@@ -729,7 +754,7 @@ class MiniMaxH3MasterDirector:
                 ref_videos=ref_videos,
                 ref_audios=ref_audios,
                 ref_video_audios=ref_video_audios,
-                refmod_items=refmod_items,
+                refmod_items=clip_refmod_items,
                 guide_frames=guide_frames,
                 ref_image_size=str(group.get("ref_image_size", "match") if group else "match"),
             )
@@ -755,6 +780,10 @@ class MiniMaxH3MasterDirector:
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
                     pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
                     seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
+                if clip_item.get("continuation_source"):
+                    # The context came from an external file, not the preceding
+                    # timeline output. Never trim unrelated delivered footage.
+                    previous_trim = 0
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
                 if previous_trim and all_decoded_frames:
@@ -776,7 +805,7 @@ class MiniMaxH3MasterDirector:
                 seed=clip_seed,
                 model_name=str(getattr(clip_active_model, "model_name", "h3")),
                 loras=clip_lora_files,
-                ref_signatures=[fingerprint_value([ref_images, ref_videos, ref_video_audios, ref_audios, refmod_items, first_frame, last_frame])],
+                ref_signatures=[fingerprint_value([ref_images, ref_videos, ref_video_audios, ref_audios, clip_refmod_items, first_frame, last_frame])],
                 upstream_fingerprint=previous_fingerprint if clip_continuity else None,
                 generation_settings={"version": 3, "runtime": runtime_signature, "algorithm_weights": algorithm_signature, "mode": canon_mode, "steps": steps, "cfg": cfg,
                     "sampler": sampler, "scheduler": scheduler, "shift_video": shift_video,

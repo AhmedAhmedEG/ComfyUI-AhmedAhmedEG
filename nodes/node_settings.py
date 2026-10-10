@@ -45,6 +45,9 @@ class MiniMaxH3DirectorSettings:
             },
             "optional": {
                 "settings_optional": (MMX_DIRECTOR_CONFIG, {"tooltip": "Optional previous configuration to chain or override."}),
+                "canvas_policy": (["manual", "original", "auto"], {"default": "manual", "tooltip": "Manual uses width/height; Original follows source dimensions; Auto uses megapixels/aspect."}),
+                "canvas_megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.1, "tooltip": "Used only by Auto canvas."}),
+                "canvas_aspect": (["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3", "auto"], {"default": "16:9", "tooltip": "Used only by Auto canvas; auto follows source aspect."}),
             },
         }
 
@@ -74,6 +77,9 @@ class MiniMaxH3DirectorSettings:
         context_length: str = "22",
         preview_mode: str = "full",
         settings_optional: Optional[Dict[str, Any]] = None,
+        canvas_policy: str = "manual",
+        canvas_megapixels: float = 1.0,
+        canvas_aspect: str = "16:9",
         **kwargs,
     ) -> Tuple[Dict[str, Any]]:
         if generation_mode is not None:
@@ -83,6 +89,8 @@ class MiniMaxH3DirectorSettings:
             run_mode = "full_batch" if generation_mode == "All shots" else "clip_by_clip"
             prompt_mode = "simple"
         cfg_dict = {
+            "resolution": {"mode": canvas_policy, "width": int(width), "height": int(height),
+                           "megapixels": float(canvas_megapixels), "aspect": canvas_aspect},
             "width": int(width),
             "height": int(height),
             "frame_rate": float(frame_rate),

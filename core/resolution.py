@@ -10,6 +10,11 @@ def timeline_media_size(timeline, ref_pack=None):
     source = timeline.get("source")
     rows = ([{"filename": source}] if isinstance(source, str) else [source] if source else [])
     rows += [row for row in timeline.get("references", []) if row.get("type") in ("image", "video")]
+    for clip in timeline.get("clips", []):
+        for key in ("source", "continuation_source"):
+            value = clip.get(key)
+            if value:
+                rows.append({"filename": value} if isinstance(value, str) else value)
     for row in rows:
         if not row.get("filename"): continue
         path = resolve_input_path(row["filename"], root)

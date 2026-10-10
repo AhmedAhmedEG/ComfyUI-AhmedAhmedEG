@@ -46,3 +46,17 @@ def choose_audio(mode, generated, source, frame_count):
     if mode == "mute":
         return {"waveform": torch.zeros((1, 2, round(frame_count / FPS * 48000))), "sample_rate": 48000}
     raise ValueError(f"Unknown shot audio mode: {mode!r}")
+
+
+def continuation_range(clip, width, height):
+    """Decode just the requested ending of a clip's explicit continuation video."""
+    source = clip.get("continuation_source")
+    if not source:
+        return None
+    if not isinstance(source, dict) or not source.get("filename"):
+        raise ValueError("Continuation video must specify an input filename and end time.")
+    end = float(source.get("end", 0))
+    if not math.isfinite(end) or end <= 0:
+        raise ValueError("Continuation video end time must be finite and positive.")
+    return source_range({"source": source, "source_start": max(0, end - 56 / FPS),
+                         "source_end": end}, {}, width, height)

@@ -2057,8 +2057,9 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-reference-dialog::backdrop { background:#0009; }
 .mmx-reference-dialog img { max-width:80vw;max-height:75vh;display:block;object-fit:contain; }
 .mmx-director-root .mmx-track-row[hidden] { display:none; }
+.mmx-director-root [hidden] { display:none!important; }
 
-.mmx-director-root .mmx-multitrack-panel { min-height:0; padding:0; border-radius:2px; background:#25272b; }
+.mmx-director-root .mmx-multitrack-panel { min-height:0; padding:10px 12px; border:1px solid #50565f; border-radius:7px; background:#25272b; }
 .mmx-director-root .mmx-shot-top-bar .mmx-clip-mode-badge { display:none; }
 .mmx-director-root .mmx-clip-val-badge { font-size:11px!important; }
 
@@ -2076,7 +2077,8 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-section textarea { min-height:90px;resize:vertical; }
 .mmx-director-root .mmx-section button { border:1px solid #596776;background:#323e4e;color:#ecedf0;border-radius:5px;padding:8px 11px;cursor:pointer; }
 .mmx-director-root .mmx-section-body > button { align-self:start; }
-.mmx-director-root .mmx-project-actions { display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px; }
+.mmx-director-root .mmx-project-actions { display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;padding:14px;border-top:1px solid #454c55; }
+.mmx-director-root .mmx-project-actions .mmx-field { padding:10px;background:#20252c;border:1px solid #454c55;border-radius:5px; }
 .mmx-director-root .mmx-form-row { display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end; }
 .mmx-director-root .mmx-shot-sections { display:grid!important;grid-template-columns:1fr;gap:5px;align-items:stretch; }
 .mmx-director-root .mmx-shot-sections > details[open] { flex-basis:auto; }
@@ -2208,7 +2210,7 @@ function mountDirectorUI(node) {
     clips: [
       {
         id: "clip_1",
-        name: "Shot 1",
+        name: "Clip 1",
         type: "T2V",
         duration: 5.0,
         prompt: "",
@@ -2434,7 +2436,6 @@ function mountDirectorUI(node) {
         }
       });
 
-      const customRefs = [];
       timelineState.available_refs = discoveredRefs;
 
       // Clean up any clip ref_ids that are no longer available in the graph, migrating any legacy alt_ids
@@ -2468,7 +2469,7 @@ function mountDirectorUI(node) {
             timelineState.clips = [
               {
                 id: "clip_1",
-                name: "Shot 1",
+                name: "Clip 1",
                 type: "T2V",
                 duration: 5.0,
                 tail_seconds: 0.5,
@@ -2525,6 +2526,12 @@ function mountDirectorUI(node) {
   loadState();
 
   const syncState = () => {
+    timelineState.generation_mode ||= "Next shot";
+    for (const clip of timelineState.clips || []) {
+      clip.continuity_mode ||= "Independent (No Continuity)";
+      clip.context_length ??= 22;
+      clip.audio_context_length ??= clip.context_length;
+    }
     timelineState.project_id ||= node.id >= 0 ? String(node.id) : `project_${crypto.randomUUID()}`;
     if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
     if (builderWidget) builderWidget.value = JSON.stringify(builderState);
@@ -2582,7 +2589,7 @@ function mountDirectorUI(node) {
 
   const exportBtn = document.createElement("button");
   exportBtn.className = "mmx-action-btn";
-  exportBtn.innerHTML = "💾 Export";
+  exportBtn.innerHTML = "💾 Export timeline";
   exportBtn.title = "Export lightweight project archive";
   exportBtn.onclick = async () => {
     try {
@@ -2614,7 +2621,7 @@ function mountDirectorUI(node) {
 
   const importBtn = document.createElement("button");
   importBtn.className = "mmx-action-btn";
-  importBtn.innerHTML = "📂 Import";
+  importBtn.innerHTML = "📂 Import timeline";
   importBtn.title = "Import project archive";
   importBtn.onclick = () => {
     const fileInput = document.createElement("input");
@@ -2663,10 +2670,30 @@ function mountDirectorUI(node) {
   runSelection.type = "checkbox";
   runSelection.checked = !!timelineState.run_selection;
   runSelection.onchange = () => { timelineState.run_selection = runSelection.checked; syncState(); };
-  selectionLabel.append(runSelection, document.createTextNode("Generate selected shots"));
-  selectionLabel.title = "Other shots reuse matching cache or their original source video.";
+  selectionLabel.append(runSelection, document.createTextNode("Generate selected clips"));
+  selectionLabel.title = "Other clips reuse matching cache or their original source video.";
   toolbarLeft.appendChild(selectionLabel);
   const progressLabel = document.createElement("span"); progressLabel.style.fontSize = "11px"; toolbarLeft.appendChild(progressLabel);
+  const importVideo=document.createElement("button");importVideo.textContent="Add video clip";
+  importVideo.title="Place an existing video in the timeline without generating it. Subsequent clips can continue from its ending.";
+  const videoFile=document.createElement("input");videoFile.type="file";videoFile.accept="video/*";videoFile.hidden=true;
+  importVideo.onclick=()=>videoFile.click();
+  videoFile.onchange=async()=>{
+    const file=videoFile.files?.[0];if(!file)return;importVideo.disabled=true;
+    try{
+      const form=new FormData();form.append("file",file);
+      const response=await api.fetchApi("/minimax_director/media/upload",{method:"POST",body:form});
+      const asset=await response.json();if(!response.ok)throw new Error(asset.error || "Video upload failed");
+      if(asset.media_type!=="video")throw new Error("Choose a video file.");
+      const filename=[asset.subfolder,asset.name].filter(Boolean).join("/");
+      const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
+      if(!(info.duration>0))throw new Error("The video has no usable duration.");
+      const clip={id:`source_${crypto.randomUUID()}`,name:file.name,type:"V2V",duration:info.duration,
+        source:{filename},source_start:0,source_end:info.duration,locked:true,audio_mode:"source",prompt:"",ref_ids:[],continuity:false};
+      timelineState.clips.push(clip);activeClipId=clip.id;syncState();renderTimeline();
+    }catch(error){alert(error.message);}finally{importVideo.disabled=false;videoFile.value="";}
+  };
+  toolbarLeft.append(importVideo,videoFile);
 
   const field = (title, control, help = "") => {
     const label = document.createElement("label"); label.className = "mmx-field";
@@ -2683,8 +2710,14 @@ function mountDirectorUI(node) {
     for (const child of [...section.childNodes]) if (child!==summary) body.append(child);
     if (section===projectTools) {
       const actions=document.createElement("div");actions.className="mmx-project-actions";
-      for (const button of [...body.children].filter(child=>child.tagName==='BUTTON' && child.textContent!=='🗑️ Reset')) actions.append(button);
-      body.insertBefore(actions,intro.nextSibling);
+      const files=document.createElement("details");files.className="mmx-section";
+      const heading=document.createElement("summary");heading.textContent="Files & recovery";files.append(heading);
+      for (const button of [...body.children].filter(child=>child.tagName==='BUTTON')) {
+        const card=document.createElement("div");card.className="mmx-field";
+        const help=document.createElement("small");help.textContent=button.title || "Clear the current timeline after confirmation.";
+        card.append(button,help);actions.append(card);
+      }
+      files.append(actions);body.append(files);
     }
     section.append(body);
   };
@@ -2693,20 +2726,14 @@ function mountDirectorUI(node) {
   projectTools.appendChild(projectHeading);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
-    button.title=({"Create project exporter":"Adds and connects a Project Video node for cached exports.","Clear current project cache":"Deletes generated takes for this project after confirmation; reference files are kept.","Export with media":"Downloads a portable project including source/reference media.","Import media pack":"Loads a portable media project using append or overwrite.","Recover saved run":"Restores the latest autosaved authoring state.","Choose saved take for continuation":"Connects a specifically selected saved checkpoint.","New project":"Starts a new authoring timeline with a new project ID."})[label] || label;
+    button.title=({"Clear current project cache":"Deletes generated takes for this project after confirmation; reference files are kept.","Export with media":"Downloads a portable project including source/reference media.","Import media pack":"Loads a portable media project using append or overwrite.","Recover saved run":"Restores the latest autosaved authoring state.","New project":"Starts a new authoring timeline with a new project ID."})[label] || label;
     button.onclick = async () => { button.disabled = true; try { await handler(); } catch (error) { alert(error.message); } finally { button.disabled = false; } };
     projectTools.appendChild(button);
   };
-  addProjectAction("Create project exporter", async () => {
-    const exporter = LiteGraph.createNode("MiniMaxH3ProjectVideo");
-    if (!exporter) throw new Error("Project Video node is unavailable; reload ComfyUI after installing the update.");
-    exporter.pos = [(node.pos?.[0] || 0) + (node.size?.[0] || 1200) + 40, node.pos?.[1] || 0];
-    app.graph.add(exporter); node.connect(9, exporter, 0);
-  });
   addProjectAction("Clear current project cache", async () => {
     if (!confirm("Delete saved takes and cached outputs for this project? Uploaded reference files are retained.")) return;
     await requestJson("/minimax_director/project/clear_cache", {project_id: timelineState.project_id});
-    timelineState.clips.forEach(shot => { shot.validated = false; }); syncState(); renderTimeline();
+    timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();
   });
   addProjectAction("Export with media", async () => {
     const response = await api.fetchApi("/minimax_director/project/portable/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: timelineState.project_id, timeline: { ...timelineState, builder_state: builderState } }) });
@@ -2736,159 +2763,33 @@ function mountDirectorUI(node) {
     timelineState = result.timeline; builderState = timelineState.builder_state || builderState;
     refreshFileRefs(); syncState(); renderTimeline();
   });
-  addProjectAction("Choose saved take for continuation", async () => {
-    const rows = await requestJson(`/minimax_director/project/takes?project_id=${encodeURIComponent(timelineState.project_id || "default_director")}`);
-    const panel = document.createElement("details"); panel.open = true;
-    const heading = document.createElement("summary"); heading.textContent = "Saved takes — choose explicitly"; panel.appendChild(heading);
-    for (const take of rows) {
-      const button = document.createElement("button");
-      button.textContent = `${take.clip_id} · seed ${take.seed || "unknown"} · ${new Date(take.updated_at*1000).toLocaleString()}`;
-      button.title = take.take_id;
-      button.onclick = () => {
-        const checkpoint = LiteGraph.createNode("MiniMaxH3Checkpoint");
-        if (!checkpoint) { alert("Checkpoint node is unavailable; restart ComfyUI after installing this version."); return; }
-        app.graph.add(checkpoint); checkpoint.pos = [node.pos[0]-340, node.pos[1]];
-        for (const [name, value] of Object.entries({ project_id: timelineState.project_id || "default_director", clip_id: take.clip_id, take_id: take.take_id })) {
-          const widget = checkpoint.widgets?.find(value => value.name === name); if (widget) widget.value = value;
-        }
-        const target = node.inputs?.findIndex(input => input.name === "continuation");
-        if (target >= 0) checkpoint.connect(0, node, target);
-        app.graph.setDirtyCanvas(true,true); panel.remove();
-      }; panel.appendChild(button);
-    }
-    if (!rows.length) panel.appendChild(document.createTextNode("No completed takes saved for this project."));
-    projectTools.appendChild(panel);
-  });
   addProjectAction("New project", async () => {
-    timelineState = { version: 2, project_id: `project_${crypto.randomUUID()}`, clips: [{ id: "clip_1", name: "Shot 1", type: "T2V", duration: 5, prompt: "", seed: "0" }], references: [] };
+    timelineState = { version: 2, project_id: `project_${crypto.randomUUID()}`, clips: [{ id: "clip_1", name: "Clip 1", type: "T2V", duration: 5, prompt: "", seed: "0" }], references: [] };
     builderState = {}; activeClipId = "clip_1"; syncState(); renderTimeline();
   });
-  const sharedPrompt = document.createElement("textarea"); sharedPrompt.placeholder = "Shared prompt for every shot";
+  const sharedPrompt = document.createElement("textarea"); sharedPrompt.placeholder = "Shared prompt for every clip";
   sharedPrompt.value = timelineState.shared_prompt || "";
   sharedPrompt.onchange = () => { timelineState.shared_prompt = sharedPrompt.value; syncState(); };
-  projectTools.appendChild(field("Shared prompt",sharedPrompt,"Added to every shot; each shot keeps its own segment prompt."));
+  projectTools.appendChild(field("Shared prompt",sharedPrompt,"Added to every clip; each clip keeps its own segment prompt."));
   const fadeLabel = document.createElement("label"); fadeLabel.textContent = "Audio seam fade (ms) ";
   const fade = document.createElement("input"); fade.type = "number"; fade.min = "0"; fade.max = "1000"; fade.value = timelineState.audio_fade_ms ?? 15;
   fade.onchange = () => { timelineState.audio_fade_ms = Math.max(0,Math.min(1000,Number(fade.value)||0)); syncState(); }; fadeLabel.appendChild(fade); projectTools.appendChild(fadeLabel);
   const gainLabel = document.createElement("label"); const gain = document.createElement("input"); gain.type = "checkbox"; gain.checked = timelineState.audio_gain_match ?? true;
-  gain.onchange = () => { timelineState.audio_gain_match = gain.checked; syncState(); }; gainLabel.append(gain,document.createTextNode("Match audio gain between shots")); projectTools.appendChild(gainLabel);
-  const canvasMode = document.createElement("select");
-  for (const mode of ["config", "original", "auto", "manual"]) { const option = document.createElement("option"); option.value = mode; option.textContent = `Canvas: ${mode}`; canvasMode.appendChild(option); }
-  canvasMode.value = timelineState.resolution?.mode || "config";
-  canvasMode.onchange = () => { if (canvasMode.value === "config") delete timelineState.resolution; else timelineState.resolution = { ...(timelineState.resolution || {}), mode: canvasMode.value }; syncState(); };
-  projectTools.appendChild(field("Canvas source",canvasMode,"Config uses the Settings dimensions; Original uses source media; Auto uses aspect and megapixels."));
-  for (const [key, placeholder, fallback] of [["width", "Manual width", 1344], ["height", "Manual height", 768], ["megapixels", "Auto megapixels", 1]]) {
-    const input = document.createElement("input"); input.type = "number"; input.placeholder = placeholder; input.value = timelineState.resolution?.[key] ?? fallback;
-    input.onchange = () => { timelineState.resolution ||= { mode: "manual" }; timelineState.resolution[key] = Number(input.value); syncState(); }; projectTools.appendChild(field(placeholder,input));
-  }
-  const aspect = document.createElement("select");
-  for (const value of ["auto", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; aspect.appendChild(option); }
-  aspect.value = timelineState.resolution?.aspect || "16:9";
-  aspect.onchange = () => { timelineState.resolution ||= { mode: "auto" }; timelineState.resolution.aspect = aspect.value; syncState(); }; projectTools.appendChild(field("Aspect ratio",aspect));
+  gain.onchange = () => { timelineState.audio_gain_match = gain.checked; syncState(); }; gainLabel.append(gain,document.createTextNode("Match audio gain between clips")); projectTools.appendChild(gainLabel);
   const sharedPolicy = document.createElement("select");
   for (const value of ["prepend", "append"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; sharedPolicy.appendChild(option); }
   sharedPolicy.value = timelineState.shared_prompt_policy || "prepend";
   sharedPolicy.onchange = () => { timelineState.shared_prompt_policy = sharedPolicy.value; syncState(); }; projectTools.appendChild(field("Shared prompt placement",sharedPolicy));
 
-  const forgePanel = document.createElement("details"); const forgeHeading = document.createElement("summary"); forgeHeading.textContent = "Prompt Forge — draft and review";
-  forgePanel.appendChild(forgeHeading); projectTools.appendChild(forgePanel);
-  const forgeBackend = document.createElement("select");
-  for (const value of ["ollama", "compatible", "local"]) { const option = document.createElement("option"); option.value = value; option.textContent = value; forgeBackend.appendChild(option); }
-  const localBackend = document.createElement("select");
-  for (const value of ["transformers","gguf"]) { const option = document.createElement("option"); option.value = value; option.textContent = `Local: ${value}`; localBackend.appendChild(option); }
-  const localProjection = document.createElement("input"); localProjection.placeholder = "GGUF vision projection in models/LLM (optional)";
-  const forgeEndpoint = document.createElement("input"); forgeEndpoint.placeholder = "Provider endpoint"; forgeEndpoint.value = "http://localhost:11434";
-  const forgeModel = document.createElement("input"); forgeModel.placeholder = "Model name";
-  const forgeKey = document.createElement("input"); forgeKey.type = "password"; forgeKey.placeholder = "API key (kept in this panel only)";
-  const forgeCount = document.createElement("input"); forgeCount.type = "number"; forgeCount.min = "1"; forgeCount.max = "100"; forgeCount.value = "1";
-  const forgeInstruction = document.createElement("textarea"); forgeInstruction.placeholder = "Describe the shots, identities and details to retain";
-  const forgeVision = document.createElement("input"); forgeVision.type = "checkbox";
-  const visionLabel = document.createElement("label"); visionLabel.append(forgeVision, document.createTextNode("Use assigned Reference Pack media for vision review"));
-  const forgeReview = document.createElement("div");
-  let reviewedDraft = null;
-  const drawDraft = draft => {
-    reviewedDraft = draft; forgeReview.replaceChildren();
-    draft.shots.forEach((shot,index) => {
-      const card = document.createElement("fieldset");
-      const heading = document.createElement("legend"); heading.textContent = `Shot ${index+1}`; card.appendChild(heading);
-      const prompt = document.createElement("textarea"); prompt.value = shot.prompt; prompt.style.cssText = "display:block;width:95%;min-height:80px";
-      prompt.oninput = () => { shot.prompt = prompt.value; }; card.appendChild(prompt);
-      const duration = document.createElement("input"); duration.type = "number"; duration.min = ".01"; duration.max = "150"; duration.step = ".01"; duration.value = shot.duration || 5;
-      duration.onchange = () => { shot.duration = Number(duration.value); }; card.appendChild(duration);
-      const mode = document.createElement("select");
-      for (const value of ["T2VA","I2VA","FL2VA","L2VA","REF2VA","V2V","RV2V","Image Inpaint"]) {
-        const option = document.createElement("option"); option.value = value; option.textContent = value; mode.appendChild(option);
-      }
-      mode.value = shot.type || "T2VA"; mode.onchange = () => { shot.type = mode.value; }; card.appendChild(mode);
-      forgeReview.appendChild(card);
-    });
-  };
-  const forgeDraft = document.createElement("button"); forgeDraft.textContent = "Create draft";
-  forgeDraft.onclick = async () => {
-    forgeDraft.disabled = true;
-    try {
-      const result = await requestJson("/minimax_director/forge/draft", { timeline: timelineState, instruction: forgeInstruction.value,
-        backend: forgeBackend.value, endpoint: forgeEndpoint.value, model: forgeModel.value, api_key: forgeKey.value, count: Number(forgeCount.value),
-        local_backend: localBackend.value, projection: localProjection.value,
-        vision_ids: forgeVision.checked ? (timelineState.references || []).filter(row => ["image", "video"].includes(row.type)).map(row => row.id) : [] });
-      drawDraft(result);
-    } catch (error) { alert(error.message); } finally { forgeDraft.disabled = false; }
-  };
-  const forgeApply = document.createElement("button"); forgeApply.textContent = "Apply reviewed draft";
-  forgeApply.onclick = async () => {
-    try {
-      const draft = reviewedDraft; if (!draft) throw new Error("Create a draft before applying.");
-      const result = await requestJson("/minimax_director/forge/apply", { timeline: timelineState, draft });
-      timelineState = result.timeline; syncState(); renderTimeline();
-    } catch (error) { alert(error.message); }
-  };
-  forgePanel.append(field("Provider",forgeBackend),field("Server endpoint",forgeEndpoint,"localhost refers to the ComfyUI server, not your browser."),field("Model name",forgeModel),field("API key",forgeKey),field("Local model engine",localBackend),field("GGUF vision projection",localProjection),field("Number of shots",forgeCount),field("Draft instructions",forgeInstruction),visionLabel,forgeDraft,forgeReview,forgeApply);
-  finishSection(forgePanel,"Optional AI prompt drafting. Create a draft, inspect it, then apply; it does not generate video.");
 
-  const refmodLibrary = document.createElement("details"); const refmodHeading = document.createElement("summary"); refmodHeading.textContent = "RefMod library and descriptions";
-  refmodLibrary.appendChild(refmodHeading); projectTools.appendChild(refmodLibrary);
-  const refmodRows = document.createElement("div"); refmodLibrary.appendChild(refmodRows);
-  let refmodCatalog = [];
-  const drawRefmods = () => {
-    refmodRows.replaceChildren();
-    for (const row of timelineState.refmods || []) {
-      const card = document.createElement("fieldset");
-      const legend = document.createElement("legend"); legend.textContent = `<RefMod ${row.slot}>`; card.appendChild(legend);
-      const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.checked = row.enabled !== false;
-      enabled.onchange = () => { row.enabled = enabled.checked; syncState(); }; card.appendChild(enabled);
-      const name = document.createElement("select");
-      for (const entry of [{ name: row.name || "", description: "Select RefMod" }, ...refmodCatalog.filter(entry => entry.name !== row.name)]) {
-        const option = document.createElement("option"); option.value = entry.name; option.textContent = `${entry.name || "Select RefMod"} ${entry.kind || ""}`; option.title = entry.description || ""; name.appendChild(option);
-      }
-      name.value = row.name || "";
-      name.onchange = () => { row.name = name.value; row.description ||= refmodCatalog.find(entry => entry.name === row.name)?.description || ""; syncState(); drawRefmods(); }; card.appendChild(name);
-      const description = document.createElement("textarea"); description.placeholder = "Description saved with this workflow"; description.value = row.description || "";
-      description.onchange = () => { row.description = description.value; syncState(); }; card.appendChild(description);
-      const strength = document.createElement("input"); strength.type = "number"; strength.min = "0"; strength.max = "1"; strength.step = ".05"; strength.value = row.strength ?? 1;
-      strength.onchange = () => { row.strength = Number(strength.value); syncState(); }; card.appendChild(strength);
-      const remove = document.createElement("button"); remove.textContent = "Remove"; remove.onclick = () => { timelineState.refmods = timelineState.refmods.filter(item => item !== row); syncState(); drawRefmods(); }; card.appendChild(remove);
-      refmodRows.appendChild(card);
-    }
-  };
-  refmodLibrary.ontoggle = async () => {
-    if (!refmodLibrary.open) return;
-    try { refmodCatalog = await requestJson("/minimax_director/refmods"); drawRefmods(); }
-    catch (error) { refmodRows.textContent = error.message; }
-  };
-  const addRefmod = document.createElement("button"); addRefmod.textContent = "Add RefMod";
-  addRefmod.onclick = () => {
-    const used = new Set((timelineState.refmods || []).map(row => row.slot)); const slot = Array.from({length:8},(_,i)=>i+1).find(value => !used.has(value));
-    if (!slot) return;
-    (timelineState.refmods ||= []).push({ slot, name: "", description: "", strength: 1, enabled: true }); syncState(); drawRefmods();
-  }; refmodLibrary.appendChild(addRefmod); drawRefmods();
 
   let cancelTimelineDrag = null;
   const invalidateFrom = index => {
-    timelineState.clips.slice(index).forEach(shot => { if (!shot.locked) shot.validated = false; });
+    timelineState.clips.slice(index).forEach(clip => { if (!clip.locked) clip.validated = false; });
   };
   const deleteClip = clip => {
     const index = timelineState.clips.indexOf(clip);
-    if (index < 0 || !confirm(`Delete "${clip.name || "shot"}" from the timeline?`)) return;
+    if (index < 0 || !confirm(`Delete "${clip.name || "clip"}" from the timeline?`)) return;
     timelineState.clips.splice(index, 1); invalidateFrom(index);
     activeClipId = timelineState.clips[Math.min(index, timelineState.clips.length - 1)]?.id || null;
     syncState(); renderTimeline();
@@ -2896,10 +2797,10 @@ function mountDirectorUI(node) {
   const moveClip = (clip, destination) => {
     const index = timelineState.clips.indexOf(clip);
     if (index < 0 || clip.locked) return;
-    // A locked source stays in place; shots cannot cross it.
+    // A locked source stays in place; clips cannot cross it.
     let min = 0, max = timelineState.clips.length - 1;
-    timelineState.clips.forEach((shot, position) => {
-      if (shot.locked) { if (position < index) min = position + 1; else if (position > index) max = Math.min(max, position - 1); }
+    timelineState.clips.forEach((clip, position) => {
+      if (clip.locked) { if (position < index) min = position + 1; else if (position > index) max = Math.min(max, position - 1); }
     });
     destination = Math.max(min, Math.min(max, destination));
     if (destination === index) return;
@@ -2916,8 +2817,8 @@ function mountDirectorUI(node) {
     const clonedClip = {
       ...JSON.parse(JSON.stringify(clipToClone)),
       id: newId,
-      name: `${clipToClone.name || "Shot"} (Copy)`,
-      validated: false, // Reset validation so cloned shot generates
+      name: `${clipToClone.name || "Clip"} (Copy)`,
+      validated: false, // Reset validation so cloned clip generates
     };
     if (idx !== -1) {
       timelineState.clips.splice(idx + 1, 0, clonedClip);
@@ -2933,13 +2834,13 @@ function mountDirectorUI(node) {
   const clearBtn = document.createElement("button");
   clearBtn.className = "mmx-action-btn";
   clearBtn.innerHTML = "🗑️ Reset";
-  clearBtn.title = "Reset timeline to default shot";
+  clearBtn.title = "Reset timeline to default clip";
   clearBtn.onclick = () => {
-    if (confirm("Reset timeline to a single default shot?")) {
+    if (confirm("Reset timeline to a single default clip?")) {
       timelineState.clips = [
         {
           id: "clip_1",
-          name: "Shot 1",
+          name: "Clip 1",
           type: "T2V",
           duration: 5.0,
           prompt: "",
@@ -3001,14 +2902,13 @@ function mountDirectorUI(node) {
   root.appendChild(toolbar);
   const generationBar=document.createElement("div");generationBar.className="mmx-generation-bar";
   const generationSelect=document.createElement("select");generationSelect.className="mmx-generation-mode";
-  for (const mode of ["Next shot","All shots","Conditioning only"]){const option=document.createElement("option");option.value=mode;option.textContent=mode;generationSelect.append(option);}
+  for (const mode of ["Next shot","All shots","Conditioning only"]){const option=document.createElement("option");option.value=mode;option.textContent=mode.replace(/shot/g,"clip");generationSelect.append(option);}
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.2.0";
-  generationBar.append(field("Generation mode · v1.2.0",generationSelect,"Next shot generates one new shot. All shots processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
-  finishSection(refmodLibrary,"Optional reusable reference definitions. Use descriptions to explain their identity and role; media comes from Reference Pack.");
-  finishSection(projectTools,"Project-wide canvas, shared prompt, audio finishing, saved takes and portable exports. Expand a section to configure it.");
+  generationBar.dataset.version="1.3.0";
+  generationBar.append(field("Generation mode · v1.3.0",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
+  finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
   root.append(projectTools);
 
   // 2. Multi-Track Timeline Panel (4 Sub-Tracks + Ruler)
@@ -3038,12 +2938,12 @@ function mountDirectorUI(node) {
   rulerRow.appendChild(rulerLane);
   multitrackPanel.appendChild(rulerRow);
 
-  // Row 1: Shots Track (Shots + Prompt)
+  // Row 1: Clips Track (Clips + Prompt)
   const shotsRow = document.createElement("div");
   shotsRow.className = "mmx-track-row mmx-track-row-shots";
   const shotsHeader = document.createElement("div");
   shotsHeader.className = "mmx-track-header-cell";
-  shotsHeader.innerHTML = `<span>🎬</span><span>Shots / Prompt</span>`;
+  shotsHeader.innerHTML = `<span>🎬</span><span>Clips / Prompt</span>`;
   const shotsLane = document.createElement("div");
   shotsLane.className = "mmx-track-lane-cell mmx-shots-lane";
   shotsRow.appendChild(shotsHeader);
@@ -3109,10 +3009,11 @@ function mountDirectorUI(node) {
   };
 
   // Share one time scale between clips, ruler and scrubbing. Round the visible
-  // horizon to a labeled interval, rather than stopping labels at the last shot.
+  // horizon to a labeled interval, rather than stopping labels at the last clip.
   const timelineGeometry = () => {
-    const origin = (rulerHeader.offsetWidth || 112) + 6;
-    const viewport = Math.max(1, (multitrackPanel.clientWidth || 930) - origin - 6);
+    const panelPadding=parseFloat(getComputedStyle(multitrackPanel).paddingLeft)||0;
+    const origin = panelPadding + (rulerHeader.offsetWidth || 112) + 6;
+    const viewport = Math.max(1, (multitrackPanel.clientWidth || 930) - origin - 6 - panelPadding);
     const duration = timelineState.clips.reduce((sum, clip) => sum + (parseFloat(clip.duration) || 5), 0);
     const nominalScale = 64 * zoomLevel;
     const majorStep = nominalScale > 40 ? 1 : 2;
@@ -3126,7 +3027,7 @@ function mountDirectorUI(node) {
     rulerTicks.style.width = `${width}px`;
     rulerTicks.replaceChildren();
     multitrackPanel.style.setProperty("--mmx-grid-step", `${majorStep * pxPerSec}px`);
-    // Keep every reference lane aligned with the same shot boundaries.
+    // Keep every reference lane aligned with the same clip boundaries.
     [shotsLane, imagesLane, videosLane, audiosLane].forEach(lane => {
       [...lane.querySelectorAll('.mmx-subtrack-block')].forEach((block, index) => {
         const clip = timelineState.clips[index];
@@ -3204,25 +3105,25 @@ function mountDirectorUI(node) {
 
     panel.innerHTML = `
       <div class="mmx-modal-header">
-        <span class="mmx-modal-title">➕ Add New Timeline Shot</span>
+        <span class="mmx-modal-title">➕ Add New Timeline Clip</span>
         <button class="mmx-action-btn" id="modal-close-btn">✕</button>
       </div>
       <div class="mmx-modal-body">
         <div style="font-size: 11px; color: #94a3b8;">
-          Choose the generation mode for this shot. Each shot can independently utilize text, start/end frames, guide videos, or multi-modal character references:
+          Choose the generation mode for this clip. Each clip can independently utilize text, start/end frames, guide videos, or multi-modal character references:
         </div>
         <div class="mmx-type-modal-grid">
           <button class="mmx-type-modal-btn" data-type="T2V">
             <span class="mmx-type-modal-btn-title">
               <span class="mmx-clip-mode-badge mmx-badge-t2v">T2V</span> Text to Video
             </span>
-            <span class="mmx-type-modal-btn-desc">Pure text prompt generation. Seamlessly chains from previous shot tail when continuity is enabled.</span>
+            <span class="mmx-type-modal-btn-desc">Pure text prompt generation. Seamlessly chains from previous clip tail when continuity is enabled.</span>
           </button>
           <button class="mmx-type-modal-btn" data-type="I2V">
             <span class="mmx-type-modal-btn-title">
               <span class="mmx-clip-mode-badge mmx-badge-i2v">I2V</span> Image to Video
             </span>
-            <span class="mmx-type-modal-btn-desc">Starts from a selected reference image (or inherited previous shot tail frame).</span>
+            <span class="mmx-type-modal-btn-desc">Starts from a selected reference image (or inherited previous clip tail frame).</span>
           </button>
           <button class="mmx-type-modal-btn" data-type="FL2V">
             <span class="mmx-type-modal-btn-title">
@@ -3276,7 +3177,7 @@ function mountDirectorUI(node) {
         const newIndex = timelineState.clips.length + 1;
         const newClip = {
           id: `clip_${Date.now()}_${newIndex}`,
-          name: `Shot ${newIndex}`,
+          name: `Clip ${newIndex}`,
           type: type,
           duration: 5.0,
           tail_seconds: 0.5,
@@ -3333,7 +3234,7 @@ function mountDirectorUI(node) {
   // Structured Prompt Scaffolding and Compilation Helpers
   const scaffoldStructuredPrompt = (clip) => {
     const assigned = clip.ref_ids || [];
-    const assignedObjs = assigned.map((id) => timelineState.available_refs?.find((r) => r.id === id)).filter(Boolean);
+    const assignedObjs = activeReferences(clip);
     const imgs = assignedObjs.filter((r) => r.type === "image" || r.type === "refmod");
     const vids = assignedObjs.filter((r) => r.type === "video");
     const auds = assignedObjs.filter((r) => r.type === "audio");
@@ -3391,6 +3292,13 @@ function mountDirectorUI(node) {
   };
 
   // Render Multi-Track Timeline & Clips
+  const referenceTypes = clip => {
+    const mode=String(clip.type || "T2V").toUpperCase();
+    if (["T2V","T2VA","TEXT"].includes(mode)) return [];
+    if (["I2V","I2VA","FL2V","FL2VA","L2V","L2VA","IMAGE INPAINT","INPAINT"].includes(mode)) return ["image"];
+    return ["image","video","audio","refmod"];
+  };
+  const activeReferences = clip => (clip.ref_ids || []).map(id=>(timelineState.available_refs || []).find(row=>row.id===id)).filter(row=>row && referenceTypes(clip).includes(row.type));
   const renderTimeline = () => {
     cancelTimelineDrag?.();
     refreshFileRefs();
@@ -3407,7 +3315,7 @@ function mountDirectorUI(node) {
     // 1. Calculate Total Duration & Frames (at 24fps)
     const totalDuration = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
     const totalFrames = Math.round(totalDuration * 24);
-    durationTotal.textContent = `Total: ${totalDuration.toFixed(1)}s / ${totalFrames}f (${timelineState.clips.length} Shot${timelineState.clips.length === 1 ? "" : "s"})`;
+    durationTotal.textContent = `Total: ${totalDuration.toFixed(1)}s / ${totalFrames}f (${timelineState.clips.length} Clip${timelineState.clips.length === 1 ? "" : "s"})`;
 
     const clipTrackElements = [];
 
@@ -3427,14 +3335,14 @@ function mountDirectorUI(node) {
     let elapsed=0;
     timelineState.clips.forEach((clip,index)=>{
       const method=clip.continuity_mode || "Independent (No Continuity)";
-      if (index>0 && clip.continuity!==false && !clip.locked && !clip.source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
+      if (index>0 && clip.continuity!==false && !clip.locked && !clip.source && !clip.continuation_source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
         const priorFrames=Math.floor((Number(timelineState.clips[index-1].duration)||5)*24);
         const grid=[56,39,22,5].find(count=>count<=priorFrames && count<=Number(clip.context_length || 22)) || 0;
         const video=method==="FL2VA Tail Handoff"?1:grid;
         const audio=method==="FL2VA Tail Handoff"?0:Math.min(video,Number(clip.audio_context_length ?? video));
         for (const [kind,frames] of [["video",video],["audio",audio]]) if (frames>0) {
           const overlay=document.createElement("div");overlay.className=`mmx-continuity-overlay ${kind}`;overlay.dataset.start=elapsed;overlay.dataset.frames=frames;
-          overlay.textContent=`${kind==='video'?'V':'A'} ${frames}f`;overlay.title=`${clip.name || 'Shot '+(index+1)} borrows ${(frames/24).toFixed(2)}s of ${kind} context`;shotsLane.append(overlay);
+          overlay.textContent=`${kind==='video'?'V':'A'} ${frames}f`;overlay.title=`${clip.name || 'Clip '+(index+1)} borrows ${(frames/24).toFixed(2)}s of ${kind} context`;shotsLane.append(overlay);
         }
       }
       elapsed+=Number(clip.duration)||5;
@@ -3446,20 +3354,20 @@ function mountDirectorUI(node) {
       const isActive = clip.id === activeClipId;
       const isValidated = !!clip.validated;
 
-      // Filter assigned refs by type for this shot
+      // Filter assigned refs by type for this clip
       const assignedRefs = clip.ref_ids || [];
-      const assignedObjs = assignedRefs.map((rid) => timelineState.available_refs?.find((r) => r.id === rid)).filter(Boolean);
+      const assignedObjs = activeReferences(clip);
       const imgRefs = assignedObjs.filter((r) => r.type === "image" || r.type === "refmod");
       const vidRefs = assignedObjs.filter((r) => r.type === "video");
       const audRefs = assignedObjs.filter((r) => r.type === "audio");
 
       // ============================================
-      // Track 1: Shot Block (Header info + Prompt preview)
+      // Track 1: Clip Block (Header info + Prompt preview)
       // ============================================
       const shotBlock = document.createElement("div");
       shotBlock.className = `mmx-subtrack-block mmx-shot-block${isActive ? " active" : ""}${isValidated ? " validated" : ""}`;
       shotBlock.style.width = `${baseWidth}px`;
-      shotBlock.title = `Shot ${idx + 1}: ${clip.name || "Untitled"} (${dur.toFixed(1)}s) - Click to inspect`;
+      shotBlock.title = `Clip ${idx + 1}: ${clip.name || "Untitled"} (${dur.toFixed(1)}s) - Click to inspect`;
 
       // Top Bar: Mode, Name, Duration, Auto-Tail, Validated, Delete
       const shotTopBar = document.createElement("div");
@@ -3472,7 +3380,7 @@ function mountDirectorUI(node) {
 
       const title = document.createElement("span");
       title.className = "mmx-clip-title";
-      title.textContent = clip.name || `Shot ${idx + 1}`;
+      title.textContent = clip.name || `Clip ${idx + 1}`;
 
       const durTag = document.createElement("span");
       durTag.className = "mmx-clip-duration";
@@ -3485,7 +3393,7 @@ function mountDirectorUI(node) {
       if (clip.continuity && idx > 0) {
         const contIcon = document.createElement("span");
         contIcon.style.fontSize = "10px";
-        contIcon.title = "Auto-Tail Continuity from previous shot";
+        contIcon.title = "Auto-Tail Continuity from previous clip";
         contIcon.textContent = "🔗";
         shotTopBar.appendChild(contIcon);
       }
@@ -3501,7 +3409,7 @@ function mountDirectorUI(node) {
         valBadge.style.borderRadius = "3px";
         valBadge.style.padding = "1px 4px";
         valBadge.textContent = "✓";
-        valBadge.title = "Shot is validated (cached and skipped on re-render)";
+        valBadge.title = "Clip is validated (cached and skipped on re-render)";
         shotTopBar.appendChild(valBadge);
       }
 
@@ -3566,7 +3474,7 @@ function mountDirectorUI(node) {
           audBlock.style.width = `${newWidth}px`;
 
           const tot = timelineState.clips.reduce((acc, c) => acc + (parseFloat(c.duration) || 5.0), 0);
-          durationTotal.textContent = `Total: ${tot.toFixed(1)}s / ${Math.round(tot * 24)}f (${timelineState.clips.length} Shots)`;
+          durationTotal.textContent = `Total: ${tot.toFixed(1)}s / ${Math.round(tot * 24)}f (${timelineState.clips.length} Clips)`;
           drawRuler();
         };
 
@@ -3591,7 +3499,7 @@ function mountDirectorUI(node) {
       const imgBlock = document.createElement("div");
       imgBlock.className = `mmx-subtrack-block mmx-img-block${isActive ? " active" : ""}${isValidated ? " validated" : ""}`;
       imgBlock.style.width = `${baseWidth}px`;
-      imgBlock.title = `Shot ${idx + 1} Ref Images (${imgRefs.length}) - Click to inspect`;
+      imgBlock.title = `Clip ${idx + 1} Ref Images (${imgRefs.length}) - Click to inspect`;
       imgBlock.onclick = () => selectClip(clip.id);
 
       if (imgRefs.length > 0) {
@@ -3645,7 +3553,7 @@ function mountDirectorUI(node) {
       const vidBlock = document.createElement("div");
       vidBlock.className = `mmx-subtrack-block mmx-vid-block${isActive ? " active" : ""}${isValidated ? " validated" : ""}`;
       vidBlock.style.width = `${baseWidth}px`;
-      vidBlock.title = `Shot ${idx + 1} Ref Videos (${vidRefs.length}) - Click to inspect`;
+      vidBlock.title = `Clip ${idx + 1} Ref Videos (${vidRefs.length}) - Click to inspect`;
       vidBlock.onclick = () => selectClip(clip.id);
 
       if (vidRefs.length > 0) {
@@ -3699,7 +3607,7 @@ function mountDirectorUI(node) {
       const audBlock = document.createElement("div");
       audBlock.className = `mmx-subtrack-block mmx-aud-block${isActive ? " active" : ""}${isValidated ? " validated" : ""}`;
       audBlock.style.width = `${baseWidth}px`;
-      audBlock.title = `Shot ${idx + 1} Ref Audios (${audRefs.length}) - Click to inspect`;
+      audBlock.title = `Clip ${idx + 1} Ref Audios (${audRefs.length}) - Click to inspect`;
       audBlock.onclick = () => selectClip(clip.id);
 
       if (audRefs.length > 0) {
@@ -3804,14 +3712,14 @@ function mountDirectorUI(node) {
       audiosLane.appendChild(audBlock);
     });
 
-    const types = new Set(timelineState.clips.flatMap(shot => (shot.ref_ids || []).map(id => timelineState.available_refs.find(row => row.id === id)?.type)));
+    const types = new Set(timelineState.clips.flatMap(clip => activeReferences(clip).map(row=>row.type)));
     imagesRow.hidden = !types.has("image") && !types.has("refmod");
     videosRow.hidden = !types.has("video"); audiosRow.hidden = !types.has("audio");
-    // 3. Add Shot Button flush at end of Track 1 (Shots Lane)
+    // 3. Add Clip Button flush at end of Track 1 (Clips Lane)
     const addCard = document.createElement("div");
     addCard.className = "mmx-add-clip-card";
-    addCard.innerHTML = `<span class="mmx-add-clip-icon">+</span><span>Add Shot</span>`;
-    addCard.title = "Add a new shot to the timeline";
+    addCard.innerHTML = `<span class="mmx-add-clip-icon">+</span><span>Add Clip</span>`;
+    addCard.title = "Add a new clip to the timeline";
     addCard.onclick = openTypePickerModal;
     shotsLane.appendChild(addCard);
 
@@ -3829,15 +3737,15 @@ function mountDirectorUI(node) {
     const activeClip = timelineState.clips.find((c) => c.id === activeClipId) || timelineState.clips[0];
     if (!activeClip) {
       const empty = document.createElement("p"); empty.className = "mmx-empty-timeline";
-      empty.textContent = "No shots. Click + Add Shot in the timeline to begin.";
+      empty.textContent = "No clips. Click + Add Clip in the timeline to begin.";
       inspector.appendChild(empty); return;
     }
 
-    // Header: Shot Name + Mode Dropdown + Duration + Auto-Tail
+    // Header: Clip Name + Mode Dropdown + Duration + Auto-Tail
     const header = document.createElement("div");
     header.className = "mmx-inspector-header";
 
-    // Shot Name Input & Mode Select
+    // Clip Name Input & Mode Select
     const titleWrap = document.createElement("div");
     titleWrap.className = "mmx-inspector-title";
 
@@ -3845,7 +3753,7 @@ function mountDirectorUI(node) {
     shotLabel.style.fontSize = "11px";
     shotLabel.style.color = "#94a3b8";
     const clipIdx = timelineState.clips.indexOf(activeClip) + 1;
-    shotLabel.textContent = "Shot:";
+    shotLabel.textContent = "Clip:";
     titleWrap.appendChild(shotLabel);
 
     const nameInput = document.createElement("input");
@@ -3857,7 +3765,7 @@ function mountDirectorUI(node) {
     nameInput.style.fontWeight = "600";
     nameInput.style.padding = "2px 6px";
     nameInput.style.width = "120px";
-    nameInput.value = activeClip.name || `Shot ${clipIdx}`;
+    nameInput.value = activeClip.name || `Clip ${clipIdx}`;
     nameInput.oninput = () => {
       activeClip.name = nameInput.value;
       syncState();
@@ -3894,7 +3802,7 @@ function mountDirectorUI(node) {
     titleWrap.appendChild(modeSelect);
     header.appendChild(titleWrap);
 
-    // Actions group in Inspector Header (Validated Toggle + Delete Shot)
+    // Actions group in Inspector Header (Validated Toggle + Delete Clip)
     const headerActions = document.createElement("div");
     headerActions.style.display = "flex";
     headerActions.style.alignItems = "center";
@@ -3911,7 +3819,7 @@ function mountDirectorUI(node) {
     // 1. Validated Toggle Badge in Header (Prevents re-generation, reuses cached output)
     const valBtn = document.createElement("div");
     valBtn.className = "mmx-validate-toggle " + (activeClip.validated ? "validated" : "unvalidated");
-    valBtn.title = "Mark shot as validated. Validated shots reuse cached output and skip re-generation.";
+    valBtn.title = "Mark clip as validated. Validated clips reuse cached output and skip re-generation.";
     valBtn.innerHTML = activeClip.validated ? "<span>✅</span><span>Validated (Skip Gen)</span>" : "<span>⭕</span><span>Unvalidated (Will Gen)</span>";
     valBtn.onclick = () => {
       activeClip.validated = !activeClip.validated;
@@ -3921,18 +3829,18 @@ function mountDirectorUI(node) {
     };
     headerActions.appendChild(valBtn);
 
-    // 2. Duplicate Shot Button in Inspector Header
+    // 2. Duplicate Clip Button in Inspector Header
     const dupShotBtn = document.createElement("button");
     dupShotBtn.className = "mmx-action-btn";
-    dupShotBtn.innerHTML = "<span>📋</span><span>Duplicate Shot</span>";
+    dupShotBtn.innerHTML = "<span>📋</span><span>Duplicate Clip</span>";
     dupShotBtn.title = `Duplicate "${activeClip.name}" with all its prompt and reference settings`;
     dupShotBtn.onclick = () => duplicateClip(activeClip);
     headerActions.appendChild(dupShotBtn);
 
-    // 3. Dedicated Delete Shot Button in Inspector Header
+    // 3. Dedicated Delete Clip Button in Inspector Header
     const delShotBtn = document.createElement("button");
     delShotBtn.className = "mmx-action-btn danger";
-    delShotBtn.textContent = "Delete Shot";
+    delShotBtn.textContent = "Delete Clip";
     delShotBtn.onclick = () => deleteClip(activeClip);
     headerActions.appendChild(delShotBtn);
     if (!activeClip.locked) for (const [offset, label] of [[-1, "← Move earlier"], [1, "Move later →"]]) {
@@ -3956,7 +3864,7 @@ function mountDirectorUI(node) {
     inspector.appendChild(cardsGrid);
 
     const audioLabel = document.createElement("label");
-    audioLabel.textContent = "Shot audio: ";
+    audioLabel.textContent = "Clip audio: ";
     const audioMode = document.createElement("select");
     for (const [value, label] of [["generate", "Generate"], ["source", "Keep source audio"], ["mute", "Mute"]]) {
       const option = document.createElement("option"); option.value = value; option.textContent = label;
@@ -3970,7 +3878,7 @@ function mountDirectorUI(node) {
     shotSections.className = "mmx-shot-sections";
     inspector.appendChild(shotSections);
     modeSelect.disabled = !!activeClip.locked;
-    const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Shot models, guides and grading";
+    const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Clip models, guides and grading";
     shotExtras.appendChild(extrasTitle); shotSections.appendChild(shotExtras);
     const modelOverride = document.createElement("input"); modelOverride.placeholder = "Named model override";
     modelOverride.value = activeClip.model_override || "";
@@ -4005,7 +3913,7 @@ function mountDirectorUI(node) {
       wrap.append(input,value); shotExtras.appendChild(wrap);
     }
 
-    finishSection(shotExtras,"Optional changes for this shot: a model override, interior reference anchors, and grading after decode.");
+    finishSection(shotExtras,"Optional changes for this clip: a model override, interior reference anchors, and grading after decode.");
 
     if (["V2V", "RV2V"].includes(activeClip.type)) {
       const sourcePanel = document.createElement("fieldset");
@@ -4015,7 +3923,7 @@ function mountDirectorUI(node) {
       const blank = document.createElement("option"); blank.value = ""; blank.textContent = "Choose a video from Reference Pack"; filename.append(blank);
       const currentSource = typeof activeClip.source === "string" ? activeClip.source : activeClip.source?.filename || "";
       const videos = (timelineState.available_refs || []).filter(row => row.type === "video" && row.filename);
-      if (currentSource && !videos.some(row => row.filename === currentSource)) videos.push({filename:currentSource,name:"Saved source (legacy project)"});
+      if (currentSource && !videos.some(row => row.filename === currentSource)) videos.push({filename:currentSource,name:"Imported source video"});
       for (const row of videos) {const option=document.createElement("option");option.value=row.filename;option.textContent=row.name;filename.append(option);}
       filename.value=currentSource;
       filename.onchange=async()=>{
@@ -4059,15 +3967,15 @@ function mountDirectorUI(node) {
         const end = Number(activeClip.source_end ?? start + (activeClip.duration || 5));
         if (!Number.isFinite(end) || end <= start) return;
         const stamp = Date.now();
-        const shots = Array.from({ length: count }, (_, index) => ({
+        const clips = Array.from({ length: count }, (_, index) => ({
           ...JSON.parse(JSON.stringify(activeClip)), id: `source_${stamp}_${index}`,
           name: `${activeClip.name || "Source"} ${index + 1}`,
           source_start: start + (end - start) * index / count,
           source_end: start + (end - start) * (index + 1) / count,
           duration: (end - start) / count, validated: false,
         }));
-        timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...shots);
-        activeClipId = shots[0].id; syncState(); renderTimeline();
+        timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...clips);
+        activeClipId = clips[0].id; syncState(); renderTimeline();
       };
       sourcePanel.appendChild(split);
       const replaceSourceRanges = (cuts) => {
@@ -4076,11 +3984,11 @@ function mountDirectorUI(node) {
         cuts = [...new Set(cuts)].filter(value => Number.isFinite(value) && value > start && value < end).sort((a,b) => a-b);
         if (!cuts.length) throw new Error("No split boundaries lie inside this source range.");
         const bounds = [start, ...cuts, end];
-        const shots = bounds.slice(0,-1).map((value,index) => ({ ...JSON.parse(JSON.stringify(activeClip)),
+        const clips = bounds.slice(0,-1).map((value,index) => ({ ...JSON.parse(JSON.stringify(activeClip)),
           id: `source_${crypto.randomUUID()}`, name: `${activeClip.name || "Source"} ${index+1}`, source_start: value,
           source_end: bounds[index+1], duration: bounds[index+1]-value, validated: false, locked: false }));
-        timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...shots);
-        activeClipId = shots[0].id; syncState(); renderTimeline();
+        timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...clips);
+        activeClipId = clips[0].id; syncState(); renderTimeline();
       };
       const splitAtCursor = document.createElement("button"); splitAtCursor.textContent = "Split at playhead";
       splitAtCursor.onclick = () => { try { replaceSourceRanges([sourcePlayer?.currentTime || 0]); } catch (error) { alert(error.message); } }; sourcePanel.appendChild(splitAtCursor);
@@ -4097,7 +4005,7 @@ function mountDirectorUI(node) {
       merge.onclick = () => {
         const index = timelineState.clips.indexOf(activeClip); const next = timelineState.clips[index+1];
         const nextFile = typeof next?.source === "string" ? next.source : next?.source?.filename;
-        if (!next || nextFile !== filename.value || Math.abs(Number(activeClip.source_end)-Number(next.source_start)) > 1/24) { alert("The next shot must use the same source and a contiguous range."); return; }
+        if (!next || nextFile !== filename.value || Math.abs(Number(activeClip.source_end)-Number(next.source_start)) > 1/24) { alert("The next clip must use the same source and a contiguous range."); return; }
         activeClip.source_end = next.source_end; activeClip.duration = activeClip.source_end-(activeClip.source_start || 0);
         activeClip.prompt = [activeClip.prompt, next.prompt].filter(Boolean).join("\n");
         activeClip.ref_ids = [...new Set([...(activeClip.ref_ids || []), ...(next.ref_ids || [])])];
@@ -4109,7 +4017,7 @@ function mountDirectorUI(node) {
 
     const loraPanel = document.createElement("details");
     const loraHeading = document.createElement("summary");
-    loraHeading.textContent = "Shot LoRAs";
+    loraHeading.textContent = "Clip LoRAs";
     loraPanel.appendChild(loraHeading);
     shotSections.appendChild(loraPanel);
     if (!Array.isArray(activeClip.loras)) activeClip.loras = [];
@@ -4163,7 +4071,7 @@ function mountDirectorUI(node) {
       activeClip.loras.push({ name: "", strength: 1, enabled: true }); syncState(); drawLoras();
     };
     loraPanel.appendChild(addLora); drawLoras();
-    finishSection(loraPanel,"Optional model adapters applied only to this shot. Choose a compatible H3 LoRA and its strength.");
+    finishSection(loraPanel,"Optional model adapters applied only to this clip. Choose a compatible H3 LoRA and its strength.");
 
     // Card 1: Duration
     const cardTiming = document.createElement("div");
@@ -4256,7 +4164,8 @@ function mountDirectorUI(node) {
     timingRow.appendChild(durItem);
 
     const continuityPanel=document.createElement("details");continuityPanel.open=true;
-    const continuityTitle=document.createElement("summary");continuityTitle.textContent="Continuity · context from previous shot";continuityPanel.append(continuityTitle);
+    continuityPanel.hidden=!!activeClip.locked || ["V2V","RV2V","IMAGE INPAINT","INPAINT"].includes(String(activeClip.type).toUpperCase());
+    const continuityTitle=document.createElement("summary");continuityTitle.textContent="Continuity · context from previous clip";continuityPanel.append(continuityTitle);
     const continuityModes=["Independent (No Continuity)","Motion Context (Chained)","Latent Carry (Pinned)","FL2VA Tail Handoff"];
     const continuityMode=document.createElement("select");continuityMode.className="mmx-shot-continuity-mode";
     for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method;continuityMode.append(option);}
@@ -4275,9 +4184,38 @@ function mountDirectorUI(node) {
       const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="1";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
       redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Seam redraw strength",redraw,"0 pins the seam most strongly; 1 permits full redraw."));
     }
+    const continueFile=document.createElement("input");continueFile.type="file";continueFile.accept="video/*";continueFile.hidden=true;
+    const continueButton=document.createElement("button");continueButton.className="mmx-continue-video";
+    continueButton.textContent=activeClip.continuation_source?"Replace continuation video":"Continue from video";
+    continueButton.onclick=()=>continueFile.click();
+    continueFile.onchange=async()=>{
+      const file=continueFile.files?.[0];if(!file)return;continueButton.disabled=true;
+      try {
+        const data=new FormData();data.append("file",file);
+        const response=await api.fetchApi("/minimax_director/media/upload",{method:"POST",body:data});
+        const asset=await response.json();if(!response.ok)throw new Error(asset.error || "Video upload failed");
+        if(asset.media_type!=="video")throw new Error("Choose a video file for continuation.");
+        const filename=[asset.subfolder,asset.name].filter(Boolean).join("/");
+        const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
+        if(!(info.duration>0))throw new Error("The video has no usable duration.");
+        activeClip.continuation_source={filename,name:file.name,end:info.duration};
+        if(continuityMode.value===continuityModes[0])continuityMode.value=continuityModes[1];
+        commitContinuity();
+      }catch(error){alert(error.message);}finally{continueButton.disabled=false;}
+    };
+    continuityPanel.append(field("Continue from",continueButton,"Uses the ending of this video as context. The source video is not added to the generated output. Without a file, context comes from the preceding clip."),continueFile);
+    if(activeClip.continuation_source){
+      const chosen=document.createElement("div");chosen.className="mmx-field";
+      const title=document.createElement("span");title.textContent=activeClip.continuation_source.name || activeClip.continuation_source.filename;
+      const player=document.createElement("video");player.controls=true;player.preload="metadata";player.style.cssText="width:100%;max-height:160px;background:#111";
+      const path=activeClip.continuation_source.filename;const split=path.lastIndexOf("/");
+      player.src=api.apiURL(`/view?filename=${encodeURIComponent(path.slice(split+1))}&subfolder=${encodeURIComponent(split<0?"":path.slice(0,split))}&type=input`);
+      const remove=document.createElement("button");remove.textContent="Use previous timeline clip";
+      remove.onclick=()=>{delete activeClip.continuation_source;commitContinuity();};chosen.append(title,player,remove);continuityPanel.append(chosen);
+    }
     continuityMode.disabled=!!activeClip.locked;
     shotSections.prepend(continuityPanel);
-    finishSection(continuityPanel,timelineState.clips.indexOf(activeClip)===0?"First shot: context requires an explicitly connected continuation checkpoint. Otherwise there is no previous clip to borrow from.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
+    finishSection(continuityPanel,timelineState.clips.indexOf(activeClip)===0?"Choose a video below to continue from its ending, or use the preceding timeline clip. Context is removed from the newly generated output.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
     cardTiming.appendChild(timingRow);
     cardsGrid.appendChild(cardTiming);
 
@@ -4389,7 +4327,7 @@ function mountDirectorUI(node) {
     refsTitle.className = "mmx-local-refs-title";
     refsTitle.innerHTML = `
       <span>LOCAL REFERENCES (FROM REF PACK):</span>
-      <span style="font-weight: 500; font-size: 9px; color: #64748b;">Click to assign to this shot</span>
+      <span style="font-weight: 500; font-size: 9px; color: #64748b;">Click to assign to this clip</span>
     `;
     refsPoolWrap.appendChild(refsTitle);
 
@@ -4398,7 +4336,7 @@ function mountDirectorUI(node) {
 
     if (!Array.isArray(activeClip.ref_ids)) activeClip.ref_ids = [];
 
-    const allRefs = timelineState.available_refs || [];
+    const allRefs = (timelineState.available_refs || []).filter(row=>referenceTypes(activeClip).includes(row.type));
     refsPoolWrap.hidden = allRefs.length === 0;
     allRefs.forEach((r) => {
       const isChecked = activeClip.ref_ids.includes(r.id);
@@ -4428,7 +4366,7 @@ function mountDirectorUI(node) {
     refsPoolWrap.appendChild(refsList);
     inspector.appendChild(refsPoolWrap);
 
-    // 2. Dedicated Per-Clip Shot Prompt (Raw Mode vs Structured Mode)
+    // 2. Dedicated Per-Clip Clip Prompt (Raw Mode vs Structured Mode)
     const promptWrap = document.createElement("div");
     promptWrap.className = "mmx-prompt-inspector";
 
@@ -4439,7 +4377,7 @@ function mountDirectorUI(node) {
     promptTitle.style.fontSize = "10px";
     promptTitle.style.fontWeight = "700";
     promptTitle.style.color = "#818cf8";
-    promptTitle.textContent = `PROMPT FOR ${String(activeClip.name || activeClip.id || "Shot").toUpperCase()}:`;
+    promptTitle.textContent = `PROMPT FOR ${String(activeClip.name || activeClip.id || "Clip").toUpperCase()}:`;
     promptToolbar.appendChild(promptTitle);
 
     // Mode Selector: Raw Prompt vs Structured Prompt
@@ -4576,7 +4514,7 @@ function mountDirectorUI(node) {
       };
 
       grid.appendChild(createField("subject_definitions", "subject_definitions:", true, false, "Describe the subjects and assigned references."));
-      grid.appendChild(createField("summary", "summary:", false, false, "[reference generation] Cinematic sequence for this shot with atmospheric lighting..."));
+      grid.appendChild(createField("summary", "summary:", false, false, "[reference generation] Cinematic sequence for this clip with atmospheric lighting..."));
       grid.appendChild(createField("retention_analysis", "retention_analysis:", true, false, "Describe which assigned subjects or features should stay unchanged."));
       grid.appendChild(createField("detailed_description", "detailed_description:", true, false, "Describe continuous action, choreography, camera movements (pan, tilt, push-in), and lighting..."));
       grid.appendChild(createField("overall_soundscape", "overall_soundscape:", false, false, "Diegetic audio: wind ambience, footsteps, mechanical hums, natural reverberation..."));
@@ -4592,7 +4530,7 @@ function mountDirectorUI(node) {
       quickTags.className = "mmx-quick-tags";
 
       const counts = {image:0, video:0, audio:0, refmod:0};
-      const tags = (activeClip.ref_ids || []).map(id => (timelineState.available_refs || []).find(row => row.id === id)).filter(Boolean).map(row => {
+      const tags = activeReferences(activeClip).map(row => {
         const kind = {image:"Picture", video:"Video", audio:"Audio", refmod:"RefMod"}[row.type];
         const tag = `<${kind} ${++counts[row.type]}>`;
         return {label: `${row.name} · ${tag}`, tag};
@@ -4795,18 +4733,18 @@ function mountDirectorUI(node) {
 
   };
 
-  // Backend updates only the shot actually completed; clip-by-clip and selection
-  // do not advance unrelated shot seeds.
+  // Backend updates only the clip actually completed; clip-by-clip and selection
+  // do not advance unrelated clip seeds.
   node.__mmxShotHandler = event => {
     const detail = event.detail;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
     progressLabel.textContent = `${detail.phase} · ${detail.clip_id} · ${detail.index || ""}/${detail.total || ""}`;
     if (detail.phase === "completed") {
 
-      const shot = timelineState.clips.find(value => value.id === detail.clip_id);
-      if (shot) {
-        shot.last_seed = detail.seed;
-        if (String(shot.seed ?? detail.authored_seed) === detail.authored_seed) shot.seed = detail.next_seed;
+      const clip = timelineState.clips.find(value => value.id === detail.clip_id);
+      if (clip) {
+        clip.last_seed = detail.seed;
+        if (String(clip.seed ?? detail.authored_seed) === detail.authored_seed) clip.seed = detail.next_seed;
         syncState(); renderInspector();
       }
     }
@@ -4850,6 +4788,7 @@ app.registerExtension({
         const legacy = [...base,"control_after_generate","execution_mode","prompt_mode","run_mode","continuity_mode","context_length","preview_mode"];
         const sampling = [...base,"control_after_generate"];
         const count = node.widgets_values.length;
+        if (count === 14 && ["manual","original","auto"].includes(node.widgets_values[11])) continue;
         const fields = count === 17 ? legacy : count === 16 ? legacy.filter(key=>key!=="control_after_generate")
           : count === 14 ? current : count === 13 ? current.filter(key=>key!=="control_after_generate") : count === 11 ? sampling : null;
         if (fields) {
@@ -4882,6 +4821,17 @@ app.registerExtension({
         if (typeof raw!=='string') continue;
         const state=JSON.parse(raw);
         state.generation_mode ||= old.generation_mode || 'Next shot';
+        if (state.resolution && configNode && !configNode.widgets_values_named?.canvas_policy) {
+          const resolution=state.resolution;
+          (configNode.widgets_values_named ||= {}).canvas_policy=resolution.mode || 'manual';
+          configNode.widgets_values_named.canvas_megapixels=resolution.megapixels ?? 1;
+          configNode.widgets_values_named.canvas_aspect=resolution.aspect || '16:9';
+          if(resolution.mode==='manual')for(const [index,key] of [[0,'width'],[1,'height']]){
+            if(resolution[key]!=null){configNode.widgets_values_named[key]=resolution[key];configNode.widgets_values[index]=resolution[key];}
+          }
+          configNode.widgets_values=[...configNode.widgets_values.slice(0,11),resolution.mode || 'manual',resolution.megapixels ?? 1,resolution.aspect || '16:9'];
+          delete state.resolution;
+        }
         for (const clip of state.clips || []) {
           clip.continuity_mode ||= clip.continuity===false?'Independent (No Continuity)':old.continuity_mode || 'Independent (No Continuity)';
           clip.context_length ??= Number(old.context_length || 22);
