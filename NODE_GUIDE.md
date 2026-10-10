@@ -22,7 +22,7 @@ Use ComfyUI's stock nodes around them:
 | Load CLIP, type `minimax` | `clip` |
 | Load VAE ×2 | Video VAE → `video_vae`; audio VAE → `audio_vae` |
 
-The starter connects Master `project_state` to **Smart Preview**. Latest clip / Full video and autoplay live in that separate player. Reference Pack is the only authoring source for references, with optional names. The starter also includes both H3 SLA Attention patches and the Boolean switch for REF2VA Turbo LoRA. Settings has one Generation mode: Next shot / All shots / Conditioning only. Raw / Structured is per shot.
+The starter connects Master `project_state` to **Smart Preview**. Latest clip / Full video and autoplay live in that separate player. Reference Pack is the only authoring source for references, with optional names. The starter also includes both H3 SLA Attention patches and the Boolean switch for REF2VA Turbo LoRA and automatic 25/8-step selection. Settings has one Generation mode: Next shot / All shots / Conditioning only. Raw / Structured is per shot.
 
 ## Optional feature tools — fifteen types
 

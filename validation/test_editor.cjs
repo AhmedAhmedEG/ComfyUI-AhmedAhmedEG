@@ -68,6 +68,10 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.querySelector('.mmx-time-tick.major span'), 'Ruler labels use browser text');
   assert(!editorRoot.querySelector('.mmx-ruler-canvas'), 'No stretched bitmap ruler');
   const rulerLane=editorRoot.querySelector('.mmx-ruler-lane');
+  const timelineZoom=editorRoot.querySelector('.mmx-zoom-slider');
+  assert.equal(timelineZoom.value,'3.0','Short clips start at a readable timeline scale');
+  assert(editorRoot.querySelector('.mmx-shot-cover'),'Assigned pool image appears in the shot card');
+  timelineZoom.value='1.0'; timelineZoom.oninput();
   Object.defineProperty(rulerLane,'clientWidth',{value:800,configurable:true});
   editorRoot.querySelector('.mmx-time-ruler').getBoundingClientRect=()=>({left:100,width:1240});
   rulerLane.dispatchEvent(new w.MouseEvent('mousedown',{clientX:100+162*1.55,bubbles:true}));

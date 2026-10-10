@@ -2059,6 +2059,27 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-multitrack-panel { min-height:0; padding:0; border-radius:2px; background:#25272b; }
 .mmx-director-root .mmx-shot-top-bar .mmx-clip-mode-badge { display:none; }
 .mmx-director-root .mmx-clip-val-badge { font-size:11px!important; }
+
+/* Compact editing desk: timeline first, readable segment prompt below. */
+.mmx-director-root:not(.mmx-preview-node) { gap:8px; padding:8px; }
+.mmx-director-root .mmx-toolbar { gap:5px; }
+.mmx-director-root .mmx-action-btn { padding:4px 7px; border-radius:3px; }
+.mmx-director-root .mmx-track-header-cell { width:112px; min-width:112px; font-size:10px; }
+.mmx-director-root .mmx-shot-block { height:112px; padding:7px 8px; background:#20262e; }
+.mmx-director-root .mmx-shot-block.active { background:#263341!important; border-color:#92adc3!important; box-shadow:none; }
+.mmx-director-root .mmx-shot-prompt-preview { white-space:normal; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45; font-size:12px; }
+.mmx-director-root .mmx-shot-cover { width:100%; height:54px; object-fit:contain; background:#15191e; flex-shrink:0; }
+.mmx-director-root .mmx-shot-block:has(.mmx-shot-cover) .mmx-shot-prompt-preview { -webkit-line-clamp:2; }
+.mmx-director-root .mmx-add-clip-card { height:112px; border-radius:2px; }
+.mmx-director-root .mmx-inspector { flex:0 0 auto; gap:7px; }
+.mmx-director-root .mmx-prompt-inspector { flex:0 0 auto; min-height:0; }
+.mmx-director-root .mmx-prompt-inspector > .mmx-textarea { flex:none!important; height:136px!important; min-height:100px!important; max-height:300px; resize:vertical; border-radius:3px; padding:9px; font:12px/1.55 ui-monospace,Consolas,monospace; }
+.mmx-director-root .mmx-prompt-mode-tabs { border-radius:3px; padding:1px; }
+.mmx-director-root .mmx-prompt-mode-tab { border-radius:2px; padding:3px 9px; }
+.mmx-director-root .mmx-prompt-mode-tab.active { background:#426780; }
+.mmx-director-root .mmx-inspector-card-title { color:#afb6bf!important; font-size:10px; }
+.mmx-director-root .mmx-timecode-display { color:#c5d7e4; background:#191d22; border-radius:2px; }
+.mmx-director-root .mmx-local-refs-pool { border-radius:2px; padding:7px; }
 `;
 
 function injectCSS() {
@@ -2093,7 +2114,7 @@ function mountDirectorUI(node) {
   // State initialization
   let domWidget = null;
   let playheadSeconds = 0.0;
-  let zoomLevel = 1.0;
+  let zoomLevel = 3.0;
   let activeClipId = "clip_1";
 
   const getMinDomHeight = () => 480;
@@ -2911,7 +2932,7 @@ function mountDirectorUI(node) {
   zoomSlider.min = "0.5";
   zoomSlider.max = "3.0";
   zoomSlider.step = "0.1";
-  zoomSlider.value = "1.0";
+  zoomSlider.value = "3.0";
   zoomSlider.className = "mmx-zoom-slider";
   zoomSlider.oninput = () => {
     zoomLevel = parseFloat(zoomSlider.value) || 1.0;
@@ -3409,6 +3430,16 @@ function mountDirectorUI(node) {
       shotTopBar.appendChild(delBtn);
 
       shotBlock.appendChild(shotTopBar);
+
+      const coverRef = imgRefs.find(ref => ref.type === "image" && ref.url);
+      if (coverRef) {
+        const cover = document.createElement("img");
+        cover.className = "mmx-shot-cover";
+        cover.src = coverRef.url;
+        cover.alt = coverRef.name;
+        cover.draggable = false;
+        shotBlock.appendChild(cover);
+      }
 
       // Bottom Bar: Prompt Preview Snippet
       const promptSnippet = document.createElement("div");

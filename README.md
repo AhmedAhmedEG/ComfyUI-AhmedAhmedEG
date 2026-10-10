@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.1.0** consolidates the MiniMax/video production features of
+Version **1.1.1** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -18,7 +18,7 @@ scaled to fit 960 × 540; final export keeps its configured resolution.
 
 ## Install and start
 
-There is one public **MiniMax H3 Master Node** name. The package has 22 distinct
+There is one public **MiniMax H3 Master Node** name. The package has 23 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
 nodes. The two core nodes are in `ComfyUI-AhmedAhmedEG/Start here`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
@@ -38,7 +38,7 @@ native MiniMax H3 ImageToVideo, ReferenceToVideo, AddGuide, SigmaShift and curre
 
 Load `workflows/MiniMax H3 Start Here.json`. It uses standard **Load Diffusion
 Model** (FL2VA + REF2VA), **Load CLIP** (type `minimax`), two **Load VAE** nodes,
-and a separate **Smart Preview** node connected to `project_state`. It previews **Latest clip** by default; **Full video** is an explicit switch in the player. H3 SLA Attention (plaguekind-nodes) patches both model families, and a stock Boolean/model switch enables the supplied REF2VA Turbo LoRA. Select 8 steps when enabling that LoRA. Reference media enter through **Reference Pack (Pool)**; give connected items optional names. The Master, Settings, Reference Pack and Smart Preview are this pack’s four nodes in the starter. The saved filenames match the current server’s MiniMax H3 models. Check the five selections, edit
+and a separate **Smart Preview** node connected to `project_state`. It previews **Latest clip** by default; **Full video** is an explicit switch in the player. H3 SLA Attention (plaguekind-nodes) patches both model families, and a stock Boolean/model switch enables the supplied REF2VA Turbo LoRA. The same toggle automatically selects 8 steps for Turbo or 25 for the base model; edit the two integer nodes to change those values. Reference media enter through **Reference Pack (Pool)**; give connected items optional names. The Master, Settings, Reference Pack and Smart Preview are this pack’s four nodes in the starter. The saved filenames match the current server’s MiniMax H3 models. Check the five selections, edit
 a shot and upload references in the Master. Both diffusion models are lazy:
 only the family required by the timeline’s shot modes is requested.
 
@@ -51,7 +51,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.1.0 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.1.1 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.

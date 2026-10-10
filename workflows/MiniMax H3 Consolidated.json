@@ -1,8 +1,8 @@
 {
   "id": "b6d8e7c1-60d3-498a-a713-bbcde0a64b02",
   "revision": 0,
-  "last_node_id": 21,
-  "last_link_id": 20,
+  "last_node_id": 24,
+  "last_link_id": 24,
   "nodes": [
     {
       "id": 1,
@@ -46,7 +46,7 @@
       "type": "UNETLoader",
       "pos": [
         0,
-        220
+        210
       ],
       "size": [
         350,
@@ -84,7 +84,7 @@
       "type": "CLIPLoader",
       "pos": [
         0,
-        800
+        900
       ],
       "size": [
         350,
@@ -123,7 +123,7 @@
       "type": "VAELoader",
       "pos": [
         0,
-        1050
+        1140
       ],
       "size": [
         350,
@@ -158,7 +158,7 @@
       "type": "VAELoader",
       "pos": [
         0,
-        1230
+        1320
       ],
       "size": [
         350,
@@ -192,15 +192,15 @@
       "id": 4,
       "type": "MiniMaxH3DirectorSettings",
       "pos": [
-        1000,
-        0
+        1040,
+        620
       ],
       "size": [
         380,
         430
       ],
       "flags": {},
-      "order": 5,
+      "order": 13,
       "mode": 0,
       "properties": {
         "Node name for S&R": "MiniMaxH3DirectorSettings"
@@ -210,6 +210,14 @@
           "name": "settings_optional",
           "type": "MMX_DIRECTOR_CONFIG",
           "link": null
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": 24
         }
       ],
       "outputs": [
@@ -258,15 +266,15 @@
       "id": 5,
       "type": "MiniMaxH3MasterNode",
       "pos": [
-        1500,
+        2120,
         0
       ],
       "size": [
         1280,
-        1200
+        980
       ],
       "flags": {},
-      "order": 6,
+      "order": 16,
       "mode": 0,
       "properties": {
         "Node name for S&R": "MiniMaxH3MasterNode"
@@ -439,7 +447,7 @@
       "id": 11,
       "type": "H3SLAAttention",
       "pos": [
-        500,
+        1520,
         0
       ],
       "size": [
@@ -447,7 +455,7 @@
         530
       ],
       "flags": {},
-      "order": 15,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
@@ -508,8 +516,8 @@
       "id": 12,
       "type": "H3SLAAttention",
       "pos": [
-        500,
-        600
+        1520,
+        640
       ],
       "size": [
         440,
@@ -577,15 +585,15 @@
       "id": 13,
       "type": "LoraLoaderModelOnly",
       "pos": [
-        0,
-        440
+        520,
+        240
       ],
       "size": [
         440,
         140
       ],
       "flags": {},
-      "order": 10,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
@@ -626,15 +634,17 @@
       "id": 14,
       "type": "ComfySwitchNode",
       "pos": [
-        1000,
-        600
+        1040,
+        240
       ],
       "size": [
         380,
         130
       ],
-      "flags": {},
-      "order": 13,
+      "flags": {
+        "collapsed": true
+      },
+      "order": 14,
       "mode": 0,
       "inputs": [
         {
@@ -684,11 +694,11 @@
       "id": 15,
       "type": "PrimitiveBoolean",
       "pos": [
-        1000,
-        800
+        0,
+        440
       ],
       "size": [
-        380,
+        400,
         100
       ],
       "flags": {},
@@ -700,11 +710,12 @@
           "name": "BOOLEAN",
           "type": "BOOLEAN",
           "links": [
-            6
+            6,
+            23
           ]
         }
       ],
-      "title": "Enable REF2VA Turbo LoRA · use 8 steps",
+      "title": "Enable REF2VA Turbo LoRA + 8 steps",
       "properties": {
         "cnr_id": "comfy-core",
         "ver": "0.33.0",
@@ -723,15 +734,15 @@
       "id": 16,
       "type": "MiniMaxH3RefPack",
       "pos": [
-        0,
-        1450
+        520,
+        1000
       ],
       "size": [
-        440,
-        520
+        450,
+        680
       ],
       "flags": {},
-      "order": 12,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
@@ -825,7 +836,7 @@
       "id": 17,
       "type": "MiniMaxH3SmartPreview",
       "pos": [
-        2850,
+        3500,
         0
       ],
       "size": [
@@ -833,7 +844,7 @@
         600
       ],
       "flags": {},
-      "order": 13,
+      "order": 17,
       "mode": 0,
       "inputs": [
         {
@@ -858,15 +869,15 @@
       "id": 18,
       "type": "CreateVideo",
       "pos": [
-        2850,
-        750
+        3500,
+        700
       ],
       "size": [
         340,
         190
       ],
       "flags": {},
-      "order": 7,
+      "order": 18,
       "mode": 0,
       "inputs": [
         {
@@ -916,15 +927,15 @@
       "id": 19,
       "type": "SaveVideo",
       "pos": [
-        2850,
-        1350
+        3940,
+        700
       ],
       "size": [
         340,
         500
       ],
       "flags": {},
-      "order": 8,
+      "order": 20,
       "mode": 0,
       "inputs": [
         {
@@ -958,15 +969,15 @@
       "id": 20,
       "type": "MiniMaxH3VideoCombine",
       "pos": [
-        3300,
-        1950
+        3500,
+        980
       ],
       "size": [
         350,
         620
       ],
       "flags": {},
-      "order": 9,
+      "order": 19,
       "mode": 2,
       "properties": {
         "Node name for S&R": "MiniMaxH3VideoCombine"
@@ -1043,15 +1054,15 @@
       "id": 21,
       "type": "MiniMaxH3ProjectVideo",
       "pos": [
-        3300,
-        2700
+        3500,
+        1700
       ],
       "size": [
         350,
         270
       ],
       "flags": {},
-      "order": 10,
+      "order": 7,
       "mode": 2,
       "properties": {
         "Node name for S&R": "MiniMaxH3ProjectVideo"
@@ -1091,6 +1102,142 @@
         "fps": 24,
         "filename_prefix": "minimax/cached_project",
         "export_individual_shots": true
+      }
+    },
+    {
+      "id": 22,
+      "type": "PrimitiveInt",
+      "pos": [
+        0,
+        580
+      ],
+      "size": [
+        400,
+        100
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "title": "Base model · sampling steps",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "PrimitiveInt"
+      },
+      "widgets_values": [
+        25,
+        "fixed"
+      ],
+      "widgets_values_named": {
+        "value": 25,
+        "control_after_generate": "fixed"
+      }
+    },
+    {
+      "id": 23,
+      "type": "PrimitiveInt",
+      "pos": [
+        0,
+        720
+      ],
+      "size": [
+        400,
+        100
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "title": "Turbo LoRA · sampling steps",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "PrimitiveInt"
+      },
+      "widgets_values": [
+        8,
+        "fixed"
+      ],
+      "widgets_values_named": {
+        "value": 8,
+        "control_after_generate": "fixed"
+      }
+    },
+    {
+      "id": 24,
+      "type": "ComfySwitchNode",
+      "pos": [
+        520,
+        580
+      ],
+      "size": [
+        380,
+        130
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "shape": 7,
+          "type": "INT",
+          "link": 21
+        },
+        {
+          "name": "on_true",
+          "shape": 7,
+          "type": "INT",
+          "link": 22
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "switch"
+          },
+          "link": 23
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "INT",
+          "links": [
+            24
+          ]
+        }
+      ],
+      "title": "Select sampling steps",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.33.0",
+        "Node name for S&R": "ComfySwitchNode"
+      },
+      "widgets_values": [
+        false
+      ],
+      "widgets_values_named": {
+        "switch": false
       }
     }
   ],
@@ -1254,6 +1401,38 @@
       20,
       1,
       "AUDIO"
+    ],
+    [
+      21,
+      22,
+      0,
+      24,
+      0,
+      "INT"
+    ],
+    [
+      22,
+      23,
+      0,
+      24,
+      1,
+      "INT"
+    ],
+    [
+      23,
+      15,
+      0,
+      24,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      24,
+      24,
+      0,
+      4,
+      1,
+      "INT"
     ]
   ],
   "groups": [],
