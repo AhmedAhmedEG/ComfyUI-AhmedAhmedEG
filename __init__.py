@@ -19,7 +19,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.4.7"
+__version__ = "1.4.8"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -87,7 +87,8 @@ if getattr(PromptServer, "instance", None) is not None:
         try:
             from .core.preview import create_preview_plan
             body = await request.json()
-            result = await asyncio.to_thread(create_preview_plan, body["timeline"], body.get("scope", "latest"))
+            result = await asyncio.to_thread(create_preview_plan, body["timeline"], body.get("scope", "latest"),
+                quality=body.get("quality", "original"), take_id=body.get("take_id"))
             return web.json_response(result)
         except (ValueError, KeyError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)

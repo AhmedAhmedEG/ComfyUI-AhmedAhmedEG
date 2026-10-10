@@ -45,7 +45,7 @@ class MiniMaxH3ProjectVideo:
         previous_rms = None
         shots = state.get("clips", [])
         for index, shot in enumerate(shots):
-            if selection == "selected" and not shot.get("selected", True): continue
+            if selection == "selected" and not shot.get("selected", False): continue
             cid = safe_component(shot.get("id", f"clip_{index+1}"))
             if stream == "original_source" or shot.get("locked"):
                 source = source_range(shot, state, int(state.get("width", 1344)), int(state.get("height", 768)), preserve_canvas=stream == "original_source")
@@ -64,7 +64,7 @@ class MiniMaxH3ProjectVideo:
                     frames = frames[prefix:]
                     if audio:
                         audio = {**audio, "waveform": audio["waveform"][..., round(prefix/24*audio["sample_rate"]):]}
-                if index + 1 < len(shots) and (selection == "all" or shots[index+1].get("selected", True)):
+                if index + 1 < len(shots) and (selection == "all" or shots[index+1].get("selected", False)):
                     next_id = safe_component(shots[index+1].get("id", f"clip_{index+2}"))
                     tail_trim = int(manager._manifest.get("clips", {}).get(next_id, {}).get("previous_trim", 0))
                     if tail_trim and frames.shape[0] > tail_trim:

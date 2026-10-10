@@ -261,6 +261,8 @@ class ProjectCacheManager:
             "updated_at": time.time(),
             "has_audio": audio_dict is not None,
             "has_frames": decoded_frames is not None,
+            "width": int(decoded_frames.shape[2]) if decoded_frames is not None else None,
+            "height": int(decoded_frames.shape[1]) if decoded_frames is not None else None,
             "generation": generation,
             "has_pre_refine": pre_refine_frames is not None,
         }

@@ -269,3 +269,14 @@ Include Media now sits beside Export Project in one bordered control, rather tha
 ## 1.4.7 — named server projects
 
 Added a named server library with atomic metadata saves, full workflow restoration and revision conflict checks across sessions. Ordinary workflow files retain project names and cache IDs. Metadata is kept outside disposable cache directories, so deleting saved results does not delete the named project. New editor projects use UUIDs to avoid node-ID collisions between workflows. 131 backend regressions and editor checks pass.
+
+
+## 1.4.8 — timeline-owned clip selection and video import
+
+Moved generation selection to a checkbox inside each timeline clip and green selection styling. New, duplicated, imported and split clips start unchecked; legacy missing flags default false, explicit flags survive reload. Video import now belongs to the Add Clip chooser; removed the duplicate toolbar action.
+
+Validation: 132 backend regressions and frontend checks pass, including selection persistence, checkbox pointer isolation, green state and Add Clip video import.
+
+The playhead now anchors to the panel bounds instead of increasing scroll height as tracks hide, preventing checkbox focus from clipping the ruler.
+
+Smart Preview now defaults to Original Resolution, offers optional caps and a Saved Take selector, reports missing cache items, clears stale playback on failed requests, and letterboxes mixed resolutions on an enclosing canvas. Real H.264/AAC encoding and HTTP range tests pass (8 tests), including mixed-size full playback and viewing an older take after regeneration. Read-only remote history confirmed the two recent resolutions were two takes of clip_1.

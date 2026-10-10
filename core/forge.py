@@ -111,7 +111,7 @@ def apply_draft(timeline, draft, policy="replace"):
         base.update(proposed)
         base.setdefault("id", "clip_" + uuid.uuid4().hex)
         base.setdefault("name", f"Shot {index+1}")
-        base.setdefault("selected", True)
+        base.setdefault("selected", False)
         base["validated"] = False
         created.append(base)
     state["clips"] = [*old, *created] if policy == "append" else created

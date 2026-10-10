@@ -434,11 +434,11 @@
         }
       ],
       "widgets_values": [
-        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
+        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
         "{}"
       ],
       "widgets_values_named": {
-        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": true, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
+        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
         "builder_state": "{}"
       },
       "title": "MiniMax H3 Master Node"

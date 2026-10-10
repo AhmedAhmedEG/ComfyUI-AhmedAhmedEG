@@ -12,6 +12,10 @@ torch = setup_mock_torch_if_needed()
 
 
 class Consolidation(unittest.TestCase):
+    def test_clip_selection_defaults_off_and_preserves_explicit_choices(self):
+        state = migrate_timeline({"clips": [{"id": "new"}, {"id": "yes", "selected": True}, {"id": "no", "selected": False}]})
+        self.assertEqual([clip["selected"] for clip in state["clips"]], [False, True, False])
+
     def test_starter_uses_separate_preview_and_attention_switching(self):
         from nodes import NODE_CLASS_MAPPINGS
         workflow=json.loads((Path(__file__).resolve().parents[1]/'workflows/MiniMax H3 Start Here.json').read_text(encoding='utf-8'))

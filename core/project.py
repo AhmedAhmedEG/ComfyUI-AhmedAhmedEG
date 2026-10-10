@@ -38,7 +38,7 @@ def migrate_timeline(value):
             raise ValueError("Every shot must be an object.")
         if shot.get("seed") is not None:
             shot["seed"] = seed_string(shot["seed"])
-        shot.setdefault("selected", True)
+        shot.setdefault("selected", False)
     return state
 
 

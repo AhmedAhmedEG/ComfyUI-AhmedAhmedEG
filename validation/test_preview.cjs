@@ -1,16 +1,17 @@
 const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
 const fs=require('fs'), assert=require('assert');
 const dom=new JSDOM('<body><div id="root"><div id="toolbar"></div><div id="timeline"></div><div id="inspector"></div></div>',{url:'http://localhost/',runScripts:'outside-only'});
-const w=dom.window; let loads=0, plays=0, options={}, calls=[], pending;
+const w=dom.window; let loads=0, plays=0, options={}, calls=[], pending, failed=false;
 w.HTMLMediaElement.prototype.load=()=>{loads++};
 w.HTMLMediaElement.prototype.pause=()=>{};
 w.HTMLMediaElement.prototype.play=()=>{plays++;return Promise.resolve()};
 w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 const api={apiURL:p=>p,fetchApi:async(path,request)=>{
+  if(path.includes('/project/takes'))return {ok:true,json:async()=>[{take_id:'old-take',clip_id:'two',has_frames:true,updated_at:1},{take_id:'new-take',clip_id:'two',has_frames:true,updated_at:2}]};
   assert.equal(path,'/minimax_director/preview/info');
   const data=JSON.parse(request.body);calls.push(data);
   if(pending)return pending;
-  return {ok:true,json:async()=>({found:true,scope:data.scope,label:'Shot 2',project_id:'project',key:data.scope==='latest'?'clip-revision':'full-revision'})};
+  return {ok:!failed,json:async()=>({error:failed?'Preview failed':undefined,found:true,scope:data.scope,label:'Shot 2',project_id:'project',key:(data.scope==='take'?data.take_id:data.scope==='latest'?'clip-revision':'full-revision')+'-'+data.quality})};
 }};
 const player=w.installSmartPreview({root:w.document.querySelector('#root'),toolbar:w.document.querySelector('#toolbar'),timelinePanel:w.document.querySelector('#timeline'),inspector:w.document.querySelector('#inspector'),node:{setDirtyCanvas(){}},api,getTimeline:()=>({project_id:'project',preview_mode:'full',clips:[{id:'two'}]}),getOptions:()=>options,saveOptions:v=>{options=v}});
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -28,6 +29,18 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
   assert(video.src.includes('full-revision'));assert.equal(options.scope,'full');
   select.value='latest';select.onchange();await tick();
   assert(video.src.includes('clip-revision'));
+
+  assert.equal(calls[0].quality,'original','Preview defaults to generated resolution');
+  const quality=w.document.querySelector('.mmx-preview-quality');quality.value='540p';quality.onchange();await tick();
+  assert.equal(calls.at(-1).quality,'540p');assert(video.src.includes('540p'));
+  select.value='take';select.onchange();await tick();await tick();
+  const takeChoice=w.document.querySelector('.mmx-preview-take');assert(!takeChoice.hidden);
+  assert(video.src.includes('old-take'),'An earlier take can be viewed without replacing the current clip');
+  takeChoice.value='new-take';takeChoice.onchange();await tick();await tick();
+  assert(video.src.includes('new-take'));assert.equal(options.take_id,'new-take');
+  select.value='latest';select.onchange();await tick();assert(takeChoice.hidden);
+  failed=true;await player.refresh();assert(!video.hasAttribute('src'),'Failed full/clip requests do not leave a misleading old video visible');
+  failed=false;await player.refresh();assert(video.src.includes('clip-revision'));
   w.document.querySelector('input').checked=true;w.document.querySelector('input').onchange();
   video.dispatchEvent(new w.Event('loadeddata'));assert.equal(plays,1);
   let resolve;pending=new Promise(r=>{resolve=r});player.completed();

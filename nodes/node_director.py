@@ -428,7 +428,7 @@ class MiniMaxH3MasterDirector:
             seed_mode = clip_item.get("seed_mode", "fixed")
             if seed_mode not in ("fixed", "randomize", "increment", "decrement"):
                 raise ValueError("Unknown shot seed mode.")
-            skipping_selection = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", True)
+            skipping_selection = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
             if (clip_validated or skipping_selection) and clip_item.get("last_seed") is not None:
                 clip_seed = int(clip_item["last_seed"])
             elif seed_mode == "randomize" and execution_mode != "Conditioning Guide Output":
@@ -822,7 +822,7 @@ class MiniMaxH3MasterDirector:
             completed_clips.append(clip_item)
 
             # If clip is validated and stored in server cache, skip diffusion sampling!
-            skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", True)
+            skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
             if (clip_validated or skip_requested) and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp):
                 cached_frames = cache_mgr.load_clip_frames(clip_id)
                 cached_audio = cache_mgr.load_clip_audio(clip_id)
@@ -1062,7 +1062,7 @@ class MiniMaxH3MasterDirector:
         out_indices = list(range(len(clips)))
 
         if preview_mode in ("unvalidated", "unvalidated_only", "new_only", "selected", "selected_only"):
-            unval_indices = [i for i, c in enumerate(clips) if c.get("selected", True)] if preview_mode in ("selected", "selected_only") else [i for i, c in enumerate(clips) if not c.get("validated", False)]
+            unval_indices = [i for i, c in enumerate(clips) if c.get("selected", False)] if preview_mode in ("selected", "selected_only") else [i for i, c in enumerate(clips) if not c.get("validated", False)]
             if unval_indices:
                 output_frames = [all_decoded_frames[i] for i in unval_indices]
                 output_audios = [all_decoded_audios[i] for i in unval_indices]

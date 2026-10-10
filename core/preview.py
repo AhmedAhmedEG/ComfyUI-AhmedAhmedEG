@@ -10,17 +10,24 @@ from .cache_manager import ProjectCacheManager, safe_component
 from .media_io import resolve_input_path
 
 
-def create_preview_plan(state, scope="latest", base_dir=None):
-    if scope not in ("latest", "full"):
-        raise ValueError("Preview scope must be latest or full.")
+def create_preview_plan(state, scope="latest", base_dir=None, quality="original", take_id=None):
+    if scope not in ("latest", "full", "take"):
+        raise ValueError("Preview scope must be latest, full or take.")
+    if quality not in ("original", "540p", "720p", "1080p"):
+        raise ValueError("Unknown preview resolution.")
     manager = ProjectCacheManager(safe_component(state["project_id"]), base_dir)
     shots = state.get("clips", [])
     if not isinstance(shots, list) or len(shots) > 1000:
         raise ValueError("Invalid preview timeline.")
     rows = []
-    for index, shot in enumerate(shots):
+    if scope == "take":
+        take = manager._manifest.get("takes", {}).get(safe_component(take_id)) if take_id else None
+        shots_to_read = [{"id": take["clip_id"], "name": next((s.get("name") for s in shots if s.get("id") == take["clip_id"]), take["clip_id"])}] if take else []
+    else:
+        shots_to_read = shots
+    for index, shot in enumerate(shots_to_read):
         cid = safe_component(shot.get("id", f"clip_{index+1}"))
-        meta = manager._manifest.get("clips", {}).get(cid, {})
+        meta = take if scope == "take" else manager._manifest.get("clips", {}).get(cid, {})
         if not meta.get("has_frames"):
             if scope == "full" and shot.get("locked") and shot.get("source"):
                 rows.append({"clip_id": cid, "name": shot.get("name", cid), "source": shot,
@@ -41,7 +48,7 @@ def create_preview_plan(state, scope="latest", base_dir=None):
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
             left["trim_tail"] = right.get("previous_trim", 0)
-    plan = {"version": 1, "project_id": manager.project_id, "scope": scope, "rows": rows,
+    plan = {"version": 2, "project_id": manager.project_id, "scope": scope, "quality": quality, "rows": rows,
         "source_state": {k: state[k] for k in ("width", "height", "resolution", "references") if k in state},
         "gain_match": bool(state.get("audio_gain_match", True)), "fade_ms": float(state.get("audio_fade_ms", 15))}
     key = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -58,7 +65,8 @@ def create_preview_plan(state, scope="latest", base_dir=None):
             if os.path.exists(temporary): os.unlink(temporary)
     return {"found": True, "scope": scope, "key": key, "project_id": manager.project_id,
         "clip_ids": [row["clip_id"] for row in rows], "clip_count": len(rows), "total_clips": len(shots),
-        "label": rows[0]["name"] if scope == "latest" else f"{len(rows)}/{len(shots)} completed clips"}
+        "missing_clips": [{"id": s["id"], "name": s.get("name", s["id"])} for s in shots if s.get("id") not in {row["clip_id"] for row in rows}] if scope == "full" else [],
+        "label": rows[0]["name"] if scope != "full" else f"{len(rows)}/{len(shots)} completed clips"}
 
 
 def preview_path(project_id, key, base_dir=None):
@@ -84,7 +92,7 @@ def encode_preview(project_id, key, base_dir=None):
     def load(row):
         if row.get("source"):
             from .source_media import source_range
-            source = source_range(row["source"], plan["source_state"], 960, 544)
+            source = source_range(row["source"], plan["source_state"], 960, 544, preserve_canvas=True)
             if source is None: raise ValueError("Source clip is unavailable.")
             frames, audio = source["frames"], source["audio"]
         else:
@@ -104,11 +112,7 @@ def encode_preview(project_id, key, base_dir=None):
             audio = {**audio, "waveform": waveform}
         return frames, audio
 
-    first, _ = load(plan["rows"][0])
-    h, w = first.shape[1:3]
-    ratio = min(1., 960 / w, 540 / h)
-    width, height = max(2, int(w*ratio)//2*2), max(2, int(h*ratio)//2*2)
-    del first
+    width, height = 0, 0
     audios = []
     def frames_iter():
         for row in plan["rows"]:
@@ -126,10 +130,15 @@ def encode_preview(project_id, key, base_dir=None):
     # Audio is prepared first so the shared encoder can configure its stream.
     for row in plan["rows"]:
         frames, audio = load(row)
+        height, width = max(height, int(frames.shape[1])), max(width, int(frames.shape[2]))
         if audio is None or audio["waveform"].shape[-1] == 0:
             audio = {"waveform": torch.zeros((1, 2, round(frames.shape[0]/24*48000))), "sample_rate": 48000}
         audios.append(audio)
         del frames
+    quality = plan.get("quality", "540p")
+    cap = {"540p": (960, 540), "720p": (1280, 720), "1080p": (1920, 1080)}.get(quality)
+    ratio = min(1., cap[0]/width, cap[1]/height) if cap else 1.
+    width, height = max(2, int(width*ratio)//2*2), max(2, int(height*ratio)//2*2)
     sound = concatenate_audio_clips(audios, target_sample_rate=48000, crossfade_ms=0,
         enable_gain_match=plan["gain_match"], enable_declick=plan["fade_ms"] > 0, seam_fade_ms=plan["fade_ms"])
     audios.clear()

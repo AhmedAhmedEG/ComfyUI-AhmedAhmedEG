@@ -13,6 +13,7 @@ from core.preview import create_preview_plan, encode_preview, preview_path
 
 class SmartPreview(unittest.TestCase):
     def setUp(self):
+        torch.set_num_threads(2)
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.manager = ProjectCacheManager("preview_test", self.temp.name)
         self.state = {"project_id": "preview_test", "clips": [
@@ -68,6 +69,36 @@ class SmartPreview(unittest.TestCase):
             self.assertEqual(len(list(video.decode(video=0))), 10)
         with av.open(self.encode(new)) as video:
             self.assertEqual(len(list(video.decode(video=0))), 5)
+
+    def test_saved_take_remains_viewable_after_same_clip_is_regenerated(self):
+        old_take = self.manager._manifest["clips"]["one"]["generation"]
+        self.manager.store_clip_results("one", "new", {"samples": torch.zeros((1, 1, 2, 4, 4))},
+            decoded_frames=torch.ones((5, 32, 64, 3))*.9)
+        plan = create_preview_plan(self.state, "take", self.temp.name, take_id=old_take)
+        self.assertEqual(plan["clip_ids"], ["one"])
+        with av.open(self.encode(plan)) as video:
+            frames=list(video.decode(video=0))
+            self.assertEqual(len(frames),12)
+            self.assertLess(frames[0].to_ndarray(format="rgb24").mean(),70)
+        self.assertNotEqual(self.manager._load_manifest()["clips"]["one"]["generation"], old_take,
+                            "Viewing must not change the current take")
+
+    def test_mixed_resolution_full_preview_keeps_both_clips_at_original_canvas(self):
+        self.manager.store_clip_results("two", "large", {"samples": torch.zeros((1, 1, 2, 4, 4))},
+            decoded_frames=torch.ones((3, 736, 1280, 3))*.8)
+        full=self.plan("full")
+        self.assertEqual(full["clip_ids"],["one","two"])
+        self.assertEqual(full["missing_clips"],[{"id":"pending","name":"pending"}])
+        with av.open(self.encode(full)) as video:
+            frames=list(video.decode(video=0));self.assertEqual(len(frames),15)
+            self.assertEqual((video.streams.video[0].width,video.streams.video[0].height),(1280,736))
+            self.assertLess(frames[0].to_ndarray(format="rgb24")[368,640].mean(),70)
+            self.assertGreater(frames[-1].to_ndarray(format="rgb24")[368,640].mean(),170)
+        small=create_preview_plan(self.state,"latest",self.temp.name,quality="540p")
+        self.assertNotEqual(full["key"],small["key"])
+        with av.open(self.encode(small)) as video:
+            self.assertLessEqual(video.streams.video[0].height,540)
+            self.assertLessEqual(video.streams.video[0].width,960)
 
     def test_info_is_lazy_and_missing_clips_are_not_substituted(self):
         plan = self.plan()
