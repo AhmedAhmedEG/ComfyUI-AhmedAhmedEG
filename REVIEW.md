@@ -255,3 +255,7 @@ Replaced the sparse three-column Project form with a short prompt/audio row and 
 ## 1.4.4 — shared prompt below the timeline
 
 Moved the single shared prompt textarea and its placement selector immediately below the timeline, ahead of clip controls. Removed shared prompt from Project; Project now owns only audio finishing and file operations. Regression checks verify DOM order, sole ownership and serialization.
+
+## 1.4.5 — clear project action labels
+
+Renamed project actions in Title Case and ordered routine New/Import/Export operations before Restore/Reset/Delete. Reset Timeline and Delete Saved Results have red borders and a gentle red glow; the reset emoji is removed. Recovery is named Restore Last Autosave and its tooltip explains that snapshots are written after generated clips, not every UI edit. Cache deletion help now discloses autosave removal. Action order and declined deletion are covered by editor checks.

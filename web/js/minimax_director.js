@@ -2219,7 +2219,9 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-project-audio-fade input { width:100px; }
 .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:12px 0 0;border:0; }
 .mmx-director-root .mmx-project-workspace .mmx-project-actions > .mmx-field { padding:0;border:0;background:transparent;justify-content:flex-start; }
-.mmx-director-root .mmx-project-workspace .mmx-project-actions button { min-height:40px; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions button { display:flex;align-items:center;justify-content:center;text-align:center;width:100%;box-sizing:border-box;min-height:40px; }
+.mmx-director-root .mmx-project-workspace button.mmx-project-danger { background:#3b2329;border-color:#bf5967;color:#ffd0d6;box-shadow:0 0 12px #e45c6d2b,inset 0 0 10px #e45c6d0d; }
+.mmx-director-root .mmx-project-workspace button.mmx-project-danger:hover { background:#512932;border-color:#f0808d;box-shadow:0 0 16px #e45c6d55; }
 .mmx-director-root .mmx-project-workspace small { display:none; }
 .mmx-director-root .mmx-project-workspace .mmx-export-options { padding:4px 0;border:0;background:transparent;font-size:12px; }
 .mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
@@ -2715,7 +2717,7 @@ function mountDirectorUI(node) {
 
   const exportBtn = document.createElement("button");
   exportBtn.className = "mmx-action-btn";
-  exportBtn.textContent = "Export project";
+  exportBtn.textContent = "Export Project";exportBtn.dataset.projectAction="export";
   exportBtn.title = "Save the timeline as JSON, or include source/reference files in a portable archive.";
   const includeMedia=document.createElement("input");includeMedia.type="checkbox";includeMedia.checked=true;
   includeMedia.className="mmx-export-media";
@@ -2751,7 +2753,7 @@ function mountDirectorUI(node) {
 
   const importBtn = document.createElement("button");
   importBtn.className = "mmx-action-btn";
-  importBtn.textContent = "Import project";
+  importBtn.textContent = "Import Project";importBtn.dataset.projectAction="import";
   importBtn.title = "Load a JSON timeline or a portable archive; choose append or overwrite.";
   importBtn.onclick = () => {
     const fileInput = document.createElement("input");
@@ -2842,8 +2844,10 @@ function mountDirectorUI(node) {
     if (section===projectTools) {
       const actions=document.createElement("div");actions.className="mmx-project-actions";
       const files=document.createElement("details");files.className="mmx-section";
-      const heading=document.createElement("summary");heading.textContent="Files & recovery";files.append(heading);
-      for (const button of [...body.children].filter(child=>child.tagName==='BUTTON')) {
+      const heading=document.createElement("summary");heading.textContent="Files & Recovery";files.append(heading);
+      const actionOrder=["new","import","export","restore","reset","delete-results"];
+      const buttons=[...body.children].filter(child=>child.tagName==='BUTTON').sort((a,b)=>actionOrder.indexOf(a.dataset.projectAction)-actionOrder.indexOf(b.dataset.projectAction));
+      for (const button of buttons) {
         const card=document.createElement("div");card.className="mmx-field";
         const help=document.createElement("small");help.textContent=button.title || "Clear the current timeline after confirmation.";
         card.append(button,help);actions.append(card);
@@ -2859,12 +2863,14 @@ function mountDirectorUI(node) {
   projectTools.appendChild(projectHeading);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
-    button.title=({"Clear current project cache":"Deletes generated takes for this project after confirmation; reference files are kept.","Export with media":"Downloads a portable project including source/reference media.","Import media pack":"Loads a portable media project using append or overwrite.","Recover saved run":"Restores the latest autosaved authoring state.","New project":"Starts a new authoring timeline with a new project ID."})[label] || label;
+    button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];
+    if(label==="Delete Saved Results")button.classList.add("mmx-project-danger");
+    button.title=({"Delete Saved Results":"Delete cached generations, saved takes and the last autosave for this project. Keep the current timeline and uploaded references.","Restore Last Autosave":"Replace the current timeline with the snapshot saved after the last generated clip. Does not resume rendering.","New Project":"Start a blank timeline with a new project ID and fresh shared/audio settings. Existing server-side saved results are kept."})[label] || label;
     button.onclick = async () => { button.disabled = true; try { await handler(); } catch (error) { alert(error.message); } finally { button.disabled = false; } };
     projectTools.appendChild(button);
   };
-  addProjectAction("Clear current project cache", async () => {
-    if (!confirm("Delete saved takes and cached outputs for this project? Uploaded reference files are retained.")) return;
+  addProjectAction("Delete Saved Results", async () => {
+    if (!confirm("Delete this project's cached generations, saved takes and last autosave? The current timeline and uploaded references are kept.")) return;
     await requestJson("/minimax_director/project/clear_cache", {project_id: timelineState.project_id});
     timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();
   });
@@ -2885,14 +2891,14 @@ function mountDirectorUI(node) {
         if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
         builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state || builderState;activeClipId=timelineState.clips?.[0]?.id; refreshFileRefs(); syncState(); renderTimeline();
   };
-  const exportOptions=field("Include media in export",includeMedia,"On: portable archive with source/reference files. Off: lightweight JSON that points to existing files.");exportOptions.classList.add("mmx-export-options");
+  const exportOptions=field("Include Media In Export",includeMedia,"On: portable archive with source/reference files. Off: lightweight JSON that points to existing files.");exportOptions.classList.add("mmx-export-options");
   projectTools.append(exportBtn,importBtn,exportOptions);
-  addProjectAction("Recover saved run", async () => {
+  addProjectAction("Restore Last Autosave", async () => {
     const result = await requestJson(`/minimax_director/project/recover?project_id=${encodeURIComponent(timelineState.project_id || "default_director")}`);
     timelineState = result.timeline; builderState = timelineState.builder_state || builderState;
     refreshFileRefs(); syncState(); renderTimeline();
   });
-  addProjectAction("New project", async () => {
+  addProjectAction("New Project", async () => {
     timelineState = { version: 2, project_id: `project_${crypto.randomUUID()}`, clips: [{ id: "clip_1", name: "Clip 1", type: "T2V", duration: 5, prompt: "", seed: "0" }], references: [] };
     builderState = {}; activeClipId = "clip_1"; syncState(); renderTimeline();
   });
@@ -2961,9 +2967,9 @@ function mountDirectorUI(node) {
   };
 
   const clearBtn = document.createElement("button");
-  clearBtn.className = "mmx-action-btn";
-  clearBtn.innerHTML = "🗑️ Reset";
-  clearBtn.title = "Reset timeline to default clip";
+  clearBtn.className = "mmx-action-btn mmx-project-danger";clearBtn.dataset.projectAction="reset";
+  clearBtn.textContent = "Reset Timeline";
+  clearBtn.title = "Replace all clips with one blank clip. Keep this project ID, shared prompt, audio settings and saved results.";
   clearBtn.onclick = () => {
     if (confirm("Reset timeline to a single default clip?")) {
       timelineState.clips = [
@@ -3035,7 +3041,7 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.4";
+  generationBar.dataset.version="1.4.5";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
   finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
