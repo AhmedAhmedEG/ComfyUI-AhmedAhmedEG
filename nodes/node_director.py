@@ -823,7 +823,8 @@ class MiniMaxH3MasterDirector:
 
             # If clip is validated and stored in server cache, skip diffusion sampling!
             skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
-            if (clip_validated or skip_requested) and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp):
+            approved_take = clip_validated and run_mode == "clip_by_clip"
+            if approved_take or ((clip_validated or skip_requested) and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp)):
                 cached_frames = cache_mgr.load_clip_frames(clip_id)
                 cached_audio = cache_mgr.load_clip_audio(clip_id)
                 cached_latent = cache_mgr.load_clip_latent(clip_id)
@@ -851,6 +852,9 @@ class MiniMaxH3MasterDirector:
                     }
                     run_report.append({"clip_id": clip_id, "action": "cached", "frames": int(cached_frames.shape[0])})
                     continue
+
+            if approved_take:
+                raise ValueError(f"Approved clip {clip_id!r} has no complete saved take. Restore its saved results or unapprove it to generate again.")
 
             if skip_requested:
                 low_carry = None

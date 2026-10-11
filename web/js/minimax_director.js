@@ -1,6 +1,5 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { installLocale } from "./minimax_locale.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 
 function escapeHtml(value) {
@@ -2214,6 +2213,10 @@ const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Mas
 .mmx-director-root .mmx-project-workspace > summary span { font-size:12px;font-weight:400;color:#b4c2cf; }
 .mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:1fr;gap:16px;padding:16px;border-top:1px solid #414e5a; }
 .mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:1/-1;align-self:start;margin:0;border:0;border-top:1px solid #414e5a;border-radius:0;background:transparent; }
+.mmx-director-root .mmx-timeline-audio { display:flex !important;flex-direction:row !important;align-items:center;flex-wrap:wrap;gap:20px !important;margin:10px 0 14px;padding:12px;border:1px solid #414e5a;border-radius:6px;background:var(--mmx-soft,#242a30); }
+.mmx-director-root .mmx-timeline-audio .mmx-project-audio-fade { justify-content:flex-start; }
+.mmx-director-root .mmx-inspector-header .mmx-validate-toggle { padding:7px 10px;border:1px solid #658675;background:#283b33;color:#bde8d0; }
+.mmx-director-root .mmx-timecode-display { width:145px; }
 .mmx-director-root .mmx-project-group { display:flex;flex-direction:column;gap:10px;min-width:0; }
 .mmx-director-root .mmx-project-group + .mmx-project-group { border-left:1px solid #414e5a;padding-left:24px; }
 .mmx-director-root .mmx-project-group > h3 { font-size:13px;margin:0;color:#c6d8e7; }
@@ -2370,7 +2373,7 @@ function mountDirectorUI(node) {
   const updateServerStatus=()=>{
     if(serverStatus)serverStatus.textContent=savedProjectSignature && savedProjectSignature===projectSignature()
       ? "Saved On Server" : timelineState.server_revision ? "Server Project · Save Your Changes" : "Not Saved On Server";
-    if(serverStatus)projectScope.textContent=timelineState.project_name || 'All clips · audio & files';
+    if(serverStatus)projectScope.textContent=timelineState.project_name || 'All Clips · Projects & Files';
   };
 
   let builderState = {
@@ -2709,8 +2712,7 @@ function mountDirectorUI(node) {
   // Create modern timeline root element
   const root = document.createElement("div");
   root.className = "mmx-director-root";
-  node.__mmxLocaleCleanup?.();
-  node.__mmxLocaleCleanup = installLocale(root);
+
 
   // Timeline navigation and footage insertion. Project files live in Project.
   const toolbar = document.createElement("div");
@@ -2886,7 +2888,7 @@ function mountDirectorUI(node) {
   };
   const projectTools = document.createElement("details");
   const projectHeading = document.createElement("summary"); projectHeading.textContent = "Project";
-  const projectScope=document.createElement("span");projectScope.textContent="All clips · audio & files";projectHeading.append(projectScope);
+  const projectScope=document.createElement("span");projectScope.textContent="All Clips · Projects & Files";projectHeading.append(projectScope);
   projectTools.appendChild(projectHeading);
   const library=document.createElement('div');library.className='mmx-project-library';
   const projectName=document.createElement('input');projectName.type='text';projectName.maxLength=128;
@@ -3114,9 +3116,12 @@ function mountDirectorUI(node) {
   durationTotal.textContent = "Total: 5.0s / 120f";
   toolbarRight.appendChild(durationTotal);
 
-  const timecodeBadge = document.createElement("div");
+  const timecodeBadge = document.createElement("input");
+  timecodeBadge.type = "text";
+  timecodeBadge.setAttribute("aria-label", "Timeline Timecode");
+  timecodeBadge.title = "Enter HH:MM:SS:FF (24 fps) or seconds to move the playhead.";
   timecodeBadge.className = "mmx-timecode-display";
-  timecodeBadge.textContent = "00:00:00:00";
+  timecodeBadge.value = "00:00:00:00";
   toolbarRight.appendChild(timecodeBadge);
 
   const zoomWrap = document.createElement("div");
@@ -3129,10 +3134,12 @@ function mountDirectorUI(node) {
   zoomSlider.min = "0.5";
   zoomSlider.max = "3.0";
   zoomSlider.step = "0.1";
-  zoomSlider.value = "3.0";
+  zoomLevel = Math.max(0.5,Math.min(3,Number(node.properties?.mmx_timeline_zoom) || 3));
+  zoomSlider.value = String(zoomLevel);
   zoomSlider.className = "mmx-zoom-slider";zoomSlider.setAttribute("aria-label","Timeline zoom");
   zoomSlider.oninput = () => {
     zoomLevel = parseFloat(zoomSlider.value) || 1.0;
+    node.properties ||= {}; node.properties.mmx_timeline_zoom = zoomLevel;
     renderTimeline();
   };
   ["mousedown", "pointerdown", "touchstart"].forEach((evt) => {
@@ -3140,7 +3147,7 @@ function mountDirectorUI(node) {
   });
   zoomWrap.appendChild(zoomSlider);
   toolbarRight.appendChild(zoomWrap);
-  toolbarRight.appendChild(root.querySelector(".mmx-language-select"));
+
 
   toolbar.appendChild(toolbarRight);
   root.appendChild(toolbar);
@@ -3150,10 +3157,10 @@ function mountDirectorUI(node) {
   generationSelect.value=timelineState.generation_mode || "Next shot";
   generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
   timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.8";
+  generationBar.dataset.version="1.4.9";
   generationBar.append(selectionLabel);
   generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
-  finishSection(projectTools,"Shared prompt and audio finishing for this project. Canvas and sampling are configured in the connected Settings node.");
+  finishSection(projectTools,"Named server projects, file backups and recovery. Canvas and sampling are configured in the connected Settings node.");
   projectTools.classList.add("mmx-project-workspace");
   const projectBody=projectTools.querySelector(":scope > .mmx-section-body");
   const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
@@ -3166,9 +3173,11 @@ function mountDirectorUI(node) {
   sharedPrompt.setAttribute("aria-label","Shared prompt");sharedPrompt.title="Applies to every clip. Placement controls whether it comes before or after the clip prompt.";
   sharedPolicy.closest(".mmx-field").classList.add("mmx-project-placement");
   fadeLabel.classList.add("mmx-project-audio-fade");
-  const audioGroup=group("Audio finishing",fadeLabel,gainLabel);
+  const audioGroup=group("Timeline Audio Joins",fadeLabel,gainLabel);
+  audioGroup.classList.add("mmx-timeline-audio");
+  audioGroup.title="Applies when joining completed clips: fades edges to reduce clicks and matches loudness. Separate from generation and continuity context.";
   const projectFiles=projectBody.querySelector("details");
-  projectBody.append(audioGroup,projectFiles);
+  projectBody.append(projectFiles);
   root.append(projectTools);
 
 
@@ -3252,7 +3261,7 @@ function mountDirectorUI(node) {
   multitrackPanel.appendChild(playheadNeedle);
 
   root.appendChild(multitrackPanel);
-  root.appendChild(sharedPromptSection);
+  root.append(sharedPromptSection,audioGroup);
 
   // 3. Active Clip Inspector (Directly below timeline - 100% pure timeline!)
   const inspector = document.createElement("div");
@@ -3323,9 +3332,19 @@ function mountDirectorUI(node) {
     playheadNeedle.style.height = "auto";
     playheadNeedle.style.bottom = "0px";
     multitrackPanel.scrollTop = 0;
-    timecodeBadge.textContent = formatTimecode(playheadSeconds, 24);
+    if (document.activeElement !== timecodeBadge) timecodeBadge.value = formatTimecode(playheadSeconds, 24);
   };
 
+  timecodeBadge.onchange = () => {
+    const value = timecodeBadge.value.trim();
+    const parts = /^(\d+):([0-5]\d):([0-5]\d):([0-2]\d)$/.exec(value);
+    const seconds = parts && Number(parts[4]) < 24 ? Number(parts[1])*3600 + Number(parts[2])*60 + Number(parts[3]) + Number(parts[4])/24 : /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
+    if (!Number.isFinite(seconds)) { timecodeBadge.setCustomValidity("Enter HH:MM:SS:FF with frames 00-23, or seconds."); timecodeBadge.reportValidity(); return; }
+    timecodeBadge.setCustomValidity(""); playheadSeconds = Math.min(timelineGeometry().end, seconds);
+    timecodeBadge.value = formatTimecode(playheadSeconds,24); drawRuler();
+  };
+  timecodeBadge.addEventListener("keydown", event => { if(event.key === "Enter") { timecodeBadge.onchange(); event.stopPropagation(); } });
+  for(const event of ["pointerdown","mousedown","keydown"]) timecodeBadge.addEventListener(event,e=>e.stopPropagation());
   let isScrubbing = false;
   const updateScrubFromClientX = (clientX) => {
     const rect = rulerTicks.getBoundingClientRect();
@@ -3409,7 +3428,7 @@ function mountDirectorUI(node) {
           </button>
           <button class="mmx-type-modal-btn" data-type="REF2VA">
             <span class="mmx-type-modal-btn-title">
-              <span class="mmx-clip-mode-badge mmx-badge-ref2va">REF2VA</span> Ref to Video + Audio (Multi-Modal)
+              <span class="mmx-clip-mode-badge mmx-badge-ref2va">REF2V</span> Reference to Video
             </span>
             <span class="mmx-type-modal-btn-desc">Full multi-modal reference generation with character identity images, audio tracks, and RefMods.</span>
           </button>
@@ -4063,7 +4082,7 @@ function mountDirectorUI(node) {
       { id: "I2V", label: "I2V (Image to Video)" },
       { id: "FL2V", label: "FL2V (First & Last Frame)" },
       { id: "V2V", label: "V2V (Video to Video)" },
-      { id: "REF2VA", label: "REF2VA (Ref to Video + Audio)" },
+      { id: "REF2VA", label: "REF2V (Reference to Video)" },
       { id: "L2VA", label: "L2VA (Last Frame)" },
       { id: "RV2V", label: "RV2V (Reference Video Edit)" },
       { id: "Image Inpaint", label: "Image Inpaint (Single Image)" },
@@ -4073,6 +4092,7 @@ function mountDirectorUI(node) {
     clipTypeLabel.dataset.type=activeClip.type;
     clipTypeLabel.title="Clip type is fixed. Use Add Clip to create a clip with a different type.";
     titleWrap.appendChild(clipTypeLabel);
+    titleWrap.style.cssText="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1";
     header.appendChild(titleWrap);
 
     // Actions group in Inspector Header (Validated Toggle + Delete Clip)
@@ -4088,7 +4108,8 @@ function mountDirectorUI(node) {
     const valBtn = document.createElement("button");
     valBtn.className = "mmx-validate-toggle " + (activeClip.validated ? "validated" : "unvalidated");
     valBtn.title = "Mark clip as validated. Validated clips reuse cached output and skip re-generation.";
-    valBtn.innerHTML = activeClip.validated ? "<span>Approved · reuse take</span>" : "<span>Needs generation</span>";
+    valBtn.textContent = activeClip.validated ? "Unapprove Clip" : "Approve Clip";
+    valBtn.setAttribute("aria-pressed",String(!!activeClip.validated));
     valBtn.onclick = () => {
       activeClip.validated = !activeClip.validated;
       syncState();
@@ -4105,12 +4126,6 @@ function mountDirectorUI(node) {
     dupShotBtn.onclick = () => duplicateClip(activeClip);
     headerActions.appendChild(dupShotBtn);
 
-    // 3. Dedicated Delete Clip Button in Inspector Header
-    const delShotBtn = document.createElement("button");
-    delShotBtn.className = "mmx-action-btn danger";
-    delShotBtn.textContent = "Delete Clip";
-    delShotBtn.onclick = () => deleteClip(activeClip);
-    headerActions.appendChild(delShotBtn);
     if (!activeClip.locked) for (const [offset, label] of [[-1, "← Move earlier"], [1, "Move later →"]]) {
       const button = document.createElement("button"); button.className = "mmx-action-btn";
       button.textContent = label;
@@ -4125,11 +4140,6 @@ function mountDirectorUI(node) {
 
     // Main Inputs Area (Placeholder for fields if needed)
     // ...
-
-    // Cards Grid: Card 1 (Duration) and Card 2 (Seed & Generation Parameters)
-    const cardsGrid = document.createElement("div");
-    cardsGrid.className = "mmx-inspector-cards-grid";
-    inspector.appendChild(cardsGrid);
 
     const audioLabel = document.createElement("label");
     audioLabel.textContent = "Clip audio: ";
@@ -4343,15 +4353,7 @@ function mountDirectorUI(node) {
     loraPanel.appendChild(addLora); drawLoras();
     finishSection(loraPanel,"Optional model adapters applied only to this clip. Choose a compatible H3 LoRA and its strength.");
 
-    // Card 1: Duration
-    const cardTiming = document.createElement("div");
-    cardTiming.className = "mmx-inspector-card";
-
-    const timingHeader = document.createElement("div");
-    timingHeader.className = "mmx-inspector-card-title";
-    timingHeader.innerHTML = "<span>⏱️</span><span>Duration</span>";
-    cardTiming.appendChild(timingHeader);
-
+    // Duration controls in the clip header.
     const timingRow = document.createElement("div");
     timingRow.className = "mmx-inspector-card-row";
 
@@ -4378,6 +4380,7 @@ function mountDirectorUI(node) {
     durNum.value = String(activeClip.duration || 5.0);
     durNum.style.width = "56px";
     durNum.style.background = "var(--comfy-input-bg, #333333)";
+    durNum.setAttribute("aria-label","Clip Duration");
     durNum.style.border = "1px solid var(--border-color, #4a4a4a)";
     durNum.style.borderRadius = "4px";
     durNum.style.color = "#f8fafc";
@@ -4401,7 +4404,7 @@ function mountDirectorUI(node) {
 
     durSlider.oninput = () => {
       const v = Math.max(0.5, Math.min(60.0, parseFloat(durSlider.value) || 5.0));
-      activeClip.duration = v;
+      activeClip.duration = v; activeClip.validated = false;
       durNum.value = String(v);
       durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
       const activeBlock = shotsLane.querySelector(`.mmx-subtrack-block.active`);
@@ -4419,7 +4422,7 @@ function mountDirectorUI(node) {
 
     durNum.onchange = () => {
       const v = Math.max(0.5, Math.min(60.0, parseFloat(durNum.value) || 5.0));
-      activeClip.duration = v;
+      activeClip.duration = v; activeClip.validated = false;
       durSlider.value = String(v);
       durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
       syncState();
@@ -4487,18 +4490,9 @@ function mountDirectorUI(node) {
     continuityMode.disabled=!!activeClip.locked;
     shotSections.prepend(continuityPanel);
     finishSection(continuityPanel,timelineState.clips.indexOf(activeClip)===0?"Choose a video below to continue from its ending, or use the preceding timeline clip. Context is removed from the newly generated output.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
-    cardTiming.appendChild(timingRow);
-    cardsGrid.appendChild(cardTiming);
+    titleWrap.appendChild(timingRow);
 
-    // Card 2: Seed & Generation Parameters
-    const cardSampling = document.createElement("div");
-    cardSampling.className = "mmx-inspector-card";
-
-    const samplingHeader = document.createElement("div");
-    samplingHeader.className = "mmx-inspector-card-title";
-    samplingHeader.innerHTML = "<span>🎲</span><span>Seed & Advance Mode</span>";
-    cardSampling.appendChild(samplingHeader);
-
+    // Seed controls in the clip header.
     const samplingRow = document.createElement("div");
     samplingRow.className = "mmx-inspector-card-row";
 
@@ -4512,7 +4506,8 @@ function mountDirectorUI(node) {
 
     const seedInput = document.createElement("input");
     seedInput.type = "text";
-    seedInput.style.width = "90px";
+    seedInput.style.width = "145px";
+    seedInput.setAttribute("aria-label","Clip Seed");
     seedInput.style.background = "var(--comfy-input-bg, #333333)";
     seedInput.style.border = "1px solid var(--border-color, #4a4a4a)";
     seedInput.style.borderRadius = "4px";
@@ -4541,7 +4536,7 @@ function mountDirectorUI(node) {
     diceBtn.title = "Generate new random seed";
     diceBtn.onclick = () => {
       const newSeed = Math.floor(Math.random() * 10000000000);
-      activeClip.seed = newSeed;
+      activeClip.seed = String(newSeed); activeClip.validated = false;
       seedInput.value = String(newSeed);
       syncState();
     };
@@ -4558,6 +4553,7 @@ function mountDirectorUI(node) {
 
     const seedModeSelect = document.createElement("select");
     seedModeSelect.className = "mmx-mode-select";
+    seedModeSelect.setAttribute("aria-label","Clip Seed Mode");
     seedModeSelect.style.background = "var(--comfy-input-bg, #333333)";
     seedModeSelect.style.border = "1px solid var(--border-color, #4a4a4a)";
     seedModeSelect.style.borderRadius = "4px";
@@ -4585,10 +4581,8 @@ function mountDirectorUI(node) {
     modeItem.appendChild(seedModeSelect);
     samplingRow.appendChild(modeItem);
 
-    cardSampling.appendChild(samplingRow);
-    cardsGrid.appendChild(cardSampling);
+    titleWrap.appendChild(samplingRow);
 
-    inspector.appendChild(cardsGrid);
 
     // 1. Local References Pool Selector (Includes Images, Videos, Audios, RefMods)
     const refsPoolWrap = document.createElement("div");
@@ -4883,7 +4877,7 @@ function mountDirectorUI(node) {
     const writing=document.createElement("div");writing.className="mmx-edit-main";
     const basic=document.createElement("div");basic.className="mmx-basic-controls";
     audioLabel.className="mmx-audio-control";
-    basic.append(cardsGrid,audioLabel);
+    basic.append(audioLabel);
     writing.append(refsPoolWrap,promptWrap,basic);
     const sourcePanel=inspector.querySelector("fieldset");
     if(sourcePanel)writing.append(sourcePanel);
@@ -5053,6 +5047,8 @@ function mountDirectorUI(node) {
       }
     }
     loadState();
+    const savedZoom = Number(node.properties?.mmx_timeline_zoom);
+    if(Number.isFinite(savedZoom) && savedZoom >= 0.5 && savedZoom <= 3) { zoomLevel=savedZoom; zoomSlider.value=String(savedZoom); }
     renderTimeline();
 
   };
@@ -5084,8 +5080,7 @@ function mountDirectorUI(node) {
       cancelTimelineDrag?.();
       node.__mmxProjectDialog?.remove();
 
-      node.__mmxLocaleCleanup?.();
-      api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
+          api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
       node.__mmxShotHandler = null; node.__mmxShotListener = null;
       return removed?.apply(this, args);
     };

@@ -147,7 +147,7 @@ D = DaSiWa, A = AIMixer, T = Tritant.
 | Authoring/references/LoRAs | `web/js/minimax_director.js`, `core/references.py`, `core/loras.py`, `core/refmod.py` |
 | Project/checkpoint/resume | `core/project.py`, `core/cache_manager.py`, `core/provenance.py`, `nodes/node_project.py`, `nodes/node_loaders.py` |
 | Sampling/upscale/face | `core/refine.py`, `core/learned_network.py`, `core/tracked_face.py`, selected `core/vendor/` modules |
-| Prompt Forge/languages | `core/forge.py`, `core/local_llm.py`, `nodes/node_forge.py`, `web/js/minimax_locale.js` |
+| Prompt Forge | `core/forge.py`, `core/local_llm.py`, `nodes/node_forge.py` |
 | Output/codecs/RTX | `nodes/node_project_video.py`, `nodes/node_video_combine.py`, `nodes/node_video_output.py`, `nodes/node_pixel_upscale.py`, `core/output_processing.py` |
 
 The installed remote ComfyUI and GPU/model-provider checks are deferred at the

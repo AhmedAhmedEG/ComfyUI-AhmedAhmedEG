@@ -19,7 +19,6 @@ w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),rem
   if (url.includes('forge/apply')) { const body=JSON.parse(options.body); submittedDraft=body.draft; result={timeline:{...body.timeline,clips:[{id:'clip_1',...body.draft.shots[0]}]}}; }
   return {ok:true,json:async()=>result};
 }};
-w.eval(fs.readFileSync('web/js/minimax_locale.js','utf8').replace('export function','function'));
 w.HTMLMediaElement.prototype.pause=()=>{};w.HTMLMediaElement.prototype.load=()=>{};
 w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_timeline.js','utf8').replace('export function','function'));
@@ -75,7 +74,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(w.document.querySelector('.mmx-director-root'),'Editor mounts');
   const writingPanel=w.document.querySelector('.mmx-edit-main');
   assert(writingPanel.querySelector('.mmx-prompt-inspector'),'Prompt belongs to the primary writing area');
-  assert(writingPanel.querySelector('.mmx-inspector-cards-grid'),'Duration and seed stay beside the prompt');
+  assert(w.document.querySelector('.mmx-inspector-header input[aria-label="Clip Seed"]'),'Seed belongs beside the clip name');
   assert(!writingPanel.querySelector('.mmx-section'),'Advanced sections cannot push the prompt down');
   const chooseTool=label=>w.document.querySelector(`[role=tab][data-tool="${label}"]`);
   chooseTool('Look').click();
@@ -90,7 +89,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const globalProject=w.document.querySelector('.mmx-project-workspace');
   assert.equal(globalProject.parentElement.className,'mmx-director-root');
   assert(globalProject.compareDocumentPosition(w.document.querySelector('.mmx-multitrack-panel')) & w.Node.DOCUMENT_POSITION_FOLLOWING,'Project precedes the timeline');
-  assert.equal(globalProject.querySelectorAll('.mmx-project-group').length,1,'Project owns audio finishing, not shared prompt');
+  assert.equal(globalProject.querySelectorAll('.mmx-project-group').length,0,'Audio joins belong below the timeline');
   const sharedPromptSection=w.document.querySelector('.mmx-shared-prompt');
   assert.strictEqual(w.document.querySelector('.mmx-multitrack-panel').nextElementSibling,sharedPromptSection,'Shared prompt is immediately below the timeline');
   assert.equal(sharedPromptSection.querySelectorAll('textarea').length,1);
@@ -129,7 +128,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(initialTags.some(text=>text.includes('Alice') && text.includes('<Picture 1>')));
   assert(!initialTags.some(text=>text.includes('<Video') || text.includes('<Audio') || text.includes('<Picture 2>')));
   const editorRoot=w.document.querySelector('.mmx-director-root');
-  assert.equal(editorRoot.querySelector('.mmx-language-select').parentElement.className,'mmx-toolbar-right');
+
   const editorWidget=node.widgets.find(widget=>widget.name==='master_director_ui');
   editorWidget.draw(null,{inputs:Array(18).fill({}),outputs:[]},1200,0,600);
   assert.equal(editorWidget.last_y,370,'Editor starts below all socket rows');
@@ -137,10 +136,19 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.querySelector('.mmx-time-tick.major span'), 'Ruler labels use browser text');
   assert(!editorRoot.querySelector('.mmx-ruler-canvas'), 'No stretched bitmap ruler');
   const rulerLane=editorRoot.querySelector('.mmx-ruler-lane');
+  assert(!editorRoot.querySelector('.mmx-language-select'));
+  assert(editorRoot.querySelector('.mmx-inspector-header input[aria-label="Clip Seed"]'));
+  assert(editorRoot.querySelector('.mmx-inspector-header input[aria-label="Clip Duration"]'));
+  const timecode=editorRoot.querySelector('.mmx-timecode-display');
+  timecode.value='00:00:01:12';timecode.onchange();assert.equal(timecode.value,'00:00:01:12');
+  timecode.value='bad';timecode.onchange();assert(timecode.validationMessage);
+  timecode.value='0';timecode.onchange();
   const timelineZoom=editorRoot.querySelector('.mmx-zoom-slider');
-  assert.equal(timelineZoom.value,'3.0','Short clips start at a readable timeline scale');
+  assert.equal(timelineZoom.value,'3','Short clips start at a readable timeline scale');
   assert(editorRoot.querySelector('.mmx-shot-cover'),'Assigned pool image appears in the shot card');
   timelineZoom.value='1.0'; timelineZoom.oninput();
+  assert.equal(node.properties.mmx_timeline_zoom,1);node.__mmxDirectorRefresh();
+  assert.equal(Number(timelineZoom.value),1,'Refresh preserves timeline zoom');
   const timelinePanel=editorRoot.querySelector('.mmx-multitrack-panel');
   Object.defineProperty(timelinePanel,'clientWidth',{value:918,configurable:true});
   const ruler=editorRoot.querySelector('.mmx-time-ruler');
@@ -151,23 +159,18 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(parseFloat(endpoint.style.left),parseFloat(ruler.style.width),'Right edge ends on a labeled interval');
   const pixelsPerSecond=parseFloat(ruler.style.width)/13;
   rulerLane.dispatchEvent(new w.MouseEvent('mousedown',{clientX:100+2.5*pixelsPerSecond*1.55,bubbles:true}));
-  assert.equal(editorRoot.querySelector('.mmx-timecode-display').textContent,'00:00:02:12','Scrubbing accounts for 155% graph zoom');
+  assert.equal(editorRoot.querySelector('.mmx-timecode-display').value,'00:00:02:12','Scrubbing accounts for 155% graph zoom');
   w.dispatchEvent(new w.MouseEvent('mousemove',{clientX:50}));
-  assert.equal(editorRoot.querySelector('.mmx-timecode-display').textContent,'00:00:00:00');
+  assert.equal(editorRoot.querySelector('.mmx-timecode-display').value,'00:00:00:00');
   assert.equal(editorRoot.querySelector('.mmx-playhead-needle').style.left,'130px','Playhead includes the actual header width and new timeline padding');
   w.dispatchEvent(new w.MouseEvent('mousemove',{clientX:100+parseFloat(ruler.style.width)*1.55}));
-  assert.equal(editorRoot.querySelector('.mmx-timecode-display').textContent,'00:00:13:00','Empty visible ruler space remains scrubbable');
+  assert.equal(editorRoot.querySelector('.mmx-timecode-display').value,'00:00:13:00','Empty visible ruler space remains scrubbable');
   w.dispatchEvent(new w.MouseEvent('mouseup'));
   assert.strictEqual(JSON.parse(timeline.value).clips[0].seed,'18446744073709551615');
   assert.deepStrictEqual(JSON.parse(timeline.value).clips[0].ref_ids,['image_1']);
-  const language=w.document.querySelector('select[title="UI language"]');
-  language.value='ar'; language.onchange();
-  assert(w.document.querySelector('.mmx-project-workspace > summary').textContent.includes('المشروع'));
-  assert(w.document.body.textContent.includes('Original user text'));
-  language.value='en';language.onchange();
   w.confirm=()=>true;
-  const inspectorDelete=()=>[...editorRoot.querySelectorAll('button')].find(el=>el.textContent==='Delete Clip');
-  assert(inspectorDelete(), 'The last shot has a visible Delete Clip action');
+  const inspectorDelete=()=>editorRoot.querySelector('.mmx-clip-del-btn');
+  assert(inspectorDelete(), 'The last clip has a timeline delete action');
   [...editorRoot.querySelectorAll('button')].find(el=>el.textContent.includes('Duplicate Clip')).click();
   [...editorRoot.querySelectorAll('button')].find(el=>el.textContent.includes('Duplicate Clip')).click();
   const generationControl=editorRoot.querySelector('.mmx-generation-mode');
@@ -217,7 +220,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   resized.querySelector('.mmx-clip-handle-right').dispatchEvent(new w.MouseEvent('mousedown',{clientX:500,bubbles:true}));
   w.dispatchEvent(new w.MouseEvent('mousemove',{clientX:549.6}));w.dispatchEvent(new w.MouseEvent('mouseup'));
   assert.equal(JSON.parse(timeline.value).clips[2].duration,5.5,'Resize accounts for 155% graph zoom');
-  inspectorDelete().click(); inspectorDelete().click(); inspectorDelete().click();
+  for(let i=0;i<10 && inspectorDelete();i++) inspectorDelete().click();
   assert.equal(JSON.parse(timeline.value).clips.length,0,'The final shot can be deleted');
   assert.strictEqual(editorRoot.querySelector('.mmx-project-workspace'),globalProject,'Global settings remain available without any clips');
   assert(!editorRoot.querySelector('.mmx-edit-tools'),'No clip-specific controls are offered without a selected clip');
@@ -228,7 +231,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const button=text=>[...w.document.querySelectorAll('button')].find(element=>element.textContent===text);
   assert(!editorRoot.textContent.includes('Prompt Forge'));
   assert(!editorRoot.textContent.includes('RefMod library'));
-  assert.equal(editorRoot.querySelector('.mmx-inspector-title select'),null,'Existing clip types cannot be edited');
+  assert.equal(editorRoot.querySelector('.mmx-inspector-title .mmx-mode-select').getAttribute('aria-label'),'Clip Seed Mode','The header selector controls seed behavior, not clip type');
   editorRoot.querySelector('.mmx-add-clip-card').click();
   w.document.querySelector('.mmx-type-modal-btn[data-type="T2V"]').click();
   const newClip=JSON.parse(timeline.value).clips.at(-1);
@@ -359,5 +362,5 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(lockedRange,'Locked source inspector renders without referencing a removed upload control');
   assert([...lockedRange.querySelectorAll('input,button,select')].every(el=>el.disabled));
   sourceNode.onRemoved();assert.strictEqual(listeners.size,0);
-  dom.window.close();console.log('Editor mount, migration, uint64 persistence, language, file continuation, actual source splitting, and cleanup passed');
+  dom.window.close();console.log('Editor mount, migration, uint64 persistence, editable timecode, persistent zoom, file continuation, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

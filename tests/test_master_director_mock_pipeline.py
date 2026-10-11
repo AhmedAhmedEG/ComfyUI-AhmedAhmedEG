@@ -444,8 +444,15 @@ class TestMockPipeline(CacheIsolatedTestCase):
                     audio_vae=self.mock_audio_vae,
                     clip=self.mock_clip,
                     timeline_data=timeline_data,
-                    config={"project_id": "test_val_cache"},
+                    config={"project_id": "test_val_cache", "steps": 8},
+                    run_mode="clip_by_clip",
                 )
+                with patch.object(ProjectCacheManager, "load_clip_frames", return_value=None):
+                    with self.assertRaisesRegex(ValueError, "Approved clip.*no complete saved take"):
+                        self.director.execute(model=self.mock_model, video_vae=self.mock_vae,
+                            audio_vae=self.mock_audio_vae, clip=self.mock_clip,
+                            timeline_data=timeline_data, config={"project_id":"test_val_cache", "steps":8},
+                            run_mode="clip_by_clip")
                 # Only shot 2 (seed 888) should have been sampled! Shot 1 was skipped from cache!
                 self.assertEqual(sampled_seeds, [888])
 
