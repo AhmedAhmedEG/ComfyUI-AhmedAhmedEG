@@ -2337,7 +2337,18 @@ function mountDirectorUI(node) {
   const promptWidget = node.widgets?.find((w) => w.name === "prompt");
   const timelineWidget = node.widgets?.find((w) => w.name === "timeline_data");
   const builderWidget = node.widgets?.find((w) => w.name === "builder_state");
-  const generationWidget = node.widgets?.find(w => w.name === "generation_mode");
+  // Older open workflows can retain the node definition from before this input existed.
+  // Add the ordinary LiteGraph combo rather than leaving those nodes without a control.
+  let generationWidget = node.widgets?.find(w => w.name === "generation_mode");
+  if (!generationWidget && !node.inputs?.some(input=>input.name === "generation_mode")) {
+    generationWidget = node.addWidget("combo", "generation_mode", "Next clip", null,
+      {values:["Next clip","All clips","Conditioning only"]});
+  }
+  if (generationWidget && generationWidget.type === "hidden") {
+    generationWidget.type = "combo"; generationWidget.hidden = false;
+    generationWidget.options = {...generationWidget.options,values:["Next clip","All clips","Conditioning only"]};
+    delete generationWidget.draw; delete generationWidget.computeSize;
+  }
   const generationDisplay = value => ({"Next shot":"Next clip","All shots":"All clips"})[value] || value || "Next clip";
 
   // Fully hide raw serialized widgets and prompt textarea from canvas

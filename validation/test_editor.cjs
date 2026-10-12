@@ -29,7 +29,7 @@ w.app.graph.links={10:{origin_id:20},11:{origin_id:21}};
 w.app.graph.getNodeById=id=>id===20?refPool:id===21?imageLoader:null;
 const initial = {version:2,project_id:'editor',clips:[{id:'clip_1',type:'I2VA',prompt:'Original user text',duration:5,seed:'18446744073709551615',ref_ids:['image_1']}],references:[{id:'uploaded',type:'image',filename:'example.png',name:'Subject'}]};
 const timeline = {name:'timeline_data',value:JSON.stringify(initial)};
-const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],inputs:[{name:'ref_pack',link:10}],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
+const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],inputs:[{name:'ref_pack',link:10}],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addWidget(type,name,value,callback,options){const widget={type,name,value,callback,options};this.widgets.push(widget);return widget;},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
 (async()=>{
   const legacy = {nodes:[{type:'MiniMaxH3MasterDirector'}]};
   w.extension.beforeConfigureGraph(legacy); assert.strictEqual(legacy.nodes[0].type,'MiniMaxH3MasterNode');
@@ -353,6 +353,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const sourceNode={...node,id:8,widgets:[sourceTimeline,{name:'builder_state',value:'{}'}],__mmxDirectorMounted:false,__mmxShotListener:null,__mmxLocaleCleanup:null,onRemoved:undefined};
   w.extension.nodeCreated(sourceNode);
   await new Promise(resolve=>setTimeout(resolve,20));
+  const restoredMode=sourceNode.widgets.find(widget=>widget.name==='generation_mode');
+  assert(restoredMode,'An old node without the schema widget gets a native combo');
+  assert.equal(restoredMode.type,'combo');
+  assert.equal(sourceNode.widgets.filter(widget=>widget.name==='generation_mode').length,1);
+  restoredMode.callback('All clips');assert.equal(JSON.parse(sourceTimeline.value).generation_mode,'All clips');
+  sourceNode.__mmxDirectorRefresh();assert.equal(sourceNode.widgets.filter(widget=>widget.name==='generation_mode').length,1,'Refresh does not duplicate the fallback control');
   button('Split into equal ranges').onclick();
   const split=JSON.parse(sourceTimeline.value).clips;
   assert.deepStrictEqual(split.map(shot=>[shot.source_start,shot.source_end]),[[3,6],[6,9]]);
