@@ -2246,6 +2246,15 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-library .mmx-project-name-field { display:flex;flex-direction:row;align-items:center;gap:12px;flex:1;min-width:260px;padding:0;border:0;background:transparent; }
 .mmx-director-root .mmx-project-name-field input { flex:1;min-width:120px; }
 .mmx-director-root .mmx-project-library button { min-height:40px;padding:0 18px; }
+.mmx-director-root .mmx-project-library button, .mmx-server-project-dialog-actions button { cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s; }
+.mmx-director-root .mmx-project-library button:hover:not(:disabled), .mmx-server-project-dialog-actions button:hover:not(:disabled) { background:#435d76;border-color:#8ab9df;box-shadow:0 0 12px #78b7eb33; }
+.mmx-director-root .mmx-project-library button:active:not(:disabled), .mmx-server-project-dialog-actions button:active:not(:disabled) { background:#263e53;box-shadow:inset 0 2px 5px #0006; }
+.mmx-director-root .mmx-project-library button:focus-visible, .mmx-server-project-dialog-actions button:focus-visible { outline:2px solid #8ab9df;outline-offset:3px; }
+.mmx-director-root .mmx-project-library button:disabled, .mmx-server-project-dialog-actions button:disabled { opacity:.65;cursor:wait; }
+.mmx-director-root .mmx-project-feedback { flex-basis:100%;padding:9px 12px;border:1px solid #596979;border-radius:5px;background:#1d2833;color:#c9e5fa;font-size:13px; }
+.mmx-director-root .mmx-project-feedback:empty { display:none; }
+.mmx-director-root .mmx-project-feedback[data-state="success"] { color:#b6edcb;border-color:#4e9270;background:#20382c; }
+.mmx-director-root .mmx-project-feedback[data-state="error"], .mmx-server-project-note[data-state="error"] { color:#ffb9c2;border-color:#b95f6c; }
 .mmx-director-root .mmx-server-project-status { flex-basis:100%;font-size:12px;color:#9fb5c7; }
 .mmx-server-project-list { width:100%;min-height:140px;padding:8px;background:#1d2229;color:#ecedf0;border:1px solid #596979;border-radius:5px; }
 .mmx-server-project-list option { padding:10px; }
@@ -2910,11 +2919,16 @@ function mountDirectorUI(node) {
   projectName.setAttribute('aria-label','Project Name');
   projectName.oninput=()=>{timelineState.project_name=projectName.value;syncState();};
   const nameField=field('Project Name',projectName);nameField.classList.add('mmx-project-name-field');
+  const projectFeedback=document.createElement('div');projectFeedback.className='mmx-project-feedback';
+  projectFeedback.setAttribute('role','status');projectFeedback.setAttribute('aria-live','polite');
+  const showProjectFeedback=(state,message)=>{projectFeedback.dataset.state=state;projectFeedback.textContent=message;};
   const saveProject=document.createElement('button');saveProject.textContent='Save Project';
   saveProject.title='Save the named timeline and workflow on this server. Latents stay in the existing server cache.';
   saveProject.onclick=async()=>{
-    if(!projectName.value.trim()){projectName.focus();return;}
-    saveProject.disabled=true;
+    if(saveProject.disabled)return;
+    if(!projectName.value.trim()){showProjectFeedback('error','Enter A Project Name Before Saving.');projectName.focus();return;}
+    saveProject.disabled=true;saveProject.textContent='Saving…';saveProject.setAttribute('aria-busy','true');
+    showProjectFeedback('busy','Saving Project On Server…');
     try{
       timelineState.project_name=projectName.value.trim();syncState();
       const graph=app.rootGraph || app.graph;
@@ -2927,12 +2941,15 @@ function mountDirectorUI(node) {
       if(timelineState.project_id===snapshot.project_id){
         timelineState.server_revision=result.project.revision;savedProjectSignature=capturedSignature;syncState();
       }
-    }catch(error){alert(error.message);}finally{saveProject.disabled=false;}
+      showProjectFeedback('success',`Saved “${snapshot.project_name}” On Server · ${new Date().toLocaleTimeString()}`);
+    }catch(error){showProjectFeedback('error',`Save Failed: ${error.message}`);}finally{saveProject.disabled=false;saveProject.textContent='Save Project';saveProject.removeAttribute('aria-busy');}
   };
   const openProject=document.createElement('button');openProject.textContent='Open Project';
   openProject.title='Choose a named project saved on this server and reopen its workflow and cached results.';
   openProject.onclick=async()=>{
-    openProject.disabled=true;
+    if(openProject.disabled)return;
+    openProject.disabled=true;openProject.textContent='Loading Projects…';openProject.setAttribute('aria-busy','true');
+    showProjectFeedback('busy','Loading Saved Projects From Server…');
     try{
       const {projects}=await requestJson('/minimax_director/project/list');
       if(node.__mmxDisposed)return;
@@ -2947,13 +2964,15 @@ function mountDirectorUI(node) {
       for(const project of projects){const option=document.createElement('option');option.value=project.project_id;
         option.textContent=`${project.name} · ${project.clip_count} Clips · ${new Date(project.updated_at*1000).toLocaleString()}`;select.append(option);}
       if(projects.length)select.value=projects.some(p=>p.project_id===timelineState.project_id)?timelineState.project_id:projects[0].project_id;
-      const note=document.createElement('p');note.textContent=projects.length
+      const note=document.createElement('p');note.className='mmx-server-project-note';note.setAttribute('role','status');note.textContent=projects.length
         ? 'Reopens the saved workflow. Media and large latent files stay on the server.' : 'No Saved Projects Yet. Enter a name and use Save Project.';
       const actions=document.createElement('div');actions.className='mmx-server-project-dialog-actions';
       const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>backdrop.remove();
       const load=document.createElement('button');load.textContent='Open Project';load.disabled=!projects.length;
       load.onclick=async()=>{
-        load.disabled=true;
+        if(load.disabled)return;
+        load.disabled=true;load.textContent='Opening…';load.setAttribute('aria-busy','true');
+        note.dataset.state='busy';note.textContent='Opening Saved Workflow…';
         try{
           const {project}=await requestJson(`/minimax_director/project/load?project_id=${encodeURIComponent(select.value)}`);
           const workflow=project.workflow;
@@ -2968,7 +2987,8 @@ function mountDirectorUI(node) {
           const opened=await app.loadGraphData(workflow,true,true,filename);
           if(opened===false)throw new Error('ComfyUI could not open this project. Check the workflow loading error.');
           backdrop.remove();
-        }catch(error){alert(error.message);load.disabled=false;}
+        }catch(error){note.dataset.state='error';note.textContent=`Open Failed: ${error.message}`;}
+        finally{load.disabled=false;load.textContent='Open Project';load.removeAttribute('aria-busy');}
       };
       backdrop.onkeydown=event=>{
         if(event.key==='Escape')backdrop.remove();
@@ -2982,10 +3002,11 @@ function mountDirectorUI(node) {
       };
       backdrop.onclick=event=>{if(event.target===backdrop)backdrop.remove();};
       actions.append(cancel,load);panel.append(heading,note,select,actions);backdrop.append(panel);document.body.append(backdrop);select.focus();
-    }catch(error){alert(error.message);}finally{openProject.disabled=false;}
+      showProjectFeedback('success',projects.length ? 'Saved Projects Ready. Choose A Project In The Open Dialog.' : 'No Saved Projects Yet. Name Your Project And Save It First.');
+    }catch(error){showProjectFeedback('error',`Could Not Load Projects: ${error.message}`);}finally{openProject.disabled=false;openProject.textContent='Open Project';openProject.removeAttribute('aria-busy');}
   };
   serverStatus=document.createElement('span');serverStatus.className='mmx-server-project-status';serverStatus.setAttribute('role','status');updateServerStatus();
-  library.append(nameField,saveProject,openProject,serverStatus);projectTools.append(library);
+  library.append(nameField,saveProject,openProject,serverStatus,projectFeedback);projectTools.append(library);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];
