@@ -7,7 +7,10 @@ function escapeHtml(value) {
 }
 
 // Embedded CSS
-const embeddedCSS = `/* Modern, sleek timeline editor styling for MiniMax H3 Master Director */
+const embeddedCSS = `
+/* Extender hides generation_mode globally; restore only this pack's native row. */
+[data-node-id]:has(.mmx-director-root) .lg-node-widget:has(button[data-testid="widget-select-default-trigger"][aria-label="generation_mode"]) { display: grid !important; }
+/* Modern, sleek timeline editor styling for MiniMax H3 Master Director */
 
 .mmx-director-root,
 .mmx-director-root * {
