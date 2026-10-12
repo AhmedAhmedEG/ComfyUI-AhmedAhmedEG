@@ -2307,7 +2307,6 @@ const embeddedCSS = `
 /* Approval, inspection and execution have distinct visual states. */
 .mmx-director-root .mmx-shot-block.validated {background:#244337!important;border-color:#66b38b!important;}
 .mmx-director-root .mmx-shot-block.active,.mmx-director-root .mmx-shot-block.validated.active {outline:3px solid #f3cf78;outline-offset:-3px;box-shadow:inset 0 0 0 5px #15191ecc!important;}
-.mmx-director-root .mmx-shot-block.active::after {content:'Editing';position:absolute;bottom:5px;left:8px;color:#ffe7ac;background:#302a1be6;padding:2px 6px;border-radius:3px;font-size:10px;pointer-events:none;}
 .mmx-director-root .mmx-shot-block.generating {border-color:#65cfff!important;box-shadow:inset 0 0 0 2px #65cfff!important;}
 .mmx-generating-badge {display:inline-flex;align-items:center;gap:5px;padding:2px 6px;background:#144a63;color:#cff2ff;border-radius:3px;font-size:10px;}
 .mmx-generating-badge::before {content:'';width:7px;height:7px;border-radius:50%;background:#7ee1ff;animation:mmx-generation-pulse 1s ease-in-out infinite alternate;}
@@ -4212,10 +4211,12 @@ function mountDirectorUI(node) {
     audioLabel.title="Applies only to this clip. Join Fade finishes audio joins across the timeline after generation.";
     const audioMode = document.createElement("select");
     for (const [value, label] of [["generate", "Generate"], ["source", "Keep source audio"], ["mute", "Mute"]]) {
+      if (value === "generate" && activeClip.locked) continue;
+      if (value === "source" && !["V2V", "RV2V"].includes(String(activeClip.type).toUpperCase())) continue;
       const option = document.createElement("option"); option.value = value; option.textContent = label;
       audioMode.appendChild(option);
     }
-    audioMode.value = activeClip.audio_mode || "generate";
+    audioMode.value = activeClip.audio_mode || (activeClip.locked ? "source" : "generate");
     audioMode.onchange = () => { activeClip.audio_mode = audioMode.value; syncState(); };
     audioMode.setAttribute("aria-label","Clip Audio");
     audioLabel.appendChild(audioMode);
@@ -5105,9 +5106,9 @@ function mountDirectorUI(node) {
     const detail = event.detail;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
-    const phaseLabel=({sampling:'Generating',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
+    const phaseLabel=({preparing:'Preparing',sampling:'Generating',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
     progressLabel.textContent = `${phaseLabel}: ${eventClip?.name || 'Clip '+(timelineState.clips.indexOf(eventClip)+1)}${detail.index ? ` (${detail.index}/${detail.total || timelineState.clips.length})` : ''}`;
-    if(detail.phase==='sampling') {generatingClipId=detail.clip_id;renderTimeline();}
+    if(['preparing','sampling'].includes(detail.phase)) {generatingClipId=detail.clip_id;renderTimeline();}
     if(detail.phase==='completed' && generatingClipId===detail.clip_id){generatingClipId=null;renderTimeline();}
     if(detail.phase==='source_ready') {
       const clip=timelineState.clips.find(value=>value.id===detail.clip_id);
@@ -5131,7 +5132,9 @@ function mountDirectorUI(node) {
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
     const clearGenerating=event=>{
       if(!generatingClipId)return;
-      if(event?.type==='executing' && event.detail?.node!=null)return;
+      // ComfyUI emits executing.detail as a node ID, not a {node} object.
+      // Only the terminal null event should clear the clip indicator.
+      if(event?.type==='executing' && (typeof event.detail==='object' ? event.detail?.node : event.detail)!=null)return;
       if(event?.type==='execution_error' && event.detail?.node_id && String(event.detail.node_id)!==String(node.id))return;
       generatingClipId=null;renderTimeline();
     };

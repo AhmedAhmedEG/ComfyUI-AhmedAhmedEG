@@ -126,13 +126,13 @@ def apply_semantic_bridge(
     task_key: str = "fl2va",
 ) -> List[Any]:
     """Rewrites the text conditioning tokens using the Semantic Bridge student MLP."""
-    if not pack or not conditioning:
+    if not pack or not conditioning or pack.get("enabled") is False:
         return conditioning
 
     adapter = pack.get("adapter")
     path = resolve_semantic_bridge_path(adapter)
     if not path or not os.path.isfile(path):
-        return conditioning
+        raise ValueError("Semantic Bridge is connected but its adapter weights are missing. Select an installed adapter or disconnect the node.")
 
     alpha = float(pack.get("alpha", DEFAULT_ALPHA))
     magnitude_match = bool(pack.get("magnitude_match", True))
@@ -171,8 +171,7 @@ def apply_semantic_bridge(
 
         return out_cond
     except Exception as exc:
-        log.warning(f"Semantic Bridge rewrite skipped: {exc}")
-        return conditioning
+        raise RuntimeError(f"Semantic Bridge rewrite failed: {exc}") from exc
 
 
 class MiniMaxH3DirectorSemanticBridge:

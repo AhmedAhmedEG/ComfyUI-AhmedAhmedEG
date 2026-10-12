@@ -348,11 +348,15 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   editorRoot.querySelector('.mmx-clip-selection input').click();
   assert(!editorRoot.querySelector('.mmx-shot-block').classList.contains('validated'),'Unchecking restores its normal color');
   const executionState=JSON.parse(timeline.value),executionClip=executionState.clips.at(-1);
+  node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'preparing',index:2,total:2}});
+  assert(editorRoot.querySelector('.mmx-generating-badge'),'Preparation already identifies its clip');
+  listeners.get('executing')({type:'executing',detail:String(node.id)});
+  assert(editorRoot.querySelector('.mmx-generating-badge'),'A scalar executing node ID must not clear the clip');
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'sampling',index:2,total:2}});
   assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`));
   assert(editorRoot.querySelector('.mmx-generating-badge').textContent==='Generating');
   assert(editorRoot.querySelector('.mmx-shot-block.active').getAttribute('aria-current')==='true');
-  listeners.get('executing')({type:'executing',detail:{node:null}});
+  listeners.get('executing')({type:'executing',detail:null});
   assert(!editorRoot.querySelector('.mmx-generating-badge'),'Execution completion clears the running indicator');
   const oldApproval={clips:[{id:'old',selected:true},{id:'draft',selected:false}],run_selection:false};
   w.migrateClipApproval(oldApproval);assert.equal(oldApproval.clips[0].validated,true);assert.equal(oldApproval.clips[0].selected,false);

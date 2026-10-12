@@ -77,7 +77,7 @@ class RuntimeContracts(unittest.TestCase):
                       noise_mask=None, sigmas=None, callback=None, seed=None):
         self.assertNotIsInstance(noise, dict)
         self.assertNotIsInstance(latent_image, dict)
-        self.sampling_calls.append({"model": model, "seed": seed, "steps": steps,
+        self.sampling_calls.append({"model": model, "seed": seed, "steps": steps, "cfg": cfg, "sampler": sampler_name, "scheduler": scheduler,
             "samples": latent_image, "sigmas": sigmas, "noise_mask": noise_mask,
             "disable_noise": disable_noise, "start_step": start_step, "last_step": last_step})
         return latent_image
@@ -103,6 +103,110 @@ class RuntimeContracts(unittest.TestCase):
             "timeline_data": json.dumps({"clips": clips or [{"id": "one", "type": "T2VA", "duration": 1., "prompt": "walk"}]})}
         options.update(kwargs)
         return self.node.execute(**options)
+
+    def test_approved_take_needs_no_live_reference_or_sampling_model(self):
+        image = {"id":"opening","type":"image","data":torch.ones((1,32,32,3))}
+        self.execute([{"id":"one","type":"I2V","duration":1,"ref_ids":["opening"]}],ref_pack={"refs":[image]})
+        self.native_calls.clear(); self.sampling_calls.clear()
+        result=self.execute([{"id":"one","type":"I2V","duration":1,"ref_ids":["opening"],"validated":True}],model=None)
+        self.assertEqual(self.native_calls,[])
+        self.assertEqual(self.sampling_calls,[])
+        self.assertEqual(json.loads(result[8])["shots"][0]["action"],"cached")
+
+    def test_cached_latent_carry_does_not_reapply_current_continuity(self):
+        clips=[{"id":"one","type":"T2V","duration":2},
+               {"id":"two","type":"T2V","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":22}]
+        self.execute(clips)
+        for clip in clips: clip["validated"]=True
+        clips[1]["continuity_mode"]="Latent Carry (Pinned)"
+        self.native_calls.clear(); self.sampling_calls.clear()
+        with patch('core.vendor.aimixer.director.h3_latent_continue.apply_latent_continue',side_effect=AssertionError('Accepted take must not be reconditioned')):
+            self.execute(clips,model=None)
+        self.assertEqual(self.native_calls,[])
+        self.assertEqual(self.sampling_calls,[])
+
+    def test_lazy_loading_matches_next_clip_and_approval(self):
+        clips=[{"id":"a","type":"REF2VA","validated":True},
+               {"id":"b","type":"T2V"},{"id":"c","type":"REF2VA"}]
+        options={"timeline_data":json.dumps({"approval_control_version":1,"clips":clips})}
+        self.assertEqual(self.node.check_lazy_status(**options,generation_mode="Next clip"),["fl2va_model"])
+        self.assertEqual(self.node.check_lazy_status(**options,generation_mode="All clips"),["fl2va_model","ref2va_model"])
+        for clip in clips: clip["validated"]=True
+        self.assertEqual(self.node.check_lazy_status(timeline_data=json.dumps({"clips":clips})),[])
+
+    def test_sampling_settings_and_shared_prompt_reach_execution(self):
+        timeline={"project_id":"regression","shared_prompt":"cinematic","shared_prompt_policy":"append",
+                  "audio_fade_ms":27,"audio_gain_match":False,
+                  "clips":[{"id":"one","type":"T2V","duration":2,"seed":"1234","prompt":"walk"}]}
+        from nodes import node_director
+        with patch('nodes.node_director.concatenate_audio_clips', wraps=node_director.concatenate_audio_clips) as joins:
+            result=self.execute(timeline_data=json.dumps(timeline),steps=17,cfg=2.5,sampler='euler',scheduler='normal')
+        call=self.sampling_calls[0]
+        self.assertEqual((call['steps'],call['cfg'],call['sampler'],call['scheduler'],call['seed']),(17,2.5,'euler','normal',1234))
+        self.assertIn('walk',result[5]); self.assertTrue(result[5].endswith('cinematic'))
+        self.assertEqual(joins.call_args.kwargs['seam_fade_ms'],27)
+        self.assertFalse(joins.call_args.kwargs['enable_gain_match'])
+        self.assertEqual(joins.call_args.kwargs['crossfade_ms'],0)
+
+    def test_invalid_audio_policy_fails_before_sampling(self):
+        for mode in ('source','invalid'):
+            with self.subTest(mode=mode),self.assertRaises(ValueError):
+                self.execute([{'id':'one','type':'T2V','duration':1,'audio_mode':mode}])
+        self.assertEqual(self.sampling_calls,[])
+
+    def test_master_mixed_resolution_output_uses_enclosing_canvas(self):
+        manager=ProjectCacheManager('regression',self.temp.name)
+        for cid,shape in [('one',(5,32,64,3)),('two',(5,96,32,3))]:
+            manager.store_clip_results(cid,cid,None,{'waveform':torch.ones((1,2,10000)),'sample_rate':48000},torch.ones(shape))
+        result=self.execute([{'id':cid,'type':'T2V','duration':1,'validated':True} for cid in ('one','two')],model=None)
+        self.assertEqual(result[0].shape,(10,96,64,3))
+        self.assertEqual((result[2]['loaded_width'],result[2]['loaded_height']),(64,96))
+
+    def test_sigma_shifts_and_external_schedule_reach_sampler(self):
+        import comfy_extras.nodes_minimax_h3 as native
+        sigmas=torch.linspace(1,0,8)
+        with patch.object(native.MiniMaxH3SigmaShift,'execute',return_value=(self.model,)) as shifts:
+            self.execute(shift_video=8.5,shift_audio=2.25,sigmas=sigmas)
+        shifts.assert_called_once_with(self.model,8.5,2.25)
+        self.assertIs(self.sampling_calls[0]['sigmas'],sigmas)
+
+    def test_optional_passes_receive_current_controls(self):
+        lift={'enabled':True,'test_setting':123}
+        refinement={'enabled':True,'steps':4,'cfg':1.75,'denoise':.3,'target_width':64,'target_height':32,
+                    'enable_tiling':True,'tile_count':3,'tile_overlap':16,'passes':2,'enable_latent_chunking':True,
+                    'backend':'global','memory_budget_mb':256}
+        face={'enabled':True,'strength':.25}
+        bridge={'adapter':'controlled-fixture','alpha':.2}
+        with patch('core.provenance.algorithm_provenance',return_value=[]), \
+             patch('nodes.node_semantic_bridge.apply_semantic_bridge',side_effect=lambda cond,*a,**kw:cond) as semantic, \
+             patch('nodes.node_director.sample_selflift',side_effect=lambda **kw:(kw['latent'],None)) as selflift, \
+             patch('nodes.node_director.apply_refine_pass',side_effect=lambda **kw:kw['latent_dict']) as refine, \
+             patch('core.tracked_face.refine_tracked_faces',side_effect=lambda frames,*a,**kw:(frames,{})) as faces:
+            self.execute(selflift=lift,refine=refinement,face_refine=face,semantic_bridge=bridge)
+        self.assertIs(selflift.call_args.kwargs['settings'],lift)
+        self.assertIsNone(selflift.call_args.kwargs['carry'])
+        for key in ('steps','cfg','denoise','target_width','target_height','enable_tiling','tile_count','tile_overlap','passes'):
+            self.assertEqual(refine.call_args.kwargs[key],refinement[key])
+        self.assertTrue(refine.call_args.kwargs['enable_chunking'])
+        self.assertEqual(refine.call_args.kwargs['memory_budget_mb'],256)
+        self.assertEqual(semantic.call_args.kwargs['task_key'],'T2VA')
+        self.assertIs(faces.call_args.args[6],face)
+
+    def test_missing_semantic_adapter_is_not_a_silent_noop(self):
+        with patch('nodes.node_semantic_bridge.resolve_semantic_bridge_path',return_value=None):
+            with self.assertRaisesRegex(RuntimeError,'adapter weights are missing'):
+                self.execute(semantic_bridge={'adapter':'missing'})
+        self.assertEqual(self.sampling_calls,[])
+
+    def test_progress_identifies_only_the_clip_being_processed(self):
+        clips=[{'id':'one','type':'T2V','duration':1},{'id':'two','type':'T2V','duration':1}]
+        self.execute(clips,generation_mode='Next clip')
+        clips[0]['validated']=True
+        with patch('core.progress.shot_event') as events:
+            self.execute(clips,generation_mode='Next clip',unique_id='42')
+        stages=[call.args[2:4] for call in events.call_args_list]
+        self.assertEqual(stages,[('two','preparing'),('two','sampling'),('two','completed')])
+        self.assertTrue(all(call.args[:2]==('42','regression') for call in events.call_args_list))
 
     def test_hidden_execution_graph_is_not_used_as_prompt(self):
         result = self.execute(

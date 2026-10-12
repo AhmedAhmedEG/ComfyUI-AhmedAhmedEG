@@ -117,7 +117,8 @@ class MiniMaxH3MasterDirector:
         settings = config if isinstance(config, dict) else {}
         try:
             tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
-            clips = tl.get("clips", []) if isinstance(tl,dict) else []
+            tl = migrate_timeline(tl) if isinstance(tl, dict) else {}
+            clips = tl.get("clips", [])
         except (ValueError, TypeError):
             tl, clips = {}, []
         generation=kwargs.get("generation_mode", tl.get("generation_mode") if isinstance(tl,dict) else None)
@@ -135,14 +136,18 @@ class MiniMaxH3MasterDirector:
         overrides = kwargs.get("model_pack") or {}
         types = set()
         for item in clips:
-            if item.get("locked"):
+            if item.get("locked") or item.get("validated"):
                 continue
             name=item.get("model_override")
             if name:
                 if not isinstance(overrides,dict) or overrides.get(name) is None:
                     raise ValueError(f"Unknown clip model override: {name}")
+                if generation in ("Next clip", "Next shot"):
+                    break
                 continue
             types.add(normalize_mode(item.get("type","T2V")))
+            if generation in ("Next clip", "Next shot"):
+                break
         needed = []
         if any(get_required_model_type(t)=="fl2va" for t in types) and fl2va_model is None:
             needed.append("fl2va_model")
@@ -398,9 +403,78 @@ class MiniMaxH3MasterDirector:
                 "tail_audio": continuation.get("audio"), "tail_latent": None}
             previous_fingerprint = fingerprint_value([previous_av, frames, continuation.get("audio")])
 
+        def reuse_saved_take(clip_idx, clip_item, source=None):
+            nonlocal last_latent, previous_av, low_carry, previous_tail, previous_fingerprint
+            clip_id = str(clip_item["id"])
+            canon_mode = normalize_mode(clip_item.get("type", "T2V"))
+            approved_take = bool(clip_item.get("validated"))
+            audio_mode = clip_item.get("audio_mode", timeline.get("audio_mode", "generate"))
+            cached_frames = cache_mgr.load_clip_frames(clip_id)
+            cached_audio = cache_mgr.load_clip_audio(clip_id)
+            cached_latent = cache_mgr.load_clip_latent(clip_id)
+            if approved_take and cached_latent is not None and (cached_frames is None or cached_audio is None):
+                v_saved, a_saved = extract_streams_from_av_latent(cached_latent)
+                if cached_frames is None:
+                    cached_frames = decode_video_latent(video_vae, v_saved)
+                    cached_frames = cached_frames[:int(cached_latent.get("_mmx_visible_end", cached_frames.shape[0]))]
+                    if canon_mode == MODE_INPAINT:
+                        cached_frames = cached_frames[-1:]
+                if cached_audio is None:
+                    cached_audio = decode_audio_latent(audio_vae, a_saved) if audio_vae and a_saved is not None and canon_mode != MODE_INPAINT else {"waveform": torch.zeros((1,2,round(cached_frames.shape[0]/FPS*48000))),"sample_rate":48000}
+                    meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
+                    saved_audio_mode = meta.get("audio_mode", audio_mode)
+                    expected_source = meta.get("source_audio_fingerprint")
+                    if str(saved_audio_mode).lower() in ("source", "keep_source", "original") and source is None:
+                        source = source_range(clip_item, timeline, width, height, ref_pool=ref_pool)
+                    if expected_source and (source is None or fingerprint_value(source["audio"]) != expected_source):
+                        raise ValueError("The approved take's original soundtrack is missing or changed. Restore its saved audio or original source.")
+                    cached_audio = choose_audio(saved_audio_mode, cached_audio, source, cached_frames.shape[0])
+                cache_mgr.restore_clip_media(clip_id, cached_frames, cached_audio)
+            if cached_frames is not None and cached_audio is not None:
+                last_latent = cached_latent
+                previous_av = cached_latent
+                low_carry = cached_latent.get("_selflift_low_carry") if cached_latent else None
+                clip_chained_flags[clip_idx] = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("trim_prefix", 0))
+                previous_trim = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("previous_trim", 0))
+                if previous_trim and all_decoded_frames:
+                    all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
+                    all_decoded_audios[-1] = fit_audio_duration(all_decoded_audios[-1], all_decoded_frames[-1].shape[0], FPS)
+                previous_fingerprint = cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("fingerprint")
+                log.info(f"Master Director: Clip {clip_idx + 1}/{len(clips)} [{clip_id}] is validated & cached. Skipping diffusion sampling.")
+                all_decoded_frames.append(cached_frames)
+                all_decoded_audios.append(
+                    cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
+                )
+                v_stream, _ = extract_streams_from_av_latent(cached_latent) if cached_latent else (None, None)
+                tail_count = max(1, min(int(cached_frames.shape[0]), 56))
+                cached_aud = cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
+                wf_c = cached_aud["waveform"]
+                sr_c = int(cached_aud.get("sample_rate", 48000))
+                aud_samples_c = min(wf_c.shape[-1], max(1, int(round(56 / frame_rate * sr_c))))
+                cached_tail_aud = {"waveform": wf_c[..., -aud_samples_c:].clone(), "sample_rate": sr_c}
+                previous_tail = {
+                    "last_frame": cached_frames[-1:].clone(),
+                    "tail_frames": cached_frames[-tail_count:].clone(),
+                    "tail_latent": v_stream[:, :, -1:].clone() if hasattr(v_stream, "shape") and getattr(v_stream, "ndim", 0) >= 3 else None,
+                    "tail_audio": cached_tail_aud,
+                }
+                run_report.append({"clip_id": clip_id, "action": "cached", "frames": int(cached_frames.shape[0])})
+                return True
+            return False
+
         for clip_idx, clip_item in enumerate(clips):
             clip_id = str(clip_item.get("id") or f"clip_{clip_idx + 1}")
             clip_type = str(clip_item.get("type", "T2V")).upper()
+            # Accepted footage is immutable: do not rebuild its conditioning,
+            # validate current refs, load a sampling model, or reapply continuity.
+            if clip_item.get("validated") and not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
+                if not reuse_saved_take(clip_idx, clip_item):
+                    raise ValueError(f"Approved clip {clip_id!r} has no complete saved take. Restore its saved results or unapprove it to generate again.")
+                completed_clips.append(clip_item)
+                continue
+
+            if not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
+                shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1, total=len(clips))
             clip_dur = float(clip_item.get("duration", duration))
             if not math.isfinite(clip_dur) or clip_dur <= 0:
                 raise ValueError(f"Shot {clip_idx + 1} duration must be positive and finite.")
@@ -635,6 +709,10 @@ class MiniMaxH3MasterDirector:
                 is_chained_from_previous = False
                 clip_chained_flags[clip_idx] = False
             audio_mode = clip_item.get("audio_mode", timeline.get("audio_mode", "generate"))
+            if str(audio_mode).lower() not in ("generate", "source", "keep_source", "original", "mute"):
+                raise ValueError(f"Unknown clip audio mode: {audio_mode!r}")
+            if str(audio_mode).lower() in ("source", "keep_source", "original") and source is None:
+                raise ValueError("Keep Source Audio requires a source video clip.")
             visible_frames = source["frames"].shape[0] if source is not None else align_frame_count(int(clip_dur * FPS))
             continuation_prefix = 0
             latent_carry = clip_continuity_mode == "Latent Carry (Pinned)"
@@ -863,60 +941,12 @@ class MiniMaxH3MasterDirector:
             previous_fingerprint = clip_fp
             completed_clips.append(clip_item)
 
-            # If clip is validated and stored in server cache, skip diffusion sampling!
+            # Compatibility for explicit legacy selection-filter API requests.
             skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
-            # Approval accepts the saved take in both generation modes, even
-            # after global settings change. Only unapproved skipped clips need
-            # a matching fingerprint; missing approved results must not sample.
-            approved_take = clip_validated
-            if approved_take or (skip_requested and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp)):
-                cached_frames = cache_mgr.load_clip_frames(clip_id)
-                cached_audio = cache_mgr.load_clip_audio(clip_id)
-                cached_latent = cache_mgr.load_clip_latent(clip_id)
-                if approved_take and cached_latent is not None and (cached_frames is None or cached_audio is None):
-                    v_saved, a_saved = extract_streams_from_av_latent(cached_latent)
-                    if cached_frames is None:
-                        cached_frames = decode_video_latent(video_vae, v_saved)
-                        cached_frames = cached_frames[:int(cached_latent.get("_mmx_visible_end", cached_frames.shape[0]))]
-                        if canon_mode == MODE_INPAINT:
-                            cached_frames = cached_frames[-1:]
-                    if cached_audio is None:
-                        cached_audio = decode_audio_latent(audio_vae, a_saved) if audio_vae and a_saved is not None and canon_mode != MODE_INPAINT else {"waveform": torch.zeros((1,2,round(cached_frames.shape[0]/FPS*48000))),"sample_rate":48000}
-                        meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
-                        saved_audio_mode = meta.get("audio_mode", audio_mode)
-                        expected_source = meta.get("source_audio_fingerprint")
-                        if expected_source and (source is None or fingerprint_value(source["audio"]) != expected_source):
-                            raise ValueError("The approved take's original soundtrack is missing or changed. Restore its saved audio or original source.")
-                        cached_audio = choose_audio(saved_audio_mode, cached_audio, source, cached_frames.shape[0])
-                    cache_mgr.restore_clip_media(clip_id, cached_frames, cached_audio)
-                if cached_frames is not None and cached_audio is not None:
-                    last_latent = cached_latent
-                    previous_av = cached_latent
-                    low_carry = cached_latent.get("_selflift_low_carry") if cached_latent else None
-                    clip_chained_flags[clip_idx] = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("trim_prefix", clip_chained_flags[clip_idx]))
-                    log.info(f"Master Director: Clip {clip_idx + 1}/{len(clips)} [{clip_id}] is validated & cached. Skipping diffusion sampling.")
-                    all_decoded_frames.append(cached_frames)
-                    all_decoded_audios.append(
-                        cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
-                    )
-                    v_stream, _ = extract_streams_from_av_latent(cached_latent) if cached_latent else (None, None)
-                    tail_count = max(1, min(int(cached_frames.shape[0]), 56))
-                    cached_aud = cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
-                    wf_c = cached_aud["waveform"]
-                    sr_c = int(cached_aud.get("sample_rate", 48000))
-                    aud_samples_c = min(wf_c.shape[-1], max(1, int(round(56 / frame_rate * sr_c))))
-                    cached_tail_aud = {"waveform": wf_c[..., -aud_samples_c:].clone(), "sample_rate": sr_c}
-                    previous_tail = {
-                        "last_frame": cached_frames[-1:].clone(),
-                        "tail_frames": cached_frames[-tail_count:].clone(),
-                        "tail_latent": v_stream[:, :, -1:].clone() if hasattr(v_stream, "shape") and getattr(v_stream, "ndim", 0) >= 3 else None,
-                        "tail_audio": cached_tail_aud,
-                    }
-                    run_report.append({"clip_id": clip_id, "action": "cached", "frames": int(cached_frames.shape[0])})
+            # Unapproved skipped clips require a matching fingerprint.
+            if skip_requested and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp):
+                if reuse_saved_take(clip_idx, clip_item, source):
                     continue
-
-            if approved_take:
-                raise ValueError(f"Approved clip {clip_id!r} has no complete saved take. Restore its saved results or unapprove it to generate again.")
 
             if skip_requested:
                 low_carry = None
@@ -1143,7 +1173,8 @@ class MiniMaxH3MasterDirector:
 
         # Stitch clips together
         if output_frames:
-            target_h, target_w = output_frames[0].shape[1], output_frames[0].shape[2]
+            target_h = max(int(f.shape[1]) for f in output_frames)
+            target_w = max(int(f.shape[2]) for f in output_frames)
             standardized_frames = []
             standardized_audios = []
             for k, f in enumerate(output_frames):
@@ -1161,7 +1192,11 @@ class MiniMaxH3MasterDirector:
                     standardized_audios.append(curr_audio)
 
                 if f.shape[1] != target_h or f.shape[2] != target_w:
-                    f_res = F.interpolate(f.permute(0, 3, 1, 2), size=(target_h, target_w), mode="bilinear", align_corners=False).permute(0, 2, 3, 1)
+                    scale = min(target_w / f.shape[2], target_h / f.shape[1])
+                    new_h, new_w = max(1, round(f.shape[1] * scale)), max(1, round(f.shape[2] * scale))
+                    f_res = F.interpolate(f.permute(0, 3, 1, 2), size=(new_h, new_w), mode="bilinear", align_corners=False)
+                    pad_x, pad_y = (target_w-new_w)//2, (target_h-new_h)//2
+                    f_res = F.pad(f_res, (pad_x, target_w-new_w-pad_x, pad_y, target_h-new_h-pad_y)).permute(0, 2, 3, 1)
                     standardized_frames.append(f_res)
                 else:
                     standardized_frames.append(f)
