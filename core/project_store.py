@@ -81,7 +81,9 @@ class ServerProjectStore:
         builder = builder if isinstance(builder, str) else json.dumps(builder, ensure_ascii=False)
         serialized = json.dumps(state, ensure_ascii=False, allow_nan=False)
         master.setdefault("widgets_values_named", {}).update(timeline_data=serialized, builder_state=builder)
-        master["widgets_values"] = [serialized, builder]
+        generation = {"Next shot":"Next clip", "All shots":"All clips"}.get(state.get("generation_mode"), state.get("generation_mode", "Next clip"))
+        master["widgets_values_named"]["generation_mode"] = generation
+        master["widgets_values"] = [generation, serialized, builder]
         document = {"format": "MiniMaxH3ServerProject", "version": 1, "project_id": project_id,
                     "name": name, "revision": revision, "updated_at": time.time(),
                     "timeline": state, "workflow": workflow, "master_node_id": master_node_id}

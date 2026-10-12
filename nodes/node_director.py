@@ -90,6 +90,7 @@ class MiniMaxH3MasterDirector:
                 "prompt_text": ("STRING", {"forceInput": True, "tooltip": "Newline-separated shot prompts from any text node. Blank lines are ignored."}),
                 "model_pack": ("MMX_MODEL_PACK", {"tooltip": "Named models for per-shot overrides."}),
                 "continuation": ("MMX_CONTINUATION", {"tooltip": "Explicitly selected take/checkpoint to continue."}),
+                "generation_mode": (["Next clip", "All clips", "Conditioning only"], {"default": "Next clip", "tooltip": "Next clip preserves approved takes and generates one unapproved clip. All clips processes the sequence. Conditioning only prepares inputs for an external sampler."}),
                 "timeline_data": ("STRING", {"default": "{\"version\":1,\"clips\":[]}", "multiline": False}),
                 "builder_state": ("STRING", {"default": "{}", "multiline": False}),
             },
@@ -117,7 +118,7 @@ class MiniMaxH3MasterDirector:
     ):
         """Determine which model inputs need evaluation based on active timeline clip modes."""
         settings = config if isinstance(config, dict) else {}
-        if kwargs.get("execution_mode", settings.get("execution_mode")) == "Conditioning Guide Output":
+        if kwargs.get("generation_mode") == "Conditioning only" or kwargs.get("execution_mode", settings.get("execution_mode")) == "Conditioning Guide Output":
             return []
         if model is not None:
             return []
@@ -214,7 +215,8 @@ class MiniMaxH3MasterDirector:
                 raise ValueError("Timeline must be a JSON object.")
             authored_clips = "clips" in timeline
             timeline = migrate_timeline(timeline)
-            generation = timeline.get("generation_mode")
+            generation = kwargs.get("generation_mode", timeline.get("generation_mode"))
+            generation = {"Next clip":"Next shot", "All clips":"All shots"}.get(generation, generation)
             if generation is not None:
                 if generation not in ("Next shot", "All shots", "Conditioning only"):
                     raise ValueError("Unknown timeline generation mode.")

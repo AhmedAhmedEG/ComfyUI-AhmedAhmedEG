@@ -426,12 +426,14 @@
         }
       ],
       "widgets_values": [
+        "Next clip",
         "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
         "{}"
       ],
       "widgets_values_named": {
         "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
-        "builder_state": "{}"
+        "builder_state": "{}",
+        "generation_mode": "Next clip"
       },
       "title": "MiniMax H3 Master Node"
     },

@@ -29,6 +29,10 @@ class DocumentedControls(unittest.TestCase):
         schema = collect()['MiniMaxH3DirectorSettings']
         names = {field['name'] for field in schema['inputs']}
         self.assertFalse(names & {'generation_mode', 'continuity_mode', 'context_length'})
+        master = collect()['MiniMaxH3MasterNode']
+        mode = next(field for field in master['inputs'] if field['name']=='generation_mode')
+        from nodes.node_director import MiniMaxH3MasterDirector
+        self.assertEqual(MiniMaxH3MasterDirector.INPUT_TYPES()['optional']['generation_mode'][0], ['Next clip','All clips','Conditioning only'])
         source = (Path(__file__).resolve().parent.parent/'web/js/minimax_director.js').read_text(encoding='utf8')
         self.assertEqual(set(re.findall(r'hideWidget\((\w+)\)',source)),
             {'timelineWidget','builderWidget','promptWidget','durationWidget'})

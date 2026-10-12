@@ -29,7 +29,7 @@ w.app.graph.links={10:{origin_id:20},11:{origin_id:21}};
 w.app.graph.getNodeById=id=>id===20?refPool:id===21?imageLoader:null;
 const initial = {version:2,project_id:'editor',clips:[{id:'clip_1',type:'I2VA',prompt:'Original user text',duration:5,seed:'18446744073709551615',ref_ids:['image_1']}],references:[{id:'uploaded',type:'image',filename:'example.png',name:'Subject'}]};
 const timeline = {name:'timeline_data',value:JSON.stringify(initial)};
-const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'}],inputs:[{name:'ref_pack',link:10}],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
+const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],inputs:[{name:'ref_pack',link:10}],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
 (async()=>{
   const legacy = {nodes:[{type:'MiniMaxH3MasterDirector'}]};
   w.extension.beforeConfigureGraph(legacy); assert.strictEqual(legacy.nodes[0].type,'MiniMaxH3MasterNode');
@@ -131,7 +131,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
 
   const editorWidget=node.widgets.find(widget=>widget.name==='master_director_ui');
   editorWidget.draw(null,{inputs:Array(18).fill({}),outputs:[]},1200,0,600);
-  assert.equal(editorWidget.last_y,370,'Editor starts below all socket rows');
+  assert.equal(editorWidget.last_y,400,'Editor starts below all socket rows');
   assert.equal(editorRoot.style.height,editorRoot.style.maxHeight,'Editor stays inside its allocated node area');
   assert(editorRoot.querySelector('.mmx-time-tick.major span'), 'Ruler labels use browser text');
   assert(!editorRoot.querySelector('.mmx-ruler-canvas'), 'No stretched bitmap ruler');
@@ -173,11 +173,13 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(inspectorDelete(), 'The last clip has a timeline delete action');
   [...editorRoot.querySelectorAll('button')].find(el=>el.textContent.includes('Duplicate Clip')).click();
   [...editorRoot.querySelectorAll('button')].find(el=>el.textContent.includes('Duplicate Clip')).click();
-  const generationControl=editorRoot.querySelector('.mmx-generation-mode');
+  const generationControl=node.widgets.find(w=>w.name==='generation_mode');
+  assert(!editorRoot.querySelector('.mmx-generation-bar'));
+  assert.equal(node.widgets[0],generationControl,'Native generation dropdown precedes the editor');
   assert(generationControl,'Generation mode is prominently mounted in the Master');
-  generationControl.value='All shots';generationControl.onchange();
-  assert.equal(JSON.parse(timeline.value).generation_mode,'All shots');
-  generationControl.value='Next shot';generationControl.onchange();
+  generationControl.value='All clips';generationControl.callback('All clips');
+  assert.equal(JSON.parse(timeline.value).generation_mode,'All clips');
+  generationControl.value='Next clip';generationControl.callback('Next clip');
   const continuityControl=editorRoot.querySelector('.mmx-shot-continuity-mode');
   continuityControl.value='Motion Context (Chained)';continuityControl.onchange();
   const videoContext=editorRoot.querySelector('.mmx-shot-context_length');videoContext.value='39';videoContext.onchange();
@@ -280,7 +282,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   editorRoot.querySelector('.mmx-tool-content').dispatchEvent(scrollWheel);
   assert.equal(graphWheel,0,'Panel scrolling cannot zoom the graph');
   assert(!scrollWheel.defaultPrevented,'Native panel scrolling remains enabled');w.document.body.removeEventListener('wheel',wheelListener);
-  assert(editorRoot.querySelector('.mmx-generation-bar').textContent.includes('Selected clips only'),'Eligibility is beside generation scheduling');
+  assert(editorRoot.querySelector('.mmx-toolbar-right').textContent.includes('Selected clips only'),'Eligibility is beside generation scheduling');
   const filesPanel=[...editorRoot.querySelectorAll('details')].find(el=>el.querySelector(':scope > summary')?.textContent==='Files & Recovery');
   assert.deepStrictEqual([...filesPanel.querySelectorAll('button')].map(el=>el.textContent),['New Project','Import Project','Export Project','Restore Last Autosave','Reset Timeline','Delete Saved Results'],'Routine file actions precede restore and destructive actions');
   assert.equal(filesPanel.querySelectorAll('.mmx-project-danger').length,2);
@@ -327,7 +329,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(projectDialog);assert(projectDialog.querySelector('option').textContent.includes('My Named Film'));
   await [...projectDialog.querySelectorAll('button')].find(el=>el.textContent==='Open Project').onclick();
   assert.equal(JSON.parse(openedWorkflow[0].nodes[0].widgets_values_named.timeline_data).project_name,'My Named Film');
-  assert.equal(JSON.parse(openedWorkflow[0].nodes[0].widgets_values[0]).project_id,'editor','Reopening preserves cache identity');
+  assert.equal(JSON.parse(openedWorkflow[0].nodes[0].widgets_values[1]).project_id,'editor','Reopening preserves cache identity');
   assert(openedWorkflow[3].includes('My Named Film'),'Opened workflow has an identifiable title');
   assert(!w.document.querySelector('[aria-label="Open Server Project"]'));
   timeline.value=JSON.stringify(savedTimeline);node.__mmxDirectorRefresh();

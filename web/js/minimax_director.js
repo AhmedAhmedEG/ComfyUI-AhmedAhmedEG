@@ -2302,7 +2302,7 @@ function mountDirectorUI(node) {
     if (!n || !n.size) return minH !== undefined ? minH : getMinDomHeight();
     const fallbackMin = minH !== undefined ? minH : getMinDomHeight();
     const topY = getTopWidgetsHeight(n);
-    const avail = (n.size[1] || 0) - topY - 14;
+    const avail = (n.size[1] || 0) - topY - 14 - (n.widgets?.some(w=>w.name==="generation_mode") ? 30 : 0);
     return Math.max(fallbackMin, Math.floor(avail));
   };
 
@@ -2310,7 +2310,7 @@ function mountDirectorUI(node) {
     if (!domWidget || !domWidget.element) return;
     const topY = getTopWidgetsHeight(node);
     node.widgets_start_y = topY;
-    if (domWidget) domWidget.last_y = topY;
+    if (domWidget) domWidget.last_y = topY + (generationWidget ? 30 : 0);
     const minH = getMinDomHeight();
     const availH = getAvailableDomHeight(node, minH);
     const nodeW = node.size?.[0] || 1200;
@@ -2337,6 +2337,8 @@ function mountDirectorUI(node) {
   const promptWidget = node.widgets?.find((w) => w.name === "prompt");
   const timelineWidget = node.widgets?.find((w) => w.name === "timeline_data");
   const builderWidget = node.widgets?.find((w) => w.name === "builder_state");
+  const generationWidget = node.widgets?.find(w => w.name === "generation_mode");
+  const generationDisplay = value => ({"Next shot":"Next clip","All shots":"All clips"})[value] || value || "Next clip";
 
   // Fully hide raw serialized widgets and prompt textarea from canvas
   const hideWidget = (w) => {
@@ -2948,7 +2950,8 @@ function mountDirectorUI(node) {
           const timeline=JSON.stringify(project.timeline),builder=typeof project.timeline.builder_state==='string'
             ? project.timeline.builder_state : JSON.stringify(project.timeline.builder_state || {});
           master.widgets_values_named={...master.widgets_values_named,timeline_data:timeline,builder_state:builder};
-          master.widgets_values=[timeline,builder];
+          master.widgets_values_named.generation_mode=timelineState.generation_mode;
+          master.widgets_values=[timelineState.generation_mode,timeline,builder];
           const filename=`MiniMax Project ${project.name.replace(/[\\/:*?"<>|]/g,'_')} ${project.project_id}.json`;
           const opened=await app.loadGraphData(workflow,true,true,filename);
           if(opened===false)throw new Error('ComfyUI could not open this project. Check the workflow loading error.');
@@ -3151,15 +3154,12 @@ function mountDirectorUI(node) {
 
   toolbar.appendChild(toolbarRight);
   root.appendChild(toolbar);
-  const generationBar=document.createElement("div");generationBar.className="mmx-generation-bar";
-  const generationSelect=document.createElement("select");generationSelect.className="mmx-generation-mode";
-  for (const mode of ["Next shot","All shots","Conditioning only"]){const option=document.createElement("option");option.value=mode;option.textContent=mode.replace(/shot/g,"clip");generationSelect.append(option);}
-  generationSelect.value=timelineState.generation_mode || "Next shot";
-  generationSelect.onchange=()=>{timelineState.generation_mode=generationSelect.value;syncState();};
-  timelineState.generation_mode=generationSelect.value;syncState();
-  generationBar.dataset.version="1.4.9";
-  generationBar.append(selectionLabel);
-  generationBar.prepend(field("Generation mode",generationSelect,"Next clip generates one new clip. All clips processes the sequence. Conditioning only feeds an external sampler."));root.append(generationBar);
+  if(generationWidget) {
+    generationWidget.value=generationDisplay(timelineState.generation_mode || generationWidget.value);
+    const prior=generationWidget.callback;
+    generationWidget.callback=function(value,...args){prior?.call(this,value,...args);timelineState.generation_mode=generationDisplay(value);syncState();};
+  }
+  toolbarRight.append(selectionLabel);
   finishSection(projectTools,"Named server projects, file backups and recovery. Canvas and sampling are configured in the connected Settings node.");
   projectTools.classList.add("mmx-project-workspace");
   const projectBody=projectTools.querySelector(":scope > .mmx-section-body");
@@ -3597,7 +3597,7 @@ function mountDirectorUI(node) {
     videosLane.innerHTML = "";
     audiosLane.innerHTML = "";
 
-    generationSelect.value=timelineState.generation_mode || "Next shot";
+    if(generationWidget) generationWidget.value=generationDisplay(timelineState.generation_mode);
     for (const clip of timelineState.clips) {
       clip.continuity_mode ||= "Independent (No Continuity)";
       clip.context_length ??= 22; clip.audio_context_length ??= clip.context_length;
@@ -4942,7 +4942,7 @@ function mountDirectorUI(node) {
     // Keep the editor below the sockets, using the same offset in every hook.
     const origDomDraw = domWidget.draw;
     domWidget.draw = function (ctx, n, widget_width, y, widget_height) {
-      const topY = getTopWidgetsHeight(n || node);
+      const topY = getTopWidgetsHeight(n || node) + (generationWidget ? 30 : 0);
       this.last_y = topY;
       if (origDomDraw) origDomDraw.call(this, ctx, n, widget_width, topY, widget_height);
     };
@@ -4953,6 +4953,7 @@ function mountDirectorUI(node) {
       if (idx > 0) {
         node.widgets.splice(idx, 1);
         node.widgets.unshift(domWidget);
+        if(generationWidget) { node.widgets.splice(node.widgets.indexOf(generationWidget),1);node.widgets.unshift(generationWidget); }
       }
     }
 
@@ -4969,7 +4970,7 @@ function mountDirectorUI(node) {
   node.onResize = function (size) {
     const topY = getTopWidgetsHeight(this);
     this.widgets_start_y = topY;
-    if (domWidget) domWidget.last_y = topY;
+    if (domWidget) domWidget.last_y = topY + (generationWidget ? 30 : 0);
     const minH = getMinDomHeight();
     const minNodeH = topY + minH + 16;
     const minNodeW = 1200;
@@ -4988,7 +4989,7 @@ function mountDirectorUI(node) {
   node.computeSize = function (out) {
     const topY = getTopWidgetsHeight(this);
     this.widgets_start_y = topY;
-    if (domWidget) domWidget.last_y = topY;
+    if (domWidget) domWidget.last_y = topY + (generationWidget ? 30 : 0);
     const minH = getMinDomHeight();
     const minNodeH = topY + minH + 16;
     const minNodeW = 1200;
@@ -5006,7 +5007,7 @@ function mountDirectorUI(node) {
   node.onDrawForeground = function (ctx) {
     const topY = getTopWidgetsHeight(this);
     this.widgets_start_y = topY;
-    if (domWidget) domWidget.last_y = topY;
+    if (domWidget) domWidget.last_y = topY + (generationWidget ? 30 : 0);
     if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
   };
 
@@ -5022,11 +5023,12 @@ function mountDirectorUI(node) {
   // Ensure domWidget is positioned at the TOP of node.widgets (index 0) so it starts flush at widgets_start_y
   if (node.widgets && domWidget) {
     const topY = getTopWidgetsHeight(node);
-    domWidget.last_y = topY;
+    domWidget.last_y = topY + (generationWidget ? 30 : 0);
     const domIdx = node.widgets.indexOf(domWidget);
     if (domIdx > 0) {
       node.widgets.splice(domIdx, 1);
       node.widgets.unshift(domWidget);
+        if(generationWidget) { node.widgets.splice(node.widgets.indexOf(generationWidget),1);node.widgets.unshift(generationWidget); }
     }
   }
 
@@ -5034,7 +5036,7 @@ function mountDirectorUI(node) {
   node.__mmxDirectorRefresh = () => {
     const topY = getTopWidgetsHeight(node);
     node.widgets_start_y = topY;
-    if (domWidget) domWidget.last_y = topY;
+    if (domWidget) domWidget.last_y = topY + (generationWidget ? 30 : 0);
     hideWidget(timelineWidget);
     hideWidget(builderWidget);
     hideWidget(promptWidget);
@@ -5044,6 +5046,7 @@ function mountDirectorUI(node) {
       if (domIdx > 0) {
         node.widgets.splice(domIdx, 1);
         node.widgets.unshift(domWidget);
+        if(generationWidget) { node.widgets.splice(node.widgets.indexOf(generationWidget),1);node.widgets.unshift(generationWidget); }
       }
     }
     loadState();
@@ -5137,7 +5140,7 @@ app.registerExtension({
       const configNode=graphData.nodes.find(row=>row.id===origin);
       const old=configNode?.widgets_values_named || {};
       try {
-        const raw=master.widgets_values_named?.timeline_data ?? master.widgets_values?.[0];
+        const raw=master.widgets_values_named?.timeline_data ?? master.widgets_values?.find(value=>typeof value==="string" && value.trim().startsWith("{") && value.includes("\"clips\""));
         if (typeof raw!=='string') continue;
         const state=JSON.parse(raw);
         state.generation_mode ||= old.generation_mode || 'Next shot';
@@ -5159,8 +5162,9 @@ app.registerExtension({
           clip.selected ??= false;
         }
         const serialized=JSON.stringify(state);
-        if (master.widgets_values) master.widgets_values[0]=serialized;
+        if (master.widgets_values) {const index=master.widgets_values.indexOf(raw);if(index>=0)master.widgets_values[index]=serialized;}
         (master.widgets_values_named ||= {}).timeline_data=serialized;
+        master.widgets_values_named.generation_mode ||= ({"Next shot":"Next clip","All shots":"All clips"})[state.generation_mode] || state.generation_mode;
       } catch (error) { console.warn('[DirectorUI] Could not migrate timeline controls',error); }
     }
   },
@@ -5276,16 +5280,18 @@ app.registerExtension({
         if (named["timeline_data"] !== undefined) {
           const w = this.widgets.find((x) => x.name === "timeline_data");
           if (w) w.value = named["timeline_data"];
-        } else if (values.length === 2) {
-          const w1 = this.widgets.find((x) => x.name === "timeline_data");
-          if (w1) w1.value = values[0];
-          const w2 = this.widgets.find((x) => x.name === "builder_state");
-          if (w2) w2.value = values[1];
-        } else if (values.length > 2) {
-          const w1 = this.widgets.find((x) => x.name === "timeline_data");
-          if (w1) w1.value = values[values.length - 2];
-          const w2 = this.widgets.find((x) => x.name === "builder_state");
-          if (w2) w2.value = values[values.length - 1];
+        } else {
+          const serialized=values.find(value=>typeof value==="string" && value.trim().startsWith("{") && (()=>{try{return Array.isArray(JSON.parse(value).clips);}catch{return false;}})());
+          const w=this.widgets.find(x=>x.name==="timeline_data");if(w && serialized)w.value=serialized;
+          const builder=this.widgets.find(x=>x.name==="builder_state");
+          if(builder && serialized){const index=values.indexOf(serialized);builder.value=values[index+1] || "{}";}
+        }
+        const generation=this.widgets.find(x=>x.name==="generation_mode");
+        if(generation){
+          const timeline=this.widgets.find(x=>x.name==="timeline_data");
+          let state={};try{state=JSON.parse(timeline?.value || "{}");}catch{}
+          generation.value=({"Next shot":"Next clip","All shots":"All clips"})[named.generation_mode || state.generation_mode] || named.generation_mode || state.generation_mode || "Next clip";
+          state.generation_mode=generation.value;if(timeline)timeline.value=JSON.stringify(state);
         }
 
         if (named["builder_state"] !== undefined) {
