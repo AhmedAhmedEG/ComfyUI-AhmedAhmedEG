@@ -1,5 +1,5 @@
 {
-  "version": "1.4.22",
+  "version": "1.5.0",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -27,7 +27,7 @@
       "notes": [
         "Generation is fixed at 24 fps. Canvas dimensions must be multiples of 32. Generated durations round to the 5 + 17k frame grid.",
         "video is VHS_VIDEOINFO metadata, not a native VIDEO object. Use Create Video to package images and audio.",
-        "prompt_text accepts one prompt per nonblank line. External group inputs replace timeline clips; prompt_text overrides existing clip prompts in line order; clips beyond the supplied lines keep their prompts. With no clips, lines construct new clips.",
+        "prompt_text accepts one prompt per nonblank line. The typed Timeline Builder input replaces local authoring; prompt_text overrides existing clip prompts in line order; clips beyond the supplied lines keep their prompts. With no clips, lines construct new clips.",
         "timeline_data and builder_state are editor-managed JSON. Normal users edit the visible UI rather than those values.",
         "Latest preview fits within 960 × 540; final exports use the configured generated frames. A cache contains completed takes, not an unfinished sampler step.",
         "Conditioning Guide Output returns placeholder images/audio; use its conditioning and latent in an external sampling/decoding graph."
@@ -41,7 +41,9 @@
       "extra": "<h2 id=\"editor\">Editing workspace</h2><p>The timeline comes first. Select a clip to edit its name and prompt, then write its prompt in the large left-hand area. Name and colored type code, duration, and seed/seed behavior occupy three header rows. Clip audio stays in clip controls. Drag the clip body to reorder, drag the right edge to resize, or use the timeline × button to remove it. Dropping outside cancels safely.</p><p>Reference Pack is the sole source of reference assets. Connect loaders to the pool and optionally name the assets. Assign actual pool items to the selected clip to reveal its prompt tokens. Empty reference tracks remain hidden; text-only mode has no reference picker.</p><h3>Controls on the right</h3><p>Continuity uses only the preceding timeline clip. Look holds model overrides, interior reference anchors and color grading. LoRAs contains adapters for the selected clip. The shared prompt textbox sits directly below the timeline. Project holds named server projects and file actions. Project configuration has one entry point: the Project section above the timeline. These tabs use a bounded, independently scrolling panel, so their contents do not move the writing area. Help reveals additional explanations for each field; every field label remains visible without Help.</p><p>Generation mode stays above the timeline. Preview scope and autoplay belong to the separate Smart Preview. Canvas and sampling belong to Settings. Use Add Clip → Add Existing Video to put existing footage in the sequence; place the consuming generated clip immediately after that footage and choose its continuity method.</p><p>The timeline checkbox approves a saved clip and is disabled until a latent or decoded take exists on the server. Green means approved, gold identifies the editing clip, and a blue Generating marker identifies sampling. Clip blocks show prompt text; references stay in their own lanes. Output Audio below the shared prompt applies finishing fades and gain matching, separately from generation context.</p>",
       "control_descriptions": {
         "generation_mode": "Standard Master node dropdown: Next clip preserves approved takes and generates one unapproved clip; All clips processes the sequence; Conditioning only prepares inputs for an external sampler.",
-        "latent_checkpoint": "Legacy saved-take payload. It cannot give the first clip an off-timeline predecessor; ordinary continuity uses the previous timeline clip. Add existing video footage to the timeline instead."
+        "latent_checkpoint": "Legacy saved-take payload. It cannot give the first clip an off-timeline predecessor; ordinary continuity uses the previous timeline clip. Add existing video footage to the timeline instead.",
+        "timeline": "Typed external authoring input on Master; JSON project-state input on the exporter.",
+        "ref_pack": "Connected media pool, used by exporter when uncached source footage must be decoded."
       },
       "output_descriptions": [
         "Assembled RGB frames for the Output selection.",
@@ -155,7 +157,8 @@
       "notes": [
         "Learned weights must match the supported 24-channel H3 3D architecture; image upscaler weights are not interchangeable.",
         "SIGMAS must be a finite, nonnegative, nonincreasing 1D schedule with at least two values.",
-        "More passes can increase compute and drift."
+        "More passes can increase compute and drift.",
+        "Confirm First Pass creates a staged latent, not a validated final take. Review First Pass in Smart Preview and approve on its clip card before running refinement. Changing first-pass inputs requires a new approval. Every refinement pass is cached for preview/export. Spike Guard is experimental and requires learned latent weights."
       ],
       "related": [
         "MiniMaxH3DirectorSelfLift",
@@ -166,7 +169,14 @@
         "backend": "global uses memory-aware refinement planning; sampler uses the native sampler path with explicit tiles.",
         "steps": "Number of refinement-stage sampling steps, separate from the Master first pass.",
         "sampler": "Refinement-stage sampler, separate from the first-pass Director sampler.",
-        "scheduler": "Refinement-stage noise scheduler."
+        "scheduler": "Refinement-stage noise scheduler.",
+        "confirm_first_pass": "Cache and preview the initial sample, pause for approval, then reuse that latent during refinement.",
+        "skip_fl2v": "Skip refinement of First And Last Frame clips to protect their authored endpoints.",
+        "upscale_method": "Latent interpolation/learned upscale, learned pixel upscale, RTX VSR or bicubic before refinement.",
+        "spike_guard": "Experimental learned-latent burn-signature correction, disabled by default.",
+        "guard_sensitivity": "Spike detection threshold relative to the median latent anomaly score.",
+        "guard_strength": "Correction amount from zero (no correction) to one (full correction).",
+        "upscale_model": "Learned pixel upscale weights used only for learned_pixel."
       },
       "output_descriptions": [
         "Latent refine/upscale stage configuration."
@@ -409,7 +419,10 @@
         "MiniMaxH3DirectorGroupReferenceToVideo"
       ],
       "extra": "",
-      "control_descriptions": {},
+      "control_descriptions": {
+        "refmod_library": "Selected RefMod descriptors supplied by the dedicated RefMod Library.",
+        "asset_edits": "Editor-managed slot adjustments and uploaded pack assets: crop, grading, trim, frame selection and scaling."
+      },
       "output_descriptions": [
         "Reference pool with asset identifiers and pack count."
       ],
@@ -484,7 +497,9 @@
         "MiniMaxH3OutputProcessing"
       ],
       "extra": "",
-      "control_descriptions": {},
+      "control_descriptions": {
+        "quality": "RTX interpolation quality preset; has no effect on Linear."
+      },
       "output_descriptions": [
         "Processed frame batch when pass_frames is enabled; otherwise an empty batch.",
         "Encoded file path as a STRING."
@@ -627,7 +642,11 @@
       "extra": "",
       "control_descriptions": {
         "backend": "local uses a connected generator; ollama or compatible sends requests to the selected endpoint.",
-        "images": "Up to 12 visual inputs encoded for a provider that supports vision."
+        "images": "Up to 12 visual inputs encoded for a provider that supports vision.",
+        "timeline": "Typed external authoring input on Master; JSON project-state input on the exporter.",
+        "creativity": "Prompt variability from 1 to 10; also sets sampling temperature for supported generators.",
+        "detail": "Requested prompt description density from 1 to 10; does not increase clip count.",
+        "shot_descriptions": "JSON list of individual clip instructions, in requested draft order."
       },
       "output_descriptions": [
         "Structured draft with source-context identity.",
@@ -663,7 +682,9 @@
         "MiniMaxH3MasterNode"
       ],
       "extra": "",
-      "control_descriptions": {},
+      "control_descriptions": {
+        "timeline": "Typed external authoring input on Master; JSON project-state input on the exporter."
+      },
       "output_descriptions": [
         "Original or updated timeline JSON."
       ],
@@ -714,16 +735,15 @@
       "summary": "Exports cached project clips one at a time and assembles a native VIDEO file.",
       "when": "Use it for individual-clip export or rebuilding a saved sequence without resampling.",
       "behavior": [
-        "Reads the project ID from timeline first, otherwise from the project_id widget. Iterates shots in timeline order, optionally only selected shots.",
-        "final uses cached final frames; pre_refine uses the saved first-pass frames; original_source decodes source ranges. Locked shots use their sources.",
-        "Applies stored context/handoff trims, normalizes canvases, adjusts output FPS and audio, encodes shots, then concatenates their files with FFmpeg.",
-        "Returns a native VIDEO, individual shot-file JSON and an assembled UI preview."
+        "Exports all clips or an explicit clip_ids list in timeline order.",
+        "Reads final, first_pass, pre_refine, numbered refine_pass or original_source media. Cached locked pack footage is supported.",
+        "Uses the enclosing maximum width and height with aspect-preserving fit and padding; decodes one clip at a time.",
+        "Returns an assembled native VIDEO and individual clip-file JSON."
       ],
       "steps": [
-        "Connect Master project_state to timeline, or supply a saved timeline JSON.",
-        "Choose all/selected, stream, fps and filename_prefix.",
-        "Enable export_individual_shots when you want permanent per-shot files as well.",
-        "Run after the needed takes and source media are available."
+        "Connect project_state to timeline.",
+        "Choose all or clip_ids and use the dedicated picker for an explicit selection.",
+        "Choose the saved stream and output FPS, then Run."
       ],
       "wiring": [
         "Master project_state → timeline",
@@ -740,7 +760,12 @@
         "MiniMaxH3VideoCombine"
       ],
       "extra": "",
-      "control_descriptions": {},
+      "control_descriptions": {
+        "timeline": "Typed external authoring input on Master; JSON project-state input on the exporter.",
+        "clip_ids": "Explicit comma-separated stable clip IDs. The exporter picker writes this list; used with selection=clip_ids.",
+        "refine_pass": "Intermediate refinement pass number when stream=refine_pass.",
+        "ref_pack": "Connected media pool, used by exporter when uncached source footage must be decoded."
+      },
       "output_descriptions": [
         "Native VIDEO backed by the assembled file.",
         "JSON list of encoded individual shot files."
@@ -817,7 +842,9 @@
       ],
       "extra": "",
       "control_descriptions": {
-        "quality": "RTX provider quality preset; not the video encoder’s CRF quality."
+        "quality": "RTX interpolation quality preset; has no effect on Linear.",
+        "provider": "Linear pixel blends or NVIDIA RTX frame generation; no silent provider fallback.",
+        "upscale_model": "Learned pixel upscale weights used only for learned_pixel."
       },
       "output_descriptions": [
         "Upscaled RGB frame batch."
@@ -857,6 +884,143 @@
       "beginner": {
         "meaning": "This is your video player, in its own box. It watches completed shots from the Master. The default shows only the newest clip, so you do not download the whole movie again just to see the new part.",
         "first_use": "Connect the Master’s project_state socket to this node, leave Latest clip selected, and click Run. Use Full video when you want to inspect joins between shots."
+      }
+    },
+    "MiniMaxH3TimelineBuilder": {
+      "summary": "External timeline ownership.",
+      "when": "Connect Image To Video Group or Reference To Video Group outputs to Groups Combine, then connect the combined groups to Timeline Builder.",
+      "behavior": [
+        "Connect Image To Video Group or Reference To Video Group outputs to Groups Combine, then connect the combined groups to Timeline Builder. The typed timeline output connects to Master.timeline. This restores external graph authoring without adding competing group configuration panels to the Master. Each group receives a stable identity from its ComfyUI node ID. Prompt, duration, type and the actual media tensors are authored by the group nodes. The Master retains execution controls such as seed, continuity and take approval against those identities.",
+        "Running the graph resolves the authored sequence and reports a sanitized timeline snapshot to the Master editor. Tensor data is not placed inside workflow JSON. The editor disables fields that the connected builder owns. Disconnect the builder to resume local authoring; review the visible timeline first. Reordering groups changes sequence order, while changing a prompt updates the existing clip rather than assigning it a new random identity. Duplicate identities are rejected because they could map two clips onto the same cached take.",
+        "The authoring_json output is a readable metadata export. It cannot reconstruct procedural IMAGE or AUDIO tensors by itself. Preserve the original workflow for those connections. Approved takes keep their normal immutable cache semantics; a builder is not a command to replace an approved take. Clear approval before deliberately generating a changed authored clip. Use one builder for a Master, with one ordered combined group list. This node does not sample, load diffusion weights, or join output video."
+      ],
+      "steps": [
+        "Configure the dedicated node, connect its typed outputs, and review the result before generation."
+      ],
+      "wiring": [
+        "Group nodes → Groups Combine → groups",
+        "timeline → Master.timeline"
+      ],
+      "notes": [
+        "The authoring_json output is a readable metadata export. It cannot reconstruct procedural IMAGE or AUDIO tensors by itself. Preserve the original workflow for those connections. Approved takes keep their normal immutable cache semantics; a builder is not a command to replace an approved take. Clear approval before deliberately generating a changed authored clip. Use one builder for a Master, with one ordered combined group list. This node does not sample, load diffusion weights, or join output video."
+      ],
+      "related": [
+        "MiniMaxH3MasterNode"
+      ],
+      "extra": "",
+      "control_descriptions": {
+        "groups": "Ordered MMX_DIR_GROUP list from group authoring nodes or Groups Combine."
+      },
+      "output_descriptions": [
+        "timeline output; see the execution contract above.",
+        "authoring_json output; see the execution contract above."
+      ],
+      "beginner": {
+        "meaning": "External timeline ownership.",
+        "first_use": "Connect Image To Video Group or Reference To Video Group outputs to Groups Combine, then connect the combined groups to Timeline Builder. The typed timeline output connects to Master.timeline. This restores external graph authoring without adding competing group configuration panels to the Master. Each group receives a stable identity from its ComfyUI node ID. Prompt, duration, type and the actual media tensors are authored by the group nodes. The Master retains execution controls such as seed, continuity and take approval against those identities."
+      }
+    },
+    "MiniMaxH3RefModLibrary": {
+      "summary": "Library selection and ownership.",
+      "when": "The library lists installed RefMod files and gives each selected item its own identity, description and strength.",
+      "behavior": [
+        "The library lists installed RefMod files and gives each selected item its own identity, description and strength. Connect its library output to Reference Pack.refmod_library. The pack exposes these items to the Master as selectable reference identities. The Master still decides which identities belong to a clip; editing their descriptions and strengths belongs here. A zero strength is a deliberate zero contribution rather than a missing selection. Strength must remain between zero and four.",
+        "Refresh Library reads the server catalog. Use RefMod selects a row, Description records identity guidance, and Strength sets the model contribution. These choices are serialized in library_data with the workflow. Reloading a workflow restores the selected rows rather than silently selecting every installed adapter. Names refer to installed files: this library does not download weights or train RefMods. The runtime resolves the file when a generated clip actually uses it and reports missing files as errors.",
+        "Stable IDs avoid merging different characters merely because their descriptions are similar. Duplicate IDs are rejected. Connected libraries append their entries to a Reference Pack with the pack namespace, allowing packs to be combined safely. If a selected file is removed from the server, refresh the catalog and repair that selection before generation. Identity strength is distinct from a diffusion LoRA strength. The library output contains descriptors only; loading and applying the requested adapter happens during conditioning of the selected clip. Keep character descriptions precise and do not assign unrelated subjects the same identity."
+      ],
+      "steps": [
+        "Configure the dedicated node, connect its typed outputs, and review the result before generation."
+      ],
+      "wiring": [
+        "library → Reference Pack.refmod_library"
+      ],
+      "notes": [
+        "Stable IDs avoid merging different characters merely because their descriptions are similar. Duplicate IDs are rejected. Connected libraries append their entries to a Reference Pack with the pack namespace, allowing packs to be combined safely. If a selected file is removed from the server, refresh the catalog and repair that selection before generation. Identity strength is distinct from a diffusion LoRA strength. The library output contains descriptors only; loading and applying the requested adapter happens during conditioning of the selected clip. Keep character descriptions precise and do not assign unrelated subjects the same identity."
+      ],
+      "related": [
+        "MiniMaxH3MasterNode"
+      ],
+      "extra": "",
+      "control_descriptions": {
+        "library_data": "Editor-managed selected RefMod names, stable identities, descriptions and strengths."
+      },
+      "output_descriptions": [
+        "refmods output; see the execution contract above."
+      ],
+      "beginner": {
+        "meaning": "Library selection and ownership.",
+        "first_use": "The library lists installed RefMod files and gives each selected item its own identity, description and strength. Connect its library output to Reference Pack.refmod_library. The pack exposes these items to the Master as selectable reference identities. The Master still decides which identities belong to a clip; editing their descriptions and strengths belongs here. A zero strength is a deliberate zero contribution rather than a missing selection. Strength must remain between zero and four."
+      }
+    },
+    "MiniMaxH3FrameInterpolation": {
+      "summary": "Time, endpoints and provider requirements.",
+      "when": "This output node accepts an ordered decoded IMAGE batch, its playback FPS and optional AUDIO.",
+      "behavior": [
+        "This output node accepts an ordered decoded IMAGE batch, its playback FPS and optional AUDIO. It returns a longer IMAGE batch, fitted audio and the faster FPS. Connect all three outputs to an encoder. A multiplier of two doubles FPS and frame count, preserving the container duration. Source endpoints are retained. Extra copies of the last source frame preserve its final frame hold; otherwise the usual pair interpolation formula would shorten the encoded container by part of a frame interval.",
+        "Linear is a CPU-compatible pixel blend fallback. It does not estimate optical flow, and objects may look like a dissolve between source frames. Detect Cuts uses a conservative mean pixel difference threshold of 0.3 on normalized image data for this fallback. When the threshold is crossed it holds the previous frame rather than blending across the cut. RTX delegates pair interpolation and automatic cut detection to the NVIDIA SDK. LOW, MEDIUM and HIGH are SDK quality presets; they only affect RTX. No fixed quality or speed guarantee follows from those names.",
+        "RTX needs a supported GPU, working SDK dependencies and compatible drivers. Selecting it without those dependencies fails explicitly. It is never silently substituted with Linear. Images need at least two frames. Multiplier is between two and eight and source FPS between one and 120. The node keeps or fits audio to the resulting duration; it does not generate speech or stretch the sequence into slow motion. Changing source FPS changes playback duration, so use the actual source rate. GPU execution and visual motion quality require validation on the target installation."
+      ],
+      "steps": [
+        "Configure the dedicated node, connect its typed outputs, and review the result before generation."
+      ],
+      "wiring": [
+        "images + audio + fps → video encoder"
+      ],
+      "notes": [
+        "RTX needs a supported GPU, working SDK dependencies and compatible drivers. Selecting it without those dependencies fails explicitly. It is never silently substituted with Linear. Images need at least two frames. Multiplier is between two and eight and source FPS between one and 120. The node keeps or fits audio to the resulting duration; it does not generate speech or stretch the sequence into slow motion. Changing source FPS changes playback duration, so use the actual source rate. GPU execution and visual motion quality require validation on the target installation."
+      ],
+      "related": [
+        "MiniMaxH3MasterNode"
+      ],
+      "extra": "",
+      "control_descriptions": {
+        "multiplier": "Output frame count and FPS multiplier. Duration stays unchanged.",
+        "provider": "Linear pixel blends or NVIDIA RTX frame generation; no silent provider fallback.",
+        "quality": "RTX interpolation quality preset; has no effect on Linear.",
+        "detect_cuts": "Prevent blends across detected cuts. Linear uses a mean-difference threshold; RTX uses SDK detection."
+      },
+      "output_descriptions": [
+        "images output; see the execution contract above.",
+        "audio output; see the execution contract above.",
+        "fps output; see the execution contract above."
+      ],
+      "beginner": {
+        "meaning": "Time, endpoints and provider requirements.",
+        "first_use": "This output node accepts an ordered decoded IMAGE batch, its playback FPS and optional AUDIO. It returns a longer IMAGE batch, fitted audio and the faster FPS. Connect all three outputs to an encoder. A multiplier of two doubles FPS and frame count, preserving the container duration. Source endpoints are retained. Extra copies of the last source frame preserve its final frame hold; otherwise the usual pair interpolation formula would shorten the encoded container by part of a frame interval."
+      }
+    },
+    "MiniMaxH3ProjectImport": {
+      "summary": "Review authoring conversion before use.",
+      "when": "This converter reads supported authoring metadata from current timelines, DaSiWa reference packs, AIMixer timeline lists and Tritant Extender projects.",
+      "behavior": [
+        "This converter reads supported authoring metadata from current timelines, DaSiWa reference packs, AIMixer timeline lists and Tritant Extender projects. The panel accepts JSON or a project ZIP/EXT archive, then Convert And Review displays a converted timeline and warnings. Apply Converted Timeline updates a chosen local Master only after review. Alternatively, connect the typed timeline output to Master.timeline to keep the converter as its authoring owner. Do not use both authoring paths for the same Master.",
+        "Converted clips receive deterministic identities based on the source metadata and index. Repeated conversion of identical metadata produces the same identities. Approval is reset: an upstream validated flag does not establish that this package has a readable final take. Model weights, foreign latent files and sampler settings are not imported into execution. Reconfigure the Settings and model loaders, then generate new takes or use decoded video footage from the Reference Pack. The report explicitly states that caches were not imported.",
+        "Archive paths are checked before any media extraction. Absolute paths, parent traversal and unsupported archive structure are rejected. Supported embedded media is copied into a content-namespaced directory beneath the server input folder; it is not copied into the model folders. Missing media is listed in the report. JSON conversion alone cannot transfer files from another machine. AIMixer conversion requires an explicit clip, segment or group list, and unsupported rich fields require manual review. This is a metadata migration tool, not binary compatibility with every historical project serializer. Preserve your original archive and inspect prompts, media assignments and durations before running a model."
+      ],
+      "steps": [
+        "Configure the dedicated node, connect its typed outputs, and review the result before generation."
+      ],
+      "wiring": [
+        "timeline → Master.timeline, or reviewed panel apply to a local Master"
+      ],
+      "notes": [
+        "Archive paths are checked before any media extraction. Absolute paths, parent traversal and unsupported archive structure are rejected. Supported embedded media is copied into a content-namespaced directory beneath the server input folder; it is not copied into the model folders. Missing media is listed in the report. JSON conversion alone cannot transfer files from another machine. AIMixer conversion requires an explicit clip, segment or group list, and unsupported rich fields require manual review. This is a metadata migration tool, not binary compatibility with every historical project serializer. Preserve your original archive and inspect prompts, media assignments and durations before running a model."
+      ],
+      "related": [
+        "MiniMaxH3MasterNode"
+      ],
+      "extra": "",
+      "control_descriptions": {
+        "project_json": "Reviewed source project metadata JSON. The dedicated panel writes the converted state here.",
+        "source": "Select the source serializer, or auto-detect supported metadata markers."
+      },
+      "output_descriptions": [
+        "timeline output; see the execution contract above.",
+        "conversion_report output; see the execution contract above."
+      ],
+      "beginner": {
+        "meaning": "Review authoring conversion before use.",
+        "first_use": "This converter reads supported authoring metadata from current timelines, DaSiWa reference packs, AIMixer timeline lists and Tritant Extender projects. The panel accepts JSON or a project ZIP/EXT archive, then Convert And Review displays a converted timeline and warnings. Apply Converted Timeline updates a chosen local Master only after review. Alternatively, connect the typed timeline output to Master.timeline to keep the converter as its authoring owner. Do not use both authoring paths for the same Master."
       }
     }
   },

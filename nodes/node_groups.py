@@ -56,6 +56,7 @@ class MiniMaxH3DirectorGroupImageToVideo:
             "first_frame": first_frame,
             "last_frame": last_frame,
         }
+        group["_builder_id"] = str(kwargs.get("unique_id", ""))
         return (group,)
 
 
@@ -117,6 +118,7 @@ class MiniMaxH3DirectorGroupReferenceToVideo:
             "ref_videos": videos,
             "ref_audios": audios,
         }
+        group["_builder_id"] = str(kwargs.get("unique_id", ""))
         return (group,)
 
 
@@ -147,3 +149,9 @@ class MiniMaxH3DirectorGroupsCombine:
             raise ValueError("Director Groups Combine: connect at least one group.")
 
         return (combined,)
+
+for _group_class in (MiniMaxH3DirectorGroupImageToVideo, MiniMaxH3DirectorGroupReferenceToVideo):
+    _original_inputs = _group_class.INPUT_TYPES.__func__
+    def _inputs(cls, original=_original_inputs):
+        return {**original(cls), 'hidden': {'unique_id':'UNIQUE_ID'}}
+    _group_class.INPUT_TYPES = classmethod(_inputs)

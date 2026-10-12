@@ -2698,16 +2698,28 @@ function mountDirectorUI(node) {
           return { url: null, filename: null };
         };
 
+        let assetEditor={};try{assetEditor=JSON.parse(getVal('asset_edits','{}'));}catch{}
         for (const [slot, type, short] of [["image_1","image","img_1"],["image_2","image","img_2"],["image_3","image","img_3"],["image_4","image","img_4"],["video_1","video","vid_1"],["video_2","video","vid_2"],["audio_1","audio","aud_1"],["audio_2","audio","aud_2"]]) {
           const input = rpNode.inputs?.find(row => row.name === slot);
           if (input?.link == null || !app.graph.links[input.link]) continue;
           const asset = getConnectedAsset(slot);
-          discoveredRefs.push({id: `${idPrefix}${slot}`, alt_id: `${idPrefix}${short}`, name: `${prefix}${getVal(slot+"_name",slot)}`, type, ...asset});
+          const settings=assetEditor.assets?.[slot] || {};
+          const preparedType=type==='video' && settings.media_mode==='frame'?'image':type==='video' && settings.media_mode==='audio'?'audio':type;
+          discoveredRefs.push({id: `${idPrefix}${slot}`, alt_id: `${idPrefix}${short}`, name: `${prefix}${settings.name || getVal(slot+"_name",slot)}`, ...settings,type:preparedType,source_type:type, role:settings.role,description:settings.description,...asset});
         }
         for (const [slot, short] of [["refmod_1","mod_1"],["refmod_2","mod_2"]]) {
           const model = getVal(slot,"None");
           if (!model || model.toLowerCase() === "none") continue;
           discoveredRefs.push({id: `${idPrefix}${slot}`, alt_id: `${idPrefix}${short}`, name: `${prefix}${getVal(slot+"_name",slot)}`, type:"refmod", model});
+        }
+        for(const row of assetEditor.files || []) {
+          const filename=row.filename.replace(/\\/g,'/'),parts=filename.split('/'),name=parts.pop();
+          discoveredRefs.push({...row,type:row.type==='video' && row.media_mode==='audio'?'audio':row.type==='video' && row.media_mode==='frame'?'image':row.type,url:`/view?${new URLSearchParams({filename:name,subfolder:parts.join('/'),type:'input'})}`});
+        }
+        const libraryInput=rpNode.inputs?.find(input=>input.name==='refmod_library');
+        const libraryLink=app.graph?.links?.[libraryInput?.link];const library=libraryLink && app.graph.getNodeById(libraryLink.origin_id);
+        if(library){hookNodeChange(library);let rows=[];try{rows=JSON.parse(library.widgets?.find(w=>w.name==='library_data')?.value || '[]');}catch{}
+          for(const row of rows)if(row.enabled!==false && row.id)discoveredRefs.push({id:idPrefix+row.id,type:'refmod',name:row.description || row.name,description:row.description,strength:row.strength,model:row.name});
         }
       });
 
@@ -3160,6 +3172,7 @@ function mountDirectorUI(node) {
     timelineState.clips.slice(index).forEach(clip => { if (!clip.locked) clip.validated = false; });
   };
   const deleteClip = clip => {
+    if(node.inputs?.some(input=>input.name==='timeline' && input.link!=null))return;
     const index = timelineState.clips.indexOf(clip);
     if (index < 0 || !confirm(`Delete "${clip.name || "clip"}" from the timeline?`)) return;
     timelineState.clips.splice(index, 1); invalidateFrom(index);
@@ -3790,6 +3803,7 @@ function mountDirectorUI(node) {
       shotTopBar.appendChild(modeBadge);
       shotTopBar.appendChild(title);
       shotTopBar.appendChild(durTag);
+      if(clip.refine_pending) {const review=document.createElement('span');review.textContent=clip.refine_approved?'Ready To Refine':'Review First Pass';review.className='mmx-generating-badge';shotTopBar.append(review);}
       if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent='Generating';shotTopBar.append(running);}
 
 
@@ -3821,11 +3835,12 @@ function mountDirectorUI(node) {
       shotBlock.appendChild(promptSnippet);
       const selectLabel=document.createElement('label');selectLabel.className='mmx-clip-selection';
       selectLabel.title='Approve Clip: reuse its saved result and skip generation. Uncheck to generate a new take.';
-      const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=clip.validated===true;
-      selectInput.disabled=!clip.validated && !cachedClipResults[clip.id]?.can_approve;
+      const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=clip.refine_pending ? !!clip.refine_approved : clip.validated===true;
+      selectInput.disabled=clip.refine_pending ? !cachedClipResults[clip.id]?.has_first_pass : !clip.validated && !cachedClipResults[clip.id]?.can_approve;
       if(selectInput.disabled)selectLabel.title='Generate this clip first. Approval requires a saved result or latent on the server.';
-      selectInput.setAttribute('aria-label',`Approve ${clip.name || `Clip ${idx+1}`}`);
-      selectInput.onchange=()=>{clip.validated=selectInput.checked;syncState();renderTimeline();};
+      if(clip.refine_pending)selectLabel.title='Review First Pass in Smart Preview, approve here, then Run to refine its saved latent. This does not approve a final take.';
+      selectInput.setAttribute('aria-label',`Approve ${clip.refine_pending ? 'First Pass Of ' : ''}${clip.name || `Clip ${idx+1}`}`);
+      selectInput.onchange=()=>{if(clip.refine_pending)clip.refine_approved=selectInput.checked;else clip.validated=selectInput.checked;syncState();renderTimeline();};
       for(const event of ['pointerdown','mousedown','click'])selectLabel.addEventListener(event,e=>e.stopPropagation());
       selectLabel.append(selectInput);shotBlock.append(selectLabel);
 
@@ -3841,7 +3856,7 @@ function mountDirectorUI(node) {
       rightHandle.onmousedown = (e) => {
         e.stopPropagation();
         e.preventDefault();
-        if (clip.locked) return;
+        if (clip.locked || node.inputs?.some(input=>input.name==='timeline' && input.link!=null)) return;
         startX = e.clientX;
         startDuration = parseFloat(clip.duration) || 5.0;
         const scale = shotBlock.getBoundingClientRect().width / (shotBlock.offsetWidth || baseWidth) || 1;
@@ -4109,6 +4124,7 @@ function mountDirectorUI(node) {
     addCard.innerHTML = `<span class="mmx-add-clip-icon">+</span><span>Add Clip</span>`;
     addCard.title = "Add a new clip to the timeline";
     addCard.onclick = openTypePickerModal;
+    if(node.inputs?.some(input=>input.name==='timeline' && input.link!=null)){addCard.hidden=true;addCard.onclick=null;}
     shotsLane.appendChild(addCard);
 
     // 4. Render Active Clip Inspector
@@ -4158,6 +4174,9 @@ function mountDirectorUI(node) {
     nameInput.style.padding = "2px 6px";
     nameInput.style.width = "120px";
     nameInput.value = activeClip.name || `Clip ${clipIdx}`;
+    const externallyAuthored=node.inputs?.some(input=>input.name==='timeline' && input.link!=null);
+    nameInput.disabled=externallyAuthored;
+    nameInput.title=externallyAuthored?'Name and authoring fields are owned by Timeline Builder':'Clip name';
     nameInput.oninput = () => {
       activeClip.name = nameInput.value;
       syncState();
@@ -4186,6 +4205,7 @@ function mountDirectorUI(node) {
     const dupShotBtn = document.createElement("button");
     dupShotBtn.className = "mmx-action-btn";
     dupShotBtn.textContent="Duplicate Clip";
+    dupShotBtn.disabled=externallyAuthored;
     dupShotBtn.title = `Duplicate "${activeClip.name}" with all its prompt and reference settings`;
     dupShotBtn.onclick = () => duplicateClip(activeClip);
     headerActions.appendChild(dupShotBtn);
@@ -4194,7 +4214,7 @@ function mountDirectorUI(node) {
       const button = document.createElement("button"); button.className = "mmx-action-btn";
       button.textContent = label;
       const index = timelineState.clips.indexOf(activeClip), adjacent = timelineState.clips[index + offset];
-      button.disabled = !adjacent || !!adjacent.locked;
+      button.disabled = externallyAuthored || !adjacent || !!adjacent.locked;
       button.onclick = () => moveClip(activeClip, index + offset);
       headerActions.appendChild(button);
     }
@@ -4455,6 +4475,7 @@ function mountDirectorUI(node) {
     durNum.style.width = "140px";
     durNum.style.background = "var(--comfy-input-bg, #333333)";
     durNum.setAttribute("aria-label","Clip Duration");
+    durNum.disabled=externallyAuthored;
     durNum.style.border = "1px solid var(--border-color, #4a4a4a)";
     durNum.style.borderRadius = "4px";
     durNum.style.color = "#f8fafc";
@@ -4644,7 +4665,7 @@ function mountDirectorUI(node) {
       const selected=activeReferences(activeClip);
       const imageFamily=['image','refmod'].includes(rtype);
       const atLimit=selected.filter(row=>imageFamily ? ['image','refmod'].includes(row.type) : row.type===rtype).length>=(imageFamily && ['REF2V','RV2V'].includes(clipCode(activeClip)) ? 9 : selectionLimit(activeClip,rtype)) || selected.length>=12;
-      item.disabled=!isChecked && !single && atLimit;
+      item.disabled=externallyAuthored || (!isChecked && !single && atLimit);
       if(item.disabled)item.title='Selection limit reached. Remove an asset before choosing another.';
       if(isChecked && ['FL2V','RV2V'].includes(clipCode(activeClip))) item.title=`Selection ${activeClip.ref_ids.indexOf(r.id)+1}${r.id===activeClip.source?.ref_id ? ' · Source Video' : ''}`;
       if(isChecked && (clipCode(activeClip)==='FL2V' || r.id===activeClip.source?.ref_id)) {
@@ -4754,6 +4775,7 @@ function mountDirectorUI(node) {
       scaffoldBtn.style.padding = "2px 8px";
       scaffoldBtn.innerHTML = "✨ Scaffold from Refs";
       scaffoldBtn.title = "Automatically prefill structured fields based on assigned references";
+      scaffoldBtn.disabled=externallyAuthored;
       scaffoldBtn.onclick = () => {
         const scaffold = scaffoldStructuredPrompt(activeClip);
         activeClip.structured_prompt = scaffold;
@@ -4769,6 +4791,7 @@ function mountDirectorUI(node) {
       clearStructBtn.style.fontSize = "10px";
       clearStructBtn.style.padding = "2px 8px";
       clearStructBtn.innerHTML = "Clear All";
+      clearStructBtn.disabled=externallyAuthored;
       clearStructBtn.onclick = () => {
         activeClip.structured_prompt = {
           subject_definitions: "",
@@ -4809,6 +4832,7 @@ function mountDirectorUI(node) {
         input.placeholder = placeholder;
         const rawVal = activeClip.structured_prompt[key] || (key === "overall_soundscape" ? activeClip.structured_prompt.soundscape : (key === "non_diegetic_music" ? activeClip.structured_prompt.music : "")) || "";
         input.value = rawVal;
+        input.readOnly=externallyAuthored;
         input.oninput = () => {
           activeClip.structured_prompt[key] = input.value;
           if (key === "overall_soundscape") {
@@ -4880,6 +4904,7 @@ function mountDirectorUI(node) {
       promptArea.style.minHeight = "100px";
       promptArea.placeholder = `Describe the action, camera movement and sound. Assign references from the connected pool to insert their tokens.`;
       promptArea.value = activeClip.prompt || "";
+      promptArea.readOnly=externallyAuthored;
       promptArea.oninput = () => {
         activeClip.prompt = promptArea.value;
         syncState();
@@ -5105,6 +5130,8 @@ function mountDirectorUI(node) {
   node.__mmxShotHandler = event => {
     const detail = event.detail;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
+    if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState();void refreshClipResults();renderTimeline();renderInspector();return;}
+    if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState();renderTimeline();renderInspector();return; }
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
     const phaseLabel=({preparing:'Preparing',sampling:'Generating',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
     progressLabel.textContent = `${phaseLabel}: ${eventClip?.name || 'Clip '+(timelineState.clips.indexOf(eventClip)+1)}${detail.index ? ` (${detail.index}/${detail.total || timelineState.clips.length})` : ''}`;
@@ -5121,6 +5148,7 @@ function mountDirectorUI(node) {
 
       const clip = timelineState.clips.find(value => value.id === detail.clip_id);
       if (clip) {
+        clip.refine_pending=false;clip.refine_approved=false;
         clip.last_seed = detail.seed;
         if (String(clip.seed ?? detail.authored_seed) === detail.authored_seed) clip.seed = detail.next_seed;
         syncState(); renderInspector();

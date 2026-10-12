@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.4.22** consolidates the MiniMax/video production features of
+Version **1.5.0** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -12,16 +12,22 @@ The separate **Smart Preview** node plays the **latest completed clip** by defau
 Switch to **Full video** to review the completed sequence. Each scope has its own
 cached H.264/AAC preview file, so latest mode downloads only the new clip.
 
-Each feature has one configuration owner: Settings controls canvas/sampling;
-Reference Pack supplies named references and RefMods; Prompt Forge prepares drafts;
-Smart Preview controls playback. The Master owns clip prompts, continuity, ordering,
-video import and project state. The editing workspace keeps the prompt and basic controls on the left, with independently scrolling Continuity, Look, LoRAs and Project tabs on the right. **Add video clip** imports actual footage into the
-timeline; **Continue from video** in a clip’s Continuity section uses a file’s ending
-as context without adding that file to the generated output.
+Each feature has one configuration owner. Settings controls canvas and sampling.
+Reference Pack owns media preparation; RefMod Library owns character adapter
+descriptions and strengths; Prompt Forge owns draft creation and review.
+The Master owns local clip prompts, continuity, ordering, approval and projects.
+Add Clip can insert an existing video from the connected Reference Pack. Continuity
+uses the immediately preceding timeline clip. External authoring connects through
+Timeline Builder and disables competing authoring fields in the Master.
+
+Refine can pause for first-pass approval, reuse that saved latent, and save every
+refinement pass for Smart Preview or Project Video export. Pixel/RTX upscale can
+run before refinement. Experimental Spike Guard is off by default. Frame
+Interpolation and reviewed upstream Project Import are separate optional nodes.
 
 ## Install and start
 
-There is one public **MiniMax H3 Master Node** name. The package has 23 distinct
+There is one public **MiniMax H3 Master Node** name. The package has 27 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
 nodes. The two core nodes are in `ComfyUI-AhmedAhmedEG/Start here`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
@@ -54,7 +60,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.4.22 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.5.0 reports 27 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.
@@ -150,7 +156,13 @@ Install only the providers you use in ComfyUI's environment:
 
 ## Validation and license
 
-The 1.4.22 review passes **160 regression tests**, with editor, preview and documentation checks. Starter graph contracts are verified. Version 1.4.22 is prepared for deployment; the active server remains on 1.4.21 while a generation is running. GPU sampling, actual optional model weights and RTX SDK execution remain unverified. Code consolidation does not establish visual quality or performance.
+Version 1.5.0 passes **173 regression tests**, **34 real CPU tensor/media checks**,
+and five editor/preview/documentation interaction suites. Tests include actual
+FFmpeg assembly, staged and intermediate previews, media edits, immutable approved
+takes and typed external authoring. GPU sampling comparisons, optional real model
+weights and RTX SDK execution remain unverified. Project conversion supports
+reviewed authoring metadata and embedded media, not foreign latent-cache formats.
+See [the updated parity review](docs/current-feature-parity-review.md).
 
 ```sh
 python -m unittest discover -s tests -v

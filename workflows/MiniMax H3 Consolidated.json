@@ -809,7 +809,8 @@
         "None",
         "None",
         24.0,
-        24.0
+        24.0,
+        "{}"
       ],
       "widgets_values_named": {
         "image_1_name": "",
@@ -825,7 +826,8 @@
         "refmod_1": "None",
         "refmod_2": "None",
         "video_1_fps": 24.0,
-        "video_2_fps": 24.0
+        "video_2_fps": 24.0,
+        "asset_edits": "{}"
       }
     },
     {
@@ -1088,7 +1090,9 @@
         "all",
         24,
         "minimax/cached_project",
-        true
+        true,
+        "",
+        1
       ],
       "title": "Cached disk export (enable when needed)",
       "widgets_values_named": {
@@ -1097,7 +1101,9 @@
         "selection": "all",
         "fps": 24,
         "filename_prefix": "minimax/cached_project",
-        "export_individual_shots": true
+        "export_individual_shots": true,
+        "clip_ids": "",
+        "refine_pass": 1
       }
     },
     {

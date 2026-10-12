@@ -57,9 +57,11 @@ def parse_draft(text, count):
 
 
 def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="http://localhost:11434",
-                  model="", api_key="", generator=None, images=None):
+                  model="", api_key="", generator=None, images=None, creativity=4, detail=6, shot_descriptions=None):
     count = int(count)
     if not 1 <= count <= 100: raise ValueError("Draft shot count must be between 1 and 100.")
+    creativity,detail=int(creativity),int(detail)
+    if not 1<=creativity<=10 or not 1<=detail<=10: raise ValueError("Creativity and Detail must be between 1 and 10.")
     state = migrate_timeline(timeline)
     refs = reference_context(state)
     refs.extend({"id": f"RefMod {row.get('slot')}", "type": "refmod", "description": row.get("description", "")} for row in state.get("refmods", []) if row.get("enabled", True))
@@ -67,10 +69,13 @@ def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="ht
         "Preserve identities, reference descriptions, existing context and requested retention. "
         "Use the given reference IDs; do not invent references. Describe visual action, camera, soundscape and music. "
         f"Produce exactly {count} shots. Reference context: {json.dumps(refs, ensure_ascii=False)}")
+    system += f" Creativity={creativity}/10; detail={detail}/10. Detail adds descriptive precision, never extra shots. Keep continuous action when asked; do not invent cuts or unsolicited music. Output canvas: {state.get('resolution',{})}."
+    if shot_descriptions:
+        system += " Shot instructions: " + json.dumps(list(shot_descriptions)[:count],ensure_ascii=False)
     user = str(instruction) + "\nShared prompt:\n" + str(state.get("shared_prompt", "")) + "\nExisting timeline:\n" + json.dumps(state.get("clips", []), ensure_ascii=False)
     if backend == "local":
         if not callable(generator): raise ValueError("Local Prompt Forge requires a connected callable language-model pipeline.")
-        options = {"max_new_tokens": min(32768, max(2048, count*256))}
+        options = {"max_new_tokens": min(32768, max(2048, count*256)), "temperature":creativity/10}
         if images: options["images"] = images
         response = generator([{"role": "system", "content": system}, {"role": "user", "content": user}], **options)
         text = response[0]["generated_text"] if isinstance(response, list) else response
@@ -85,7 +90,7 @@ def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="ht
             content = [{"type": "text", "text": user}, *[{"type": "image_url", "image_url": {"url": "data:image/png;base64," + image}} for image in images]]
         messages = [{"role": "system", "content": system}, {"role": "user", "content": content}]
         if images and backend == "ollama": messages[-1]["images"] = images
-        payload = {"model": model, "messages": messages, "stream": False}
+        payload = {"model": model, "messages": messages, "stream": False, **({"options":{"temperature":creativity/10}} if backend=="ollama" else {"temperature":creativity/10})}
         suffix = "/api/chat" if backend == "ollama" else "/chat/completions"
         headers = {"Content-Type": "application/json"}
         if api_key: headers["Authorization"] = "Bearer " + api_key
@@ -103,11 +108,14 @@ def apply_draft(timeline, draft, policy="replace"):
         raise ValueError("Draft apply policy must be replace or append.")
     shots = parse_draft(json.dumps({"shots": draft.get("shots")}), int(draft.get("count", 0)))
     state = migrate_timeline(timeline)
+    from .task_modes import normalize_mode
     old = state["clips"]
     created = []
     for index, proposed in enumerate(shots):
         # Existing references and overrides survive replacing a prompt draft.
         base = copy.deepcopy(old[index]) if policy == "replace" and index < len(old) else {}
+        if base and proposed["type"] != normalize_mode(base.get("type","T2V")):
+            raise ValueError("A draft cannot change an existing clip type. Append new clips instead.")
         base.update(proposed)
         base.setdefault("id", "clip_" + uuid.uuid4().hex)
         base.setdefault("name", f"Shot {index+1}")

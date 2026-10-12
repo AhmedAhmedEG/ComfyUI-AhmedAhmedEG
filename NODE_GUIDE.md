@@ -1,10 +1,10 @@
 For the full reference, open the [documentation index](docs/index.html).
 [Getting Started](docs/getting-started.html) explains the basic workflow; the
-index links to a dedicated page for each of the 23 public nodes.
+index links to a dedicated page for each of the 27 public nodes.
 
 # Which nodes should I use?
 
-The package has **23 public node types**, each with a single registered name.
+The package has **27 public node types**, each with a single registered name.
 The main editor is **MiniMax H3 Master Node**. Internal algorithms such as
 conditioning construction, tile planning, tracking, cache serialization and
 encoding adapters are Python modules, not nodes you must connect.
@@ -40,28 +40,28 @@ not internal dependencies required to make the Master work.
 | Output | Video Combine & Audio Muxer | Advanced codecs, audio encoding, metadata, trim and first/last-frame export; use stock Create/Save Video for ordinary saves |
 | Output | Project / Shot Video Export | Export saved shots or assemble the project from disk |
 | Output | Playback / Watermark / Loop | Change playback, add branding or make a loop |
-| References and prompts | Reference Pack (Pool) | Supply references from other graph nodes; direct uploads already work inside the Master |
-| References and prompts | Prompt Forge Draft | Generate a draft through a graph workflow; also available inside the Master editor |
+| References and prompts | Reference Pack (Pool) | Prepare graph media or upload pack files in the dedicated asset editor |
+| References and prompts | Prompt Forge Draft | Create, review and explicitly apply drafts in its own panel |
 | References and prompts | Review / Apply Prompt Draft | Explicitly apply a reviewed graph draft |
 | References and prompts | Local Prompt / Vision Model | Load an optional local model for graph-based drafting |
 | Checkpoints | Load Take Checkpoint | Select a saved take as continuation input |
 | Checkpoints | Advance Staged Take | Explicitly switch from a current take to a staged take |
 
-## Advanced graph tools — five types
+## Timeline authoring and advanced graph tools
 
 These support manual/custom workflows. You can ignore this category when using
 the normal Master editor:
 
 - **Director Group (Image to Video)**, **Director Group (Reference to Video)**
   and **Director Groups Combine:** build shot groups outside the timeline.
-- Connect external text directly to Master **prompt_text**, one shot prompt per line.
-  Use Reference Pack (Pool) for graph-supplied images/video/audio.
+- **Timeline Builder:** connects ordered authored groups to Master.timeline.
+- **Project Import:** converts supported upstream metadata for explicit review.
+- **RefMod Library:** selects installed identities with descriptions and strengths.
+- **Frame Interpolation:** output-only Linear/RTX pair interpolation with synchronized FPS/audio.
 - **Tail From Latent:** manually extract continuation frames/audio from a latent.
 - **Shot Model Pack:** supply named models for per-shot overrides.
 
-The normal workflow uses standard ComfyUI loaders and video output. Uploads, crop/trim, source
-editing, shared references, LoRAs, RefMods and the editor's Prompt Forge do not
-require you to add a separate node for each action.
+The normal workflow uses stock loaders, Settings, Reference Pack, Master and Smart Preview. Crop/trim/upload controls belong to Reference Pack; Forge and RefMod configuration belong to their dedicated nodes. Master does not duplicate them.
 
 ## Removed duplicates in 1.0.5
 
@@ -80,4 +80,4 @@ or deprecated registrations are kept in the node library.
 
 ## Detailed technical manual
 
-The [offline documentation index](docs/index.html) links to all 23 node chapters. Start with [Getting Started](docs/getting-started.html), then [Architecture and data](docs/architecture.html). Each node chapter explains its algorithm, inputs and outputs, settings, examples, dependencies and limitations. [Master Node](docs/nodes/master-node.html) explains Generation mode and all continuity modes in detail.
+The [offline documentation index](docs/index.html) links to all 27 node chapters. Start with [Getting Started](docs/getting-started.html), then [Architecture and data](docs/architecture.html). Each node chapter explains its algorithm, inputs and outputs, settings, examples, dependencies and limitations. [Master Node](docs/nodes/master-node.html) explains Generation mode and all continuity modes in detail.

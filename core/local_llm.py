@@ -35,11 +35,11 @@ def local_provider(name, backend="transformers", vision=False, device="cpu", pro
                 if root not in proj.parents or not proj.is_file(): raise ValueError("Select a local GGUF vision projection file.")
                 handler = Llava15ChatHandler(clip_model_path=str(proj))
             model = Llama(model_path=str(path), n_ctx=int(context_length), n_gpu_layers=-1 if device == "cuda" else 0, chat_handler=handler, verbose=False)
-            def generate(messages, max_new_tokens=2048, images=None):
+            def generate(messages, max_new_tokens=2048, images=None, temperature=.4):
                 if images:
                     messages = [*messages[:-1], {"role":"user", "content":[{"type":"text", "text":messages[-1]["content"]},
                         *[{"type":"image_url", "image_url":{"url":"data:image/png;base64,"+value}} for value in images]]}]
-                result = model.create_chat_completion(messages=messages, max_tokens=max_new_tokens, temperature=.4)
+                result = model.create_chat_completion(messages=messages, max_tokens=max_new_tokens, temperature=temperature)
                 return result["choices"][0]["message"]["content"]
         elif backend == "transformers":
             try:
@@ -52,20 +52,20 @@ def local_provider(name, backend="transformers", vision=False, device="cpu", pro
                 model = AutoModelForImageTextToText.from_pretrained(str(path), local_files_only=True, dtype="auto")
                 processor = AutoProcessor.from_pretrained(str(path), local_files_only=True)
                 model = model.to(device)
-                def generate(messages, max_new_tokens=2048, images=None):
+                def generate(messages, max_new_tokens=2048, images=None, temperature=.4):
                     from PIL import Image
                     pil = [Image.open(io.BytesIO(base64.b64decode(value))).convert("RGB") for value in images or []]
                     messages = [*messages[:-1], {"role":"user", "content":[*[{"type":"image","image":image} for image in pil], {"type":"text","text":messages[-1]["content"]}]}]
                     inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt").to(device)
-                    result = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                    result = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=temperature>0, temperature=max(temperature,.01))
                     return processor.batch_decode(result[:,inputs["input_ids"].shape[-1]:], skip_special_tokens=True)[0]
             else:
                 model = AutoModelForCausalLM.from_pretrained(str(path), local_files_only=True, dtype="auto")
                 tokenizer = AutoTokenizer.from_pretrained(str(path), local_files_only=True)
                 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=device)
-                def generate(messages, max_new_tokens=2048, images=None):
+                def generate(messages, max_new_tokens=2048, images=None, temperature=.4):
                     if images: raise ValueError("The selected local provider is text-only; choose a vision model.")
-                    result = pipe(messages, max_new_tokens=max_new_tokens, do_sample=False)
+                    result = pipe(messages, max_new_tokens=max_new_tokens, do_sample=temperature>0, temperature=max(temperature,.01))
                     text = result[0]["generated_text"]
                     return text[-1]["content"] if isinstance(text,list) else text
         else: raise ValueError("Local backend must be transformers or gguf.")

@@ -31,7 +31,8 @@ def apply_refine_pass(
     sampler_name: str = "euler", scheduler: str = "simple", sigmas=None,
     passes: int = 1, latent_upscale_model=None, enable_chunking: bool = False,
     refine_backend="sampler", memory_budget_mb=0, video_vae=None,
-    first_frame=None, last_frame=None, upscale_precision="auto",
+    first_frame=None, last_frame=None, upscale_precision="auto", pass_callback=None,
+    upscale_method="latent", upscale_model=None, spike_guard=False, guard_sensitivity=4.3, guard_strength=1.0,
 ) -> Dict[str, Any]:
     """Execute second-pass refine, upscale, or spatial tiled refinement."""
     if not 1 <= int(passes) <= 20:
@@ -41,6 +42,40 @@ def apply_refine_pass(
     from .continuity import unpack_av_samples, extract_streams_from_av_latent
     video, audio = extract_streams_from_av_latent(latent_dict)
 
+    if upscale_method not in ('latent','learned_pixel','RTX VSR','bicubic'):
+        raise ValueError('Unknown refine upscale method.')
+    if spike_guard and (upscale_method!='latent' or not latent_upscale_model or refine_backend=='sampler' and refine_mode=='refine'):
+        raise ValueError('Spike Guard requires a learned latent upscale model.')
+    def resized_masks(data,new_hw):
+        if data.get('noise_mask') is None:return data
+        streams,_=unpack_av_samples(data['noise_mask'])
+        if not streams:return data
+        mask=streams[0]
+        if len(mask.shape)==5 and tuple(mask.shape[-2:])!=tuple(new_hw):
+            from .latent_utils import spatial_interpolate_video_latent
+            mask=spatial_interpolate_video_latent(mask,*new_hw,mode='nearest')
+        from .continuity import repack_av_latent
+        return {**data,'noise_mask':repack_av_latent(mask,streams[1])['samples'] if len(streams)>1 else mask}
+    if upscale_method != 'latent' and refine_mode in ('upscale','latent_upscale'):
+        if video_vae is None: raise ValueError('Pixel upscale before refinement requires Video VAE.')
+        from .executor import decode_video_latent
+        try:
+            from ..nodes.node_pixel_upscale import MiniMaxH3PixelUpscale
+        except ImportError:
+            from nodes.node_pixel_upscale import MiniMaxH3PixelUpscale
+        pixels=decode_video_latent(video_vae,video)
+        pixels=MiniMaxH3PixelUpscale().upscale(pixels,provider=upscale_method,width=target_width,height=target_height,upscale_model=upscale_model)[0]
+        old_hw=video.shape[-2:]
+        video=video_vae.encode(pixels)
+        from .advanced_sampling import resize_conditioning
+        positive=resize_conditioning(positive,old_hw,video.shape[-2:])
+        negative=resize_conditioning(negative,old_hw,video.shape[-2:])
+        import comfy.nested_tensor
+        latent_dict={**latent_dict,'samples':comfy.nested_tensor.NestedTensor((video,audio))}
+        latent_dict=resized_masks(latent_dict,video.shape[-2:])
+        target_width,target_height=int(pixels.shape[2]),int(pixels.shape[1])
+        latent_upscale_model=None
+        del pixels
     if refine_backend == "global":
         from .vendor.dasiwa.nodes_minimax_h3_tiled_upscale import DaSiWaH3TiledUpscale
         target_w = target_width if refine_mode in ("upscale", "latent_upscale") else video.shape[-1]*16
@@ -73,8 +108,10 @@ def apply_refine_pass(
                 memory_budget_mb=memory_budget_mb, spatial_tiling=enable_tiling,
                 temporal_chunking=enable_chunking, target_width=target_w, target_height=target_h,
                 external_sigmas=sigmas, upscale_precision=upscale_precision,
-                continuity_context=continuity, continuity_soft_refine=continuity is not None)
+                continuity_context=continuity, continuity_soft_refine=continuity is not None,
+                spike_guard=spike_guard,guard_sensitivity=guard_sensitivity,guard_strength=guard_strength)
             result["_mmx_refine_report"] = report
+            if pass_callback: pass_callback(index+1,result)
             if refine_mode == "latent_upscale": break
         return result
     if refine_backend != "sampler":
@@ -93,6 +130,11 @@ def apply_refine_pass(
                 model_name=latent_upscale_model if isinstance(latent_upscale_model, str) else "",
                 model=None if isinstance(latent_upscale_model, str) else latent_upscale_model,
                 enable_latent_chunking=enable_chunking)["samples"]
+            if spike_guard:
+                from .vendor.dasiwa.h3_spike_guard import spike_guard as correct_spikes
+                source_video=extract_streams_from_av_latent(latent_dict)[0]
+                video,report=correct_spikes(source_video,video,sensitivity=guard_sensitivity,strength=guard_strength)
+                latent_dict={**latent_dict,'_mmx_refine_report':report}
         else:
             video = spatial_interpolate_video_latent(video, lat_h, lat_w)
         from .advanced_sampling import resize_conditioning
@@ -106,9 +148,11 @@ def apply_refine_pass(
             samples = tuple([video, audio])
 
         latent_dict = {**latent_dict, "samples": samples}
+        latent_dict=resized_masks(latent_dict,video.shape[-2:])
 
     if refine_mode == "latent_upscale":
         # No sampling pass requested; return upscaled latents directly
+        if pass_callback: pass_callback(1,latent_dict)
         return latent_dict
 
     for pass_index in range(int(passes)):
@@ -122,4 +166,5 @@ def apply_refine_pass(
             latent_dict = sample_latent(active_model, latent_dict, steps, cfg,
                 sampler_name, scheduler, positive, negative, seed + pass_index,
                 denoise=denoise, sigmas=sigmas)
+        if pass_callback: pass_callback(pass_index+1,latent_dict)
     return latent_dict

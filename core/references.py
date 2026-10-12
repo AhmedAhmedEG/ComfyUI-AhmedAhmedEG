@@ -48,13 +48,17 @@ def load_reference(row, root, width=1344, height=768):
         rows.append({**row, "data": data})
     elif kind == "video":
         mode = row.get("media_mode", "video")
-        if mode not in ("video", "audio", "both"):
+        if mode not in ("video", "audio", "both", "frame"):
             raise ValueError("Video reference mode must be video, audio or both.")
-        if mode in ("video", "both"):
+        if mode in ("video", "both", "frame"):
             pixels = load_video(path, root, trim_start=start, trim_end=end)
-            rows.append({**row, "data": scale_tensor_image(edit_images(pixels, row.get("edits"), row.get("crop")), scaling, width, height)})
+            if mode=="frame":
+                time=float(row.get("frame_time",0));index=round(time*24)
+                if not math.isfinite(time) or index<0 or index>=pixels.shape[0]:raise ValueError("Frame pick is outside trimmed video.")
+                pixels=pixels[index:index+1]
+            rows.append({**row, "type":"image" if mode=="frame" else "video", "data": scale_tensor_image(edit_images(pixels, row.get("edits"), row.get("crop")), scaling, width, height)})
         if mode in ("audio", "both"):
-            rows.append({**row, "id": row["id"] + "_audio", "type": "audio", "data": load_audio(path, root, trim_start=start, trim_end=end), **({"paired_video_id": row["id"]} if mode == "both" else {})})
+            rows.append({**row, "id": row["id"] + "_audio" if mode=="both" else row["id"], "type": "audio", "data": load_audio(path, root, trim_start=start, trim_end=end), **({"paired_video_id": row["id"]} if mode == "both" else {})})
     elif kind == "audio":
         rows.append({**row, "data": load_audio(path, root, trim_start=start, trim_end=end)})
     else:

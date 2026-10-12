@@ -240,7 +240,7 @@ class DaSiWaH3TiledUpscale:
                 sampler_name='euler', scheduler='simple', memory_budget_mb=0,
                 sampler=None, noise=None, upscale_precision='auto', continuity_context=None,
                 continuity_soft_refine=False, continuity_mask_strength=1.0,
-                spatial_tiling=True, temporal_chunking=True, target_width=None, target_height=None, external_sigmas=None):
+                spatial_tiling=True, temporal_chunking=True, target_width=None, target_height=None, external_sigmas=None, spike_guard=False, guard_sensitivity=4.3, guard_strength=1.0):
         import comfy.model_management as mm
         import comfy.model_base
         import comfy.samplers
@@ -340,6 +340,9 @@ class DaSiWaH3TiledUpscale:
         finally:
             if backend is not None:
                 backend.close()
+        if spike_guard and selected != 'interpolation':
+            from .h3_spike_guard import spike_guard as correct_spikes
+            upscaled, guard_report = correct_spikes(video, upscaled, sensitivity=guard_sensitivity, strength=guard_strength)
         audio_cpu = audio.to('cpu')
         if continuity is not None and denoise > 0:
             from .h3_upscale_continuity import align_continuity_conditioning

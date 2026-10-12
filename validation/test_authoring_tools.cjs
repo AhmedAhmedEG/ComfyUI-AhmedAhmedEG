@@ -1,0 +1,45 @@
+const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
+const fs=require('fs'),assert=require('assert/strict');
+const dom=new JSDOM('<!doctype html><body></body>',{url:'http://localhost/',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+w.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){}});
+let extension,submitted,applyCount=0;
+const master={id:1,type:'MiniMaxH3MasterNode',inputs:[],properties:{},widgets:[{name:'timeline_data',value:JSON.stringify({project_id:'fixture',clips:[{id:'one',name:'One',type:'T2VA',prompt:'before',duration:2}]})}]};
+const loader={id:2,widgets:[{name:'video',value:'media/source.mp4'}]};
+w.app={registerExtension:e=>extension=e,graph:{_nodes:[master,loader],links:{4:{origin_id:2}},getNodeById:id=>id===2?loader:master,setDirtyCanvas(){}}};
+w.api={apiURL:x=>x,fetchApi:async(url,opts={})=>{
+ let result={};if(url.endsWith('/refmods'))result=[{name:'Hero.safetensors',description:'Lead'}];
+ if(url.includes('waveform'))result={duration:5,peaks:[0,.5,1]};
+ if(url.includes('/forge/draft'))result={context_key:'fixture',count:1,shots:[{type:'T2VA',prompt:'draft',duration:2}]};
+ if(url.includes('/forge/apply')){applyCount++;submitted=JSON.parse(opts.body);result={timeline:{...submitted.timeline,clips:submitted.draft.shots}};}
+ if(url.includes('/project/convert'))result={timeline:{clips:[{id:'imported',prompt:'imported'}]},report:{warnings:['Caches not imported'],cache_imported:false}};
+ return {ok:true,json:async()=>result};
+}};
+w.eval(fs.readFileSync('web/js/minimax_authoring_tools.js','utf8').replace(/^import .*;\r?\n/gm,''));extension.setup();
+function node(type,values,inputs=[]){const n={type,properties:{},inputs,size:[600,650],widgets:Object.entries(values).map(([name,value])=>({name,value,type:'combo'})),setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.append(element);return {computeSize(){}};}};extension.nodeCreated(n);return n;}
+const field=(n,label)=>[...n.__mmxTools.querySelectorAll('label')].find(e=>e.firstChild.textContent===label)?.querySelector('input,select,textarea');
+const button=(n,text)=>[...n.__mmxTools.querySelectorAll('button')].find(e=>e.textContent===text);
+async function click(n,text){assert(button(n,text),text);await button(n,text).onclick();}
+const widget=(n,name)=>n.widgets.find(w=>w.name===name);
+(async()=>{
+ const pack=node('MiniMaxH3RefPack',{asset_edits:'{}',video_1_name:'Old Name'},[{name:'video_1',link:4}]);
+ assert.equal(field(pack,'Name').value,'Old Name');assert.equal(widget(pack,'video_1_name').type,'hidden');
+ assert(pack.__mmxTools.querySelector('video').src.includes('filename=source.mp4&subfolder=media'));
+ field(pack,'Trim Start (Seconds)').value='.5';field(pack,'Trim Start (Seconds)').onchange();
+ field(pack,'Use Video As').value='frame';field(pack,'Use Video As').onchange();
+ let edits=JSON.parse(widget(pack,'asset_edits').value);assert.equal(edits.assets.video_1.start,.5);assert.equal(edits.assets.video_1.media_mode,'frame');
+ widget(pack,'asset_edits').value=JSON.stringify({assets:{video_1:{name:'Restored'}},files:[]});pack.onConfigure();assert.equal(field(pack,'Name').value,'Restored');
+ const library=node('MiniMaxH3RefModLibrary',{library_data:'[]'});await new Promise(r=>setTimeout(r,0));
+ field(library,'Use RefMod').checked=true;field(library,'Use RefMod').onchange();field(library,'Strength').value='.45';field(library,'Strength').onchange();
+ assert.equal(JSON.parse(widget(library,'library_data').value)[0].strength,.45);
+ const forge=node('MiniMaxH3PromptForge',{instruction:'walk',shot_count:1,backend:'ollama',endpoint:'http://localhost',creativity:4,detail:6,shot_descriptions:'[]'});
+ await click(forge,'Create Draft');assert.equal(applyCount,0,'Creating a draft must not edit Master');
+ const review=field(forge,'Review Draft JSON');const draft=JSON.parse(review.value);draft.shots[0].prompt='human review';review.value=JSON.stringify(draft);
+ await click(forge,'Apply Reviewed Draft');assert.equal(submitted.draft.shots[0].prompt,'human review');
+ master.inputs=[{name:'timeline',link:9}];await click(forge,'Apply Reviewed Draft');assert.equal(applyCount,1,'Builder ownership must reject competing apply');master.inputs=[];
+ const exporter=node('MiniMaxH3ProjectVideo',{clip_ids:'',selection:'clip_ids',stream:'final',refine_pass:1});
+ master.widgets[0].value=JSON.stringify({clips:[{id:'one',name:'One'},{id:'two',name:'Two'}]});await click(exporter,'Refresh Clips');field(exporter,'Two').checked=true;field(exporter,'Two').onchange();assert.equal(widget(exporter,'clip_ids').value,'two');assert.equal(widget(exporter,'refine_pass').type,'hidden');
+ const interpolation=node('MiniMaxH3FrameInterpolation',{provider:'Linear',quality:'HIGH'});assert.equal(widget(interpolation,'quality').type,'hidden');widget(interpolation,'provider').value='RTX';widget(interpolation,'provider').callback();assert.equal(widget(interpolation,'quality').type,'combo');
+ const converter=node('MiniMaxH3ProjectImport',{project_json:'{}',source:'auto'});Object.defineProperty(field(converter,'Project File'),'files',{value:[new w.File(['{}'],'test.json')]});await click(converter,'Convert And Review');assert.equal(JSON.parse(master.widgets[0].value).clips.length,2,'Conversion requires reviewed apply');await click(converter,'Apply Converted Timeline');assert.equal(JSON.parse(master.widgets[0].value).clips[0].id,'imported');
+ fs.writeFileSync('.validation/authoring-tools-audit.html','<!doctype html><meta charset="utf-8"><style>body{background:#10161d;display:grid;grid-template-columns:repeat(2,620px);gap:20px;padding:24px}.mmx-authoring-tool{height:600px}</style>'+w.document.head.innerHTML+w.document.body.innerHTML);
+ dom.window.close();console.log('Authoring UI: asset persistence, native naming migration, RefMod strength, reviewed Forge apply, builder ownership, explicit export selection, mode visibility, and conversion review passed');
+})().catch(e=>{console.error(e);dom.window.close();process.exitCode=1;});

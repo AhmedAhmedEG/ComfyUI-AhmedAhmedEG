@@ -4,6 +4,10 @@ from .node_director import (
     MiniMaxH3MasterDirector,
 )
 from .node_selflift import MiniMaxH3DirectorSelfLift
+from .node_frame_interpolation import MiniMaxH3FrameInterpolation
+from .node_project_import import MiniMaxH3ProjectImport
+from .node_refmod_library import MiniMaxH3RefModLibrary
+from .node_timeline import MiniMaxH3TimelineBuilder
 from .node_refine import MiniMaxH3DirectorRefine
 from .node_face_refine import MiniMaxH3DirectorFaceRefine
 from .node_semantic_bridge import MiniMaxH3DirectorSemanticBridge
@@ -30,6 +34,10 @@ from .node_smart_preview import MiniMaxH3SmartPreview
 MiniMaxH3MasterNode = MiniMaxH3MasterDirector
 
 NODE_CLASS_MAPPINGS = {
+    "MiniMaxH3FrameInterpolation": MiniMaxH3FrameInterpolation,
+    "MiniMaxH3ProjectImport": MiniMaxH3ProjectImport,
+    "MiniMaxH3RefModLibrary": MiniMaxH3RefModLibrary,
+    "MiniMaxH3TimelineBuilder": MiniMaxH3TimelineBuilder,
     "MiniMaxH3SmartPreview": MiniMaxH3SmartPreview,
     # Flagship Master Node (named MiniMax H3 Master Node)
     "MiniMaxH3MasterNode": MiniMaxH3MasterNode,
@@ -65,6 +73,10 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "MiniMaxH3FrameInterpolation": "MiniMax H3 Frame Interpolation",
+    "MiniMaxH3ProjectImport": "MiniMax H3 Project Import",
+    "MiniMaxH3RefModLibrary": "MiniMax H3 RefMod Library",
+    "MiniMaxH3TimelineBuilder": "MiniMax H3 Timeline Builder",
     "MiniMaxH3SmartPreview": "MiniMax H3 Smart Preview",
     "MiniMaxH3MasterNode": "MiniMax H3 Master Node",
 
@@ -110,12 +122,14 @@ _MENU_GROUPS = {
     ],
     "Output": [
         "MiniMaxH3SmartPreview",
+        "MiniMaxH3FrameInterpolation",
         "MiniMaxH3VideoCombine",
         "MiniMaxH3ProjectVideo",
         "MiniMaxH3OutputProcessing"
     ],
     "References and prompts": [
         "MiniMaxH3RefPack",
+        "MiniMaxH3RefModLibrary",
         "MiniMaxH3PromptForge",
         "MiniMaxH3ApplyPromptDraft",
         "MiniMaxH3LocalPromptModel"
@@ -124,7 +138,9 @@ _MENU_GROUPS = {
         "MiniMaxH3Checkpoint",
         "MiniMaxH3AdvanceCheckpoint"
     ],
-    "Legacy graph authoring": [
+    "Timeline authoring": [
+        "MiniMaxH3TimelineBuilder",
+        "MiniMaxH3ProjectImport",
         "MiniMaxH3DirectorGroupImageToVideo",
         "MiniMaxH3DirectorGroupReferenceToVideo",
         "MiniMaxH3DirectorGroupsCombine"

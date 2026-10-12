@@ -10,11 +10,13 @@ from .cache_manager import ProjectCacheManager, safe_component
 from .media_io import resolve_input_path
 
 
-def create_preview_plan(state, scope="latest", base_dir=None, quality="original", take_id=None):
+def create_preview_plan(state, scope="latest", base_dir=None, quality="original", take_id=None, stream="final"):
     if scope not in ("latest", "full", "take"):
         raise ValueError("Preview scope must be latest, full or take.")
     if quality not in ("original", "540p", "720p", "1080p"):
         raise ValueError("Unknown preview resolution.")
+    if stream not in ("final","first_pass","pre_refine") and not (stream.startswith("pass:") and stream[5:].isdigit()):
+        raise ValueError("Unknown preview stream.")
     manager = ProjectCacheManager(safe_component(state["project_id"]), base_dir)
     shots = state.get("clips", [])
     if not isinstance(shots, list) or len(shots) > 1000:
@@ -28,6 +30,17 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     for index, shot in enumerate(shots_to_read):
         cid = safe_component(shot.get("id", f"clip_{index+1}"))
         meta = take if scope == "take" else manager._manifest.get("clips", {}).get(cid, {})
+        frames_kind="frames";audio_kind="audio";direct_frames=direct_audio=None
+        if stream=="first_pass":
+            meta=manager._manifest.get("first_pass",{}).get(cid,{})
+            frames_kind,audio_kind="draft_frames","draft_audio"
+        elif stream=="pre_refine":
+            if not meta.get("has_pre_refine"): continue
+            frames_kind="pre_refine"
+        elif stream.startswith("pass:"):
+            entry=next((r for r in meta.get("refine_passes",[]) if r["pass"]==int(stream[5:])),None)
+            if entry is None: continue
+            direct_frames,direct_audio=entry["frames"],entry["audio"]
         if not meta.get("has_frames"):
             source = shot.get("source")
             if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):
@@ -36,8 +49,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             continue
         generation = meta.get("generation")
         rows.append({"clip_id": cid, "name": shot.get("name", cid),
-            "frames": os.path.basename(manager._clip_artifact_path(cid, "frames", generation)),
-            "audio": os.path.basename(manager._clip_artifact_path(cid, "audio", generation)) if meta.get("has_audio") else None,
+            "frames": direct_frames or os.path.basename(manager._clip_artifact_path(cid, frames_kind, generation)),
+            "audio": direct_audio or (os.path.basename(manager._clip_artifact_path(cid, audio_kind, generation)) if meta.get("has_audio") else None),
             "generation": generation, "updated_at": meta.get("updated_at", 0),
             "trim_prefix": int(meta.get("trim_prefix", 0)), "previous_trim": int(meta.get("previous_trim", 0)),
             "index": index})
@@ -49,7 +62,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
             left["trim_tail"] = right.get("previous_trim", 0)
-    plan = {"version": 2, "project_id": manager.project_id, "scope": scope, "quality": quality, "rows": rows,
+    plan = {"version": 2, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
         "source_state": {k: state[k] for k in ("width", "height", "resolution", "references") if k in state},
         "gain_match": bool(state.get("audio_gain_match", True)), "fade_ms": float(state.get("audio_fade_ms", 15))}
     key = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

@@ -208,6 +208,51 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(stages,[('two','preparing'),('two','sampling'),('two','completed')])
         self.assertTrue(all(call.args[:2]==('42','regression') for call in events.call_args_list))
 
+    def test_first_pass_review_reuses_initial_sampling(self):
+        refinement={'enabled':True,'mode':'refine','confirm_first_pass':True,'skip_fl2v':False}
+        clips=[{'id':'one','type':'T2V','duration':1,'seed':'123'}]
+        first=self.execute(clips,refine=refinement)
+        pending=json.loads(first[9])['clips']
+        self.assertTrue(pending[0]['refine_pending'])
+        self.assertEqual(len(self.sampling_calls),1)
+        self.assertFalse(ProjectCacheManager('regression',self.temp.name).result_availability()['one']['can_approve'])
+        pending[0]['refine_approved']=True
+        with patch('nodes.node_director.apply_refine_pass',side_effect=lambda **kw:kw['latent_dict']) as refine:
+            final=self.execute(pending,refine=refinement)
+        self.assertEqual(len(self.sampling_calls),1,'Initial sampling must not repeat when approving its matching first pass')
+        refine.assert_called_once()
+        self.assertFalse(json.loads(final[9])['clips'][0]['refine_pending'])
+        self.assertTrue(ProjectCacheManager('regression',self.temp.name).result_availability()['one']['can_approve'])
+
+    def test_changed_first_pass_requires_new_review(self):
+        refinement={'enabled':True,'mode':'refine','confirm_first_pass':True}
+        result=self.execute(refine=refinement)
+        clips=json.loads(result[9])['clips'];clips[0]['refine_approved']=True;clips[0]['prompt']='different action'
+        with patch('nodes.node_director.apply_refine_pass') as refine:
+            result=self.execute(clips,refine=refinement)
+        self.assertEqual(len(self.sampling_calls),2)
+        refine.assert_not_called()
+        self.assertTrue(json.loads(result[9])['clips'][0]['refine_pending'])
+
+    def test_intermediate_refine_passes_are_cached_and_previewable(self):
+        from core.preview import create_preview_plan
+        result=self.execute(refine={'enabled':True,'mode':'refine','backend':'sampler','passes':2,'skip_fl2v':False})
+        manager=ProjectCacheManager('regression',self.temp.name)
+        self.assertEqual([row['pass'] for row in manager._manifest['clips']['one']['refine_passes']],[1,2])
+        plan=create_preview_plan(json.loads(result[9]),'latest',self.temp.name,stream='pass:1')
+        self.assertTrue(plan['found']);self.assertEqual(plan['clip_ids'],['one'])
+
+    def test_typed_timeline_groups_route_and_preserve_local_approval(self):
+        from nodes.node_timeline import MiniMaxH3TimelineBuilder
+        group,=MiniMaxH3DirectorGroupImageToVideo().pack(prompt='external prompt',duration_sec=1,unique_id='group_node')
+        external,_=MiniMaxH3TimelineBuilder().build(group)
+        result=self.execute(timeline=external)
+        clips=json.loads(result[9])['clips'];self.assertEqual(clips[0]['prompt'],'external prompt')
+        clips[0]['validated']=True;self.sampling_calls.clear()
+        self.execute(clips,timeline=external,model=None)
+        self.assertEqual(self.sampling_calls,[])
+        self.assertIn('timeline',self.node.INPUT_TYPES()['optional'])
+
     def test_hidden_execution_graph_is_not_used_as_prompt(self):
         result = self.execute(
             [{"id": "one", "type": "T2VA", "duration": 1., "prompt": ""}],

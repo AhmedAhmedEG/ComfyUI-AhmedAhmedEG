@@ -1,5 +1,7 @@
 # Required feature union and implementation decisions
 
+> **1.5.0 implementation update (13 October 2026):** The actionable exporter, external authoring, asset, Forge and refinement gaps have been addressed. The [updated parity review](docs/current-feature-parity-review.md) records owners, evidence, intentional differences and remaining GPU/foreign-cache limitations. The historical inventory below is not proof of identical upstream behavior.
+
 ## Product requirement
 
 This project must consolidate the MiniMax H3 authoring, generation, continuation,

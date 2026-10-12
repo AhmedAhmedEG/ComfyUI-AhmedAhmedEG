@@ -19,7 +19,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.4.22"
+__version__ = "1.5.0"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -88,7 +88,7 @@ if getattr(PromptServer, "instance", None) is not None:
             from .core.preview import create_preview_plan
             body = await request.json()
             result = await asyncio.to_thread(create_preview_plan, body["timeline"], body.get("scope", "latest"),
-                quality=body.get("quality", "original"), take_id=body.get("take_id"))
+                quality=body.get("quality", "original"), take_id=body.get("take_id"),stream=body.get("stream","final"))
             return web.json_response(result)
         except (ValueError, KeyError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -228,7 +228,7 @@ if getattr(PromptServer, "instance", None) is not None:
                 ids = body.get("vision_ids", [])
                 if len(ids) > 12: raise ValueError("Vision review supports at most 12 references.")
                 for rid in ids:
-                    row = next((r for r in state.get("references", []) if r["id"] == rid), None)
+                    row = next((r for r in [*state.get("references", []),*state.get("available_refs", [])] if r["id"] == rid), None)
                     if row is None: raise ValueError(f"Unknown vision reference: {rid}")
                     loaded = load_reference(row, folder_paths.get_input_directory())
                     visual = next((r["data"] for r in loaded if r["type"] in ("image", "video")), None)
@@ -244,7 +244,7 @@ if getattr(PromptServer, "instance", None) is not None:
                         bool(images), body.get("device", "cpu"), body.get("projection", ""))
                 return draft_prompts(state, body.get("instruction", ""), body.get("count", 1),
                     body.get("backend", "ollama"), body.get("endpoint", "http://localhost:11434"),
-                    body.get("model", ""), body.get("api_key", ""), generator=generator, images=images)
+                    body.get("model", ""), body.get("api_key", ""), generator=generator, images=images, creativity=body.get("creativity",4), detail=body.get("detail",6), shot_descriptions=body.get("shot_descriptions"))
             return web.json_response(await asyncio.to_thread(create))
         except (ValueError, TypeError, KeyError, FileNotFoundError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -259,6 +259,23 @@ if getattr(PromptServer, "instance", None) is not None:
             return web.json_response({"timeline": apply_draft(body["timeline"], body["draft"], body.get("policy", "replace"))})
         except (ValueError, TypeError, KeyError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
+
+    @routes.post("/minimax_director/project/convert")
+    async def convert_upstream_project(request):
+        try:
+            import folder_paths
+            from .core.project_conversion import read_conversion
+            reader=await request.multipart();part=await reader.next()
+            if part is None or not part.filename: raise ValueError('Choose an upstream project/archive.')
+            chunks=[];size=0
+            while chunk:=await part.read_chunk():
+                size+=len(chunk)
+                if size>512*1024**2: raise ValueError('Conversion upload exceeds 512 MiB; use metadata-only JSON for large projects.')
+                chunks.append(chunk)
+            state,report=await asyncio.to_thread(read_conversion,b''.join(chunks),folder_paths.get_input_directory())
+            return web.json_response({'timeline':state,'report':report})
+        except (ValueError,TypeError,KeyError) as exc:
+            return web.json_response({'error':str(exc)},status=400)
 
     @routes.post("/minimax_director/project/portable/export")
     async def portable_export(request):

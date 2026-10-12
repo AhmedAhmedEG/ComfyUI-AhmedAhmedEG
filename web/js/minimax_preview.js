@@ -28,7 +28,10 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const save = document.createElement("a"); save.textContent = "Save preview"; save.className = "mmx-action-btn";
   save.hidden = true; save.download = "minimax-preview.mp4";
   const refresh = document.createElement("button"); refresh.className = "mmx-action-btn"; refresh.textContent = "Refresh";
-  header.append(scope, quality, takeChoice, label, autoplayLabel, refresh, save);
+  const stream=document.createElement('select');stream.setAttribute('aria-label','Preview Stage');
+  for(const [v,t] of [['final','Final Output'],['first_pass','First Pass · Review'],['pre_refine','Before Refinement'],...Array.from({length:20},(_,i)=>['pass:'+(i+1),'Refine Pass '+(i+1)])]){const o=document.createElement('option');o.value=v;o.textContent=t;stream.append(o);}
+  stream.value=getOptions().stream || 'final';
+  header.append(scope, quality, stream,takeChoice, label, autoplayLabel, refresh, save);
   const empty = document.createElement("div"); empty.className = "mmx-preview-empty";
   empty.textContent = "Your completed clip will appear here.";
   const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "metadata"; video.hidden = true;
@@ -37,7 +40,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let request = 0, controller, disposed = false, source = "";
   let project = getTimeline().project_id;
   let statusText='';
-  const persist = () => saveOptions({scope: scope.value, quality:quality.value,take_id:takeChoice.value, autoplay: autoplay.checked, open: !panel.hidden});
+  const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value,take_id:takeChoice.value, autoplay: autoplay.checked, open: !panel.hidden});
   const stop = () => {
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
     video.hidden = true; empty.hidden = false;
@@ -67,7 +70,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       }
       const response = await api.fetchApi("/minimax_director/preview/info", {method: "POST",
         headers: {"Content-Type": "application/json"}, signal: controller.signal,
-        body: JSON.stringify({timeline: getTimeline(), scope: scope.value, quality:quality.value,take_id:scope.value==='take'?takeChoice.value:undefined})});
+        body: JSON.stringify({timeline: getTimeline(), scope: scope.value, quality:quality.value,stream:stream.value,take_id:scope.value==='take'?takeChoice.value:undefined})});
       const info = await response.json();
       if (disposed || token !== request || panel.hidden) return;
       if (!response.ok) throw new Error(info.error || "Preview unavailable.");
@@ -100,6 +103,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   };
   edit.onclick = () => show(false); preview.onclick = () => show(true);
   scope.onchange = () => { stop(); persist(); refreshPreview(); };
+  stream.onchange=()=>{persist();refreshPreview();};
   quality.onchange=()=>{stop();persist();refreshPreview();};
   takeChoice.onchange=()=>{stop();persist();refreshPreview();};
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };

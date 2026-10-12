@@ -58,6 +58,8 @@ class MiniMaxH3RefPack:
                 "video_2_audio": ("AUDIO", {"tooltip": "Optional soundtrack paired with video_2."}),
                 "video_1_fps": ("FLOAT", {"default":24.0,"min":1.0,"max":240.0,"tooltip":"Actual rate of video_1's frame batch. Match the loader's output rate; the pack resamples to H3's 24 fps."}),
                 "video_2_fps": ("FLOAT", {"default":24.0,"min":1.0,"max":240.0,"tooltip":"Actual rate of video_2's frame batch. Match the loader's output rate."}),
+                "asset_edits": ("STRING", {"default":"{}", "multiline":True, "tooltip":"Pack-owned trims, crop, roles and file references; edited in the asset panel."}),
+                "refmod_library": ("MMX_REFMOD_LIBRARY", {"tooltip":"RefMod selections configured in the separate library node."}),
             },
         }
 
@@ -185,6 +187,22 @@ class MiniMaxH3RefPack:
                 })
                 base_index += 1
 
+        try:
+            from ..core.asset_editor import prepare_pack
+        except ImportError:
+            from core.asset_editor import prepare_pack
+        local=refs[len(ref_pack_optional.get("refs",[])):] if ref_pack_optional else refs
+        inherited=refs[:len(refs)-len(local)]
+        import json
+        edits=json.loads(kwargs.get("asset_edits","{}"))
+        root=None
+        if edits.get("files"):
+            import folder_paths
+            root=folder_paths.get_input_directory()
+        local=prepare_pack(local,edits,root)
+        for row in (kwargs.get("refmod_library") or {}).get("refs",[]):
+            local.append({**row,"id":id_prefix+row["id"],"pack_index":pack_index})
+        refs=inherited+local
         pack = {
             "version": 1,
             "pack_count": pack_index,

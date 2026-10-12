@@ -77,7 +77,7 @@ def build():
             if spec['category']==group:
                 content+=f'<a class="node-card" href="{links[key]}"><b>{esc(spec["name"])}</b><p>{esc(data["nodes"][key]["summary"])}</p></a>'
         overview += section(group,content+'</div>')
-    page('index.html','Index','Getting started and documentation for all 23 public nodes.',overview)
+    page('index.html','Index','Getting started and documentation for all 27 public nodes.',overview)
 
     workflow = json.loads((ROOT/'workflows/MiniMax H3 Start Here.json').read_text(encoding='utf-8'))
     model_rows = []

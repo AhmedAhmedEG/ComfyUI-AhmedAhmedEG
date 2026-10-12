@@ -32,3 +32,5 @@ The vendor package has no ComfyUI node mappings, routes, or frontend registratio
 Only the phase-aware continuation helpers used by the Director remain; unused
 global context patch implementations and unrelated upstream pack helpers were
 removed. Model weights remain user supplied.
+
+Selected Spike Guard, RTX pair interpolation and supporting frame-generation utilities additionally come from DaSiWa revision `bdb62d4c561bbed30351974844e0168ad471331a` (GPL-3.0). Native registrations are omitted. Local adapters add explicit FPS/audio duration ownership and experimental defaults.

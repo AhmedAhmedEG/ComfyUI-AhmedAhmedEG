@@ -319,6 +319,9 @@ class ProjectCacheManager:
             latent = os.path.isfile(self.get_clip_latent_path(cid))
             rows[cid] = {"has_frames": frames, "has_audio": audio, "has_latent": latent,
                          "can_approve": latent or frames and audio, "generation": meta.get("generation")}
+        for cid,meta in self._manifest.get("first_pass",{}).items():
+            row=rows.setdefault(cid,{"has_frames":False,"has_audio":False,"has_latent":False,"can_approve":False})
+            row["has_first_pass"]=os.path.isfile(self._clip_artifact_path(cid,"draft",meta["generation"]))
         return rows
 
     @_locked
@@ -455,3 +458,53 @@ class ProjectCacheManager:
             raise ValueError("Project timeline must contain a clips list.")
         # Uploaded fingerprints are hints, never proof of server cache contents.
         return {**timeline, "project_id": self.project_id}
+
+
+    @_locked
+    def store_first_pass(self, clip_id, fingerprint, latent, frames, audio, metadata=None):
+        self._manifest = self._load_manifest()
+        token = uuid.uuid4().hex
+        files={kind:self._clip_artifact_path(clip_id,kind,token) for kind in ('draft','draft_frames','draft_audio')}
+        self._atomic_save(portable_tree(latent),files['draft'])
+        self._atomic_save(frames.cpu(),files['draft_frames'])
+        self._atomic_save(portable_tree(audio),files['draft_audio'])
+        row={'fingerprint':fingerprint,'generation':token,'width':int(frames.shape[2]),'height':int(frames.shape[1]),
+             'updated_at':time.time(),'has_frames':True,'has_audio':True,**(metadata or {})}
+        self._manifest.setdefault('first_pass',{})[safe_component(clip_id)]=row
+        self.save_manifest()
+        return row
+
+    def load_first_pass(self, clip_id, fingerprint=None):
+        self._manifest=self._load_manifest()
+        row=self._manifest.get('first_pass',{}).get(safe_component(clip_id))
+        if not row or fingerprint is not None and row['fingerprint']!=fingerprint: return None
+        latent=self._load_tensor_file(self._clip_artifact_path(clip_id,'draft',row['generation']))
+        if latent is not None:
+            latent=restore_tree(latent)
+            if isinstance(latent.get('samples'),(tuple,list)):
+                from .continuity import repack_av_latent
+                latent['samples']=repack_av_latent(*latent['samples'])['samples']
+        return {**row,'latent':latent} if latent is not None else None
+
+    def store_refine_pass(self, clip_id, number, frames, audio):
+        token=uuid.uuid4().hex
+        frames_path=self._clip_artifact_path(clip_id,'pass_frames',token)
+        audio_path=self._clip_artifact_path(clip_id,'pass_audio',token)
+        self._atomic_save(frames.cpu(),frames_path)
+        self._atomic_save(portable_tree(audio),audio_path)
+        return {'pass':number,'frames':os.path.basename(frames_path),'audio':os.path.basename(audio_path),
+                'width':int(frames.shape[2]),'height':int(frames.shape[1])}
+
+
+    @_locked
+    def store_source_media(self, clip_id, frames, audio):
+        self._manifest=self._load_manifest()
+        meta=self._manifest.get('clips',{}).get(clip_id)
+        if meta is None: raise ValueError('Store a take before attaching its source media.')
+        token=meta.get('generation')
+        self._atomic_save(frames.cpu(),self._clip_artifact_path(clip_id,'source_frames',token))
+        self._atomic_save(portable_tree(audio),self._clip_artifact_path(clip_id,'source_audio',token))
+        extra={'has_source':True,'source_width':int(frames.shape[2]),'source_height':int(frames.shape[1])}
+        meta.update(extra)
+        if token in self._manifest.get('takes',{}):self._manifest['takes'][token].update(extra)
+        self.save_manifest()

@@ -34,10 +34,17 @@ class MiniMaxH3DirectorRefine:
                 "backend": (["global", "sampler"], {"default": "global"}),
                 "memory_budget_mb": ("INT", {"default": 0, "min": 0, "max": 131072}),
                 "upscale_precision": (["auto", "bf16", "fp16", "fp32"],),
+                "confirm_first_pass": ("BOOLEAN", {"default":False, "tooltip":"Pause after the initial pass; approve it on its timeline card, then run refinement without repeating initial sampling."}),
+                "skip_fl2v": ("BOOLEAN", {"default":True, "tooltip":"Skip refinement for first-and-last-frame clips to protect their endpoints."}),
+                "upscale_method": (["latent","learned_pixel","RTX VSR","bicubic"],),
+                "spike_guard": ("BOOLEAN", {"default":False,"tooltip":"Experimental learned latent burn-signature correction. Off by default."}),
+                "guard_sensitivity": ("FLOAT", {"default":4.3,"min":1.,"max":20.}),
+                "guard_strength": ("FLOAT", {"default":1.,"min":0.,"max":1.}),
             },
             "optional": {
                 "refine_model": ("MODEL", {"tooltip": "Optional alternative UNET model for the second pass (e.g. non-turbo model)."}),
                 "sigmas": ("SIGMAS",),
+                "upscale_model": ("UPSCALE_MODEL",),
             },
         }
 
@@ -60,10 +67,13 @@ class MiniMaxH3DirectorRefine:
         refine_model=None,
         passes=1, sampler="euler", scheduler="simple", latent_upscale_model="interpolate",
         enable_latent_chunking=False, sigmas=None,
-        backend="global", memory_budget_mb=0, upscale_precision="auto",
+        backend="global", memory_budget_mb=0, upscale_precision="auto", confirm_first_pass=False, skip_fl2v=True,
+        upscale_method="latent", upscale_model=None, spike_guard=False, guard_sensitivity=4.3, guard_strength=1.,
     ):
         return ({
-            "enabled": bool(enabled),
+            "enabled": bool(enabled), "confirm_first_pass":bool(confirm_first_pass), "skip_fl2v":bool(skip_fl2v),
+            "upscale_method":upscale_method,"upscale_model":upscale_model, "spike_guard":bool(spike_guard),
+            "guard_sensitivity":float(guard_sensitivity),"guard_strength":float(guard_strength),
             "mode": mode,
             "steps": int(steps),
             "denoise": float(denoise),

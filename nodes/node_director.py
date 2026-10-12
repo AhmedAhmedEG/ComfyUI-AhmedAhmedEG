@@ -76,6 +76,7 @@ class MiniMaxH3MasterDirector:
                 "clip": ("CLIP", {"tooltip": "MiniMax H3 Qwen3-VL CLIP model."}),
             },
             "optional": {
+                "timeline": ("MMX_TIMELINE", {"tooltip":"Optional externally authored clips. Timeline Builder owns prompts, types and durations; Master owns approval and execution."}),
                 "config": ("MMX_DIRECTOR_CONFIG", {"tooltip": "Sampling, canvas, and pipeline settings (MiniMaxH3DirectorSettings)."}),
                 "ref_pack": ("MMX_REF_PACK", {"tooltip": "Reference pool containing images, videos, and audios (MiniMaxH3RefPack)."}),
                 "fl2va_model": ("MODEL", {"lazy": True, "tooltip": "Lazy-loaded FL2VA UNET."}),
@@ -118,6 +119,12 @@ class MiniMaxH3MasterDirector:
         try:
             tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
             tl = migrate_timeline(tl) if isinstance(tl, dict) else {}
+            if kwargs.get("timeline") is not None:
+                try:
+                    from ..core.timeline_input import merge_authored_timeline
+                except ImportError:
+                    from core.timeline_input import merge_authored_timeline
+                tl = merge_authored_timeline(tl, kwargs["timeline"])
             clips = tl.get("clips", [])
         except (ValueError, TypeError):
             tl, clips = {}, []
@@ -222,6 +229,12 @@ class MiniMaxH3MasterDirector:
                 raise ValueError("Timeline must be a JSON object.")
             authored_clips = "clips" in timeline
             timeline = migrate_timeline(timeline)
+            if kwargs.get("timeline") is not None:
+                try:
+                    from ..core.timeline_input import merge_authored_timeline
+                except ImportError:
+                    from core.timeline_input import merge_authored_timeline
+                timeline = merge_authored_timeline(timeline, kwargs["timeline"])
             generation = kwargs.get("generation_mode", timeline.get("generation_mode"))
             generation = {"Next clip":"Next shot", "All clips":"All shots"}.get(generation, generation)
             if generation is not None:
@@ -272,8 +285,8 @@ class MiniMaxH3MasterDirector:
                         refmod_rows.append({
                             "slot": current_slot,
                             "name": str(mod_data).strip(),
-                            "description": r.get("name", f"RefMod {current_slot}"),
-                            "strength": 1.0,
+                            "description": r.get("description") or r.get("name", f"RefMod {current_slot}"),
+                            "strength": r.get("strength",1.0),
                             "enabled": True,
                         })
 
@@ -389,6 +402,8 @@ class MiniMaxH3MasterDirector:
         except ImportError:
             from core.progress import shot_event
         run_report = []
+        if kwargs.get("timeline") is not None:
+            shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
         algorithm_signature = algorithm_provenance(selflift, refine, semantic_bridge) if execution_mode != "Conditioning Guide Output" else []
         low_carry = None
         previous_av = None
@@ -754,6 +769,7 @@ class MiniMaxH3MasterDirector:
                     if meta.get("fingerprint") != previous_fingerprint or not meta.get("has_frames") or not os.path.isfile(cache_mgr.get_clip_frames_path(clip_id)):
                         cache_mgr.store_clip_results(clip_id, previous_fingerprint, None, audio,
                             source.get("original_frames", frames), validated=True)
+                        cache_mgr.store_source_media(clip_id,source.get("original_frames",frames),source["audio"])
                         cache_mgr.update_clip_metadata(clip_id, {"mode": "VIDEO", "trim_prefix": 0, "previous_trim": 0})
                     clip_item["duration"] = int(frames.shape[0]) / FPS
                     timeline["clips"] = clips
@@ -938,8 +954,27 @@ class MiniMaxH3MasterDirector:
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "video_vae": video_vae, "audio_vae": audio_vae, "clip": clip},
             )
-            previous_fingerprint = clip_fp
             completed_clips.append(clip_item)
+
+            refine_enabled=refine is not None and refine.get('enabled',False) and not (refine.get('skip_fl2v',True) and canon_mode=='FL2VA')
+            confirm_first=refine_enabled and refine.get('confirm_first_pass',False)
+            first_fp=fingerprint_value({'runtime':runtime_signature,'mode':canon_mode,'prompt':final_prompt,
+                'seed':clip_seed,'size':(width,height),'duration':clip_dur,'steps':steps,'cfg':cfg,
+                'sampler':sampler,'scheduler':scheduler,'sigmas':sigmas,'shifts':(shift_video,shift_audio),
+                'model':clip_active_model,'loras':clip_lora_files,'refs':(ref_images,ref_videos,ref_video_audios,ref_audios,first_frame,last_frame,clip_refmod_items),
+                'guides':guide_frames,'selflift':selflift,'semantic':semantic_bridge,
+                'upstream':previous_fingerprint if clip_continuity else None,'redraw':clip_item.get('continuity_redraw',.1)})
+            staged=cache_mgr.load_first_pass(clip_id,first_fp) if confirm_first else None
+            if confirm_first and staged is None: clip_item['refine_approved']=False
+            refine_pass_rows=[]
+            def capture_refine_pass(number, pass_latent):
+                video_pass,audio_pass=extract_streams_from_av_latent(pass_latent)
+                pass_frames=decode_video_latent(video_vae,video_pass)
+                end=source['frames'].shape[0] if source is not None else int(is_chained_from_previous)+visible_frames if continuation_prefix else pass_frames.shape[0]
+                pass_frames=pass_frames[:end]
+                pass_audio=decode_audio_latent(audio_vae,audio_pass) if audio_vae else {'waveform':torch.zeros((1,2,round(pass_frames.shape[0]/FPS*48000))),'sample_rate':48000}
+                pass_audio=choose_audio(audio_mode,pass_audio,source,pass_frames.shape[0])
+                refine_pass_rows.append(cache_mgr.store_refine_pass(clip_id,number,pass_frames,pass_audio))
 
             # Compatibility for explicit legacy selection-filter API requests.
             skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
@@ -965,65 +1000,97 @@ class MiniMaxH3MasterDirector:
                 run_report.append({"clip_id": clip_id, "action": "source", "frames": int(frames.shape[0])})
                 continue
 
-            # Sampling
-            shot_event(unique_id, project_id, clip_id, "sampling", index=clip_idx+1, total=len(clips), seed=str(clip_seed))
-            clip_active_model = apply_loras(clip_active_model, clip_lora_files, lora_state_cache)
-
-            try:
-                from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
-                shifted_model, = native_outputs(MiniMaxH3SigmaShift.execute(clip_active_model, float(shift_video), float(shift_audio)))
-            except ImportError as exc:
-                raise RuntimeError("Update ComfyUI: native MiniMaxH3SigmaShift is required for correct AV sampling.") from exc
-
-            # CFG > 1 needs a valid unconditional branch with the same H3 payload.
-            negative = [[torch.zeros_like(emb), dict(meta)] for emb, meta in positive]
-            clip_frames_count = align_frame_count(int(clip_dur * frame_rate))
-            log.info(f"Master Director: Sampling clip {clip_idx + 1}/{len(clips)} [{clip_type} -> {canon_mode}] ({clip_frames_count} frames, seed={clip_seed})...")
-
-            if selflift is not None and selflift.get("enabled", False):
-                sampled_latent, low_carry = sample_selflift(
-                    model=clip_active_model,
-                    positive=positive,
-                    negative=negative,
-                    latent=latent,
-                    seed=clip_seed,
-                    steps=steps,
-                    cfg=cfg,
-                    settings=selflift, video_vae=video_vae, width=width, height=height,
-                    shift_video=shift_video, shift_audio=shift_audio,
-                    carry=low_carry if clip_continuity else None,
-                    pin_frames=int(is_chained_from_previous) if continuation_prefix else 0,
-                    sampler=sampler,
-                    scheduler=scheduler,
-                    sigmas=sigmas,
-                )
-                if low_carry is not None:
-                    sampled_latent = {**sampled_latent, "_selflift_low_carry": low_carry}
+            if staged is not None:
+                sampled_latent=staged['latent']
+                shot_event(unique_id,project_id,clip_id,'sampling',index=clip_idx+1,total=len(clips))
+                try:
+                    from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
+                    shifted_model, = native_outputs(MiniMaxH3SigmaShift.execute(clip_active_model,float(shift_video),float(shift_audio)))
+                except ImportError as exc: raise RuntimeError('Native H3 SigmaShift is required.') from exc
+                negative=[[torch.zeros_like(emb),dict(meta)] for emb,meta in positive]
             else:
-                sampling_function = sample_latent
-                if latent_carry and continuation_prefix:
-                    try:
-                        from ..core.advanced_sampling import sample_stage
-                    except ImportError:
-                        from core.advanced_sampling import sample_stage
-                    sampling_function = sample_stage
-                sampled_latent = sampling_function(
-                    shifted_model,
-                    latent,
-                    steps,
-                    cfg,
-                    sampler,
-                    scheduler,
-                    positive,
-                    negative,
-                    clip_seed,
-                    denoise=1.0,
-                    sigmas=sigmas,
-                )
+                # Sampling
+                shot_event(unique_id, project_id, clip_id, "sampling", index=clip_idx+1, total=len(clips), seed=str(clip_seed))
+                clip_active_model = apply_loras(clip_active_model, clip_lora_files, lora_state_cache)
+
+                try:
+                    from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
+                    shifted_model, = native_outputs(MiniMaxH3SigmaShift.execute(clip_active_model, float(shift_video), float(shift_audio)))
+                except ImportError as exc:
+                    raise RuntimeError("Update ComfyUI: native MiniMaxH3SigmaShift is required for correct AV sampling.") from exc
+
+                # CFG > 1 needs a valid unconditional branch with the same H3 payload.
+                negative = [[torch.zeros_like(emb), dict(meta)] for emb, meta in positive]
+                clip_frames_count = align_frame_count(int(clip_dur * frame_rate))
+                log.info(f"Master Director: Sampling clip {clip_idx + 1}/{len(clips)} [{clip_type} -> {canon_mode}] ({clip_frames_count} frames, seed={clip_seed})...")
+
+                if selflift is not None and selflift.get("enabled", False):
+                    sampled_latent, low_carry = sample_selflift(
+                        model=clip_active_model,
+                        positive=positive,
+                        negative=negative,
+                        latent=latent,
+                        seed=clip_seed,
+                        steps=steps,
+                        cfg=cfg,
+                        settings=selflift, video_vae=video_vae, width=width, height=height,
+                        shift_video=shift_video, shift_audio=shift_audio,
+                        carry=low_carry if clip_continuity else None,
+                        pin_frames=int(is_chained_from_previous) if continuation_prefix else 0,
+                        sampler=sampler,
+                        scheduler=scheduler,
+                        sigmas=sigmas,
+                    )
+                    if low_carry is not None:
+                        sampled_latent = {**sampled_latent, "_selflift_low_carry": low_carry}
+                else:
+                    sampling_function = sample_latent
+                    if latent_carry and continuation_prefix:
+                        try:
+                            from ..core.advanced_sampling import sample_stage
+                        except ImportError:
+                            from core.advanced_sampling import sample_stage
+                        sampling_function = sample_stage
+                    sampled_latent = sampling_function(
+                        shifted_model,
+                        latent,
+                        steps,
+                        cfg,
+                        sampler,
+                        scheduler,
+                        positive,
+                        negative,
+                        clip_seed,
+                        denoise=1.0,
+                        sigmas=sigmas,
+                    )
+
+            if confirm_first and not clip_item.get('refine_approved',False):
+                v_first,a_first=extract_streams_from_av_latent(sampled_latent)
+                first_frames=decode_video_latent(video_vae,v_first)
+                if source is not None: first_frames=first_frames[:source["frames"].shape[0]]
+                elif continuation_prefix: first_frames=first_frames[:int(is_chained_from_previous)+visible_frames]
+                first_audio=decode_audio_latent(audio_vae,a_first) if audio_vae else {'waveform':torch.zeros((1,2,round(first_frames.shape[0]/FPS*48000))),'sample_rate':48000}
+                first_audio=choose_audio(audio_mode,first_audio,source,first_frames.shape[0])
+                if staged is None:
+                    cache_mgr.store_first_pass(clip_id,first_fp,sampled_latent,first_frames,first_audio,
+                        {'trim_prefix':int(is_chained_from_previous),'previous_trim':int(previous_trim),'seed':str(clip_seed)})
+                all_decoded_frames.append(first_frames);all_decoded_audios.append(first_audio)
+                clip_item['refine_pending']=True
+                timeline['clips']=clips;save_autosave(cache_mgr,timeline)
+                shot_event(unique_id,project_id,clip_id,'first_pass_ready',index=clip_idx+1,total=len(clips))
+                run_report.append({'clip_id':clip_id,'action':'awaiting_refine','seed':str(clip_seed)})
+                last_latent=sampled_latent
+                break  # Never condition a successor on an unreviewed first pass.
 
             # Optional second-pass Refine
             pre_refine_latent = sampled_latent
-            if refine is not None and refine.get("enabled", False):
+            if refine_enabled:
+                try:
+                    from ..core.memory_lifecycle import before_refine
+                except ImportError:
+                    from core.memory_lifecycle import before_refine
+                before_refine(shifted_model)
                 refine_model = refine.get("refine_model")
                 if refine_model is not None:
                     refine_model, = native_outputs(MiniMaxH3SigmaShift.execute(refine_model, shift_video, shift_audio))
@@ -1049,7 +1116,9 @@ class MiniMaxH3MasterDirector:
                     enable_chunking=refine.get("enable_latent_chunking", False),
                     refine_backend=refine.get("backend", "global"), memory_budget_mb=refine.get("memory_budget_mb", 0),
                     video_vae=video_vae, first_frame=first_frame, last_frame=last_frame,
-                    upscale_precision=refine.get("upscale_precision", "auto"),
+                    upscale_precision=refine.get("upscale_precision", "auto"), pass_callback=capture_refine_pass,
+                    upscale_method=refine.get("upscale_method","latent"),upscale_model=refine.get("upscale_model"),
+                    spike_guard=refine.get("spike_guard",False),guard_sensitivity=refine.get("guard_sensitivity",4.3),guard_strength=refine.get("guard_strength",1.),
                 )
 
             # Decode
@@ -1101,7 +1170,7 @@ class MiniMaxH3MasterDirector:
             cache_error = None
             try:
                 before_frames = None
-                if refine is not None and refine.get("enabled", False):
+                if refine_enabled:
                     before_video, _ = extract_streams_from_av_latent(pre_refine_latent)
                     before_frames = decode_video_latent(video_vae, before_video)
                     before_frames = before_frames[:decoded_frames.shape[0]]
@@ -1114,8 +1183,9 @@ class MiniMaxH3MasterDirector:
                     validated=clip_validated,
                     pre_refine_frames=before_frames,
                 )
+                if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
-                    "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
+                    "refine_passes":refine_pass_rows,"refinement_pending":False, "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
             except Exception as c_err:
                 cache_error = str(c_err)
                 log.warning(f"Master Director: Could not cache clip {clip_id}: {c_err}")
@@ -1132,6 +1202,9 @@ class MiniMaxH3MasterDirector:
                 "tail_latent": v_stream[:, :, -1:].clone() if hasattr(v_stream, "shape") and getattr(v_stream, "ndim", 0) >= 3 else None,
                 "tail_audio": tail_aud,
             }
+            previous_fingerprint=clip_fp
+            clip_item["refine_pending"]=False
+            clip_item["refine_approved"]=False
             generated_count += 1
             clip_item["last_seed"] = str(clip_seed)
             clip_item["seed"] = str((clip_seed + (1 if seed_mode == "increment" else -1 if seed_mode == "decrement" else 0)) & 0xFFFFFFFFFFFFFFFF)
@@ -1141,6 +1214,11 @@ class MiniMaxH3MasterDirector:
             run_report.append({"clip_id": clip_id, "action": "generated", "seed": str(clip_seed),
                 "frames": int(decoded_frames.shape[0]), "trim_prefix": int(is_chained_from_previous),
                 "refine": sampled_latent.get("_mmx_refine_report", "off"), "cache_error": cache_error})
+            try:
+                from ..core.memory_lifecycle import between_clips
+            except ImportError:
+                from core.memory_lifecycle import between_clips
+            between_clips()
             shot_event(unique_id, project_id, clip_id, "completed", seed=str(clip_seed), next_seed=clip_item["seed"], authored_seed=authored_seed, index=clip_idx+1, total=len(clips))
             if run_mode == "clip_by_clip":
                 break

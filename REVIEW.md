@@ -1,4 +1,12 @@
-# Consolidation review — 2026-10-09
+# Consolidation review
+
+## Release 1.5.0 — 2026-10-13
+
+173 regression tests and 34 real CPU tensor/media tests pass, with five frontend/documentation suites. New coverage verifies cached fileless pack export and actual mixed-resolution FFmpeg assembly; first-pass approval reuses sampling; numbered intermediate previews encode the correct frames; asset edits change real pixels and paired sound; external timeline IDs retain execution controls; reviewed conversion resets foreign approval; synthetic Spike Guard correction has a measurable effect. All 27 public schemas, controls and workflow widget ordering are documented.
+
+Dedicated nodes own assets, RefMods, Forge review, external authoring, conversion, interpolation and export. The Master retains local editing, generation, continuity, approval and project state. Browser fixture inspection was attempted but the browser connection timed out; DOM interaction suites passed. Target GPU sampling, real optional weights, RTX SDK execution and comparative quality/performance remain unverified. Foreign latent caches are deliberately not treated as compatible.
+
+## Earlier review — 2026-10-09
 
 ## Node documentation site
 
