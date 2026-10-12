@@ -412,7 +412,7 @@ class MiniMaxH3MasterDirector:
             clip_continuity_mode = continuity["mode"]
             clip_context_length = continuity["video_frames"]
             clip_audio_context = continuity["audio_frames"]
-            clip_continuity = clip_continuity_mode != "Independent (No Continuity)"
+            clip_continuity = clip_idx > 0 and clip_continuity_mode != "Independent (No Continuity)"
             clip_ref_ids = clip_item.get("ref_ids", [])
             clip_ref_ids = list(dict.fromkeys([*timeline.get("shared_ref_ids", []), *clip_ref_ids]))
             if "tail_seconds" in clip_item:
@@ -451,18 +451,7 @@ class MiniMaxH3MasterDirector:
             if clip_item.get("continuation_source"):
                 if canon_mode in ("V2V", "RV2V", MODE_INPAINT) or clip_item.get("locked"):
                     raise ValueError("Continue from video is for generated clips, not source edits or image inpaint.")
-                try:
-                    from ..core.source_media import continuation_range
-                except ImportError:
-                    from core.source_media import continuation_range
-                carried = continuation_range(clip_item, width, height)
-                frames = carried["frames"]
-                if frames.shape[0] < 1:
-                    raise ValueError("Continuation video has no usable ending frames.")
-                previous_tail = {"last_frame": frames[-1:], "tail_frames": frames,
-                                 "tail_audio": carried["audio"], "tail_latent": None}
-                previous_av = None
-                previous_fingerprint = fingerprint_value([frames, carried["audio"]])
+                raise ValueError("External continuity sources are no longer supported. Add the video as a preceding timeline clip.")
             if canon_mode == MODE_INPAINT:
                 clip_continuity = False
                 clip_dur = 5 / FPS
@@ -603,7 +592,7 @@ class MiniMaxH3MasterDirector:
             source = source_range(clip_item, timeline, width, height) if canon_mode in ("V2V", "RV2V") else None
             if source is not None:
                 ref_video_audios = {f"ref_video_{i+2}": ref_video_audios[key] for i, key in enumerate(ref_videos) if key in ref_video_audios}
-                ref_videos = {"ref_video_1": source["frames"],
+                ref_videos = {"ref_video_1": source.get("model_frames", source["frames"]),
                     **{f"ref_video_{i+2}": value for i, value in enumerate(ref_videos.values())}}
                 clip_dur = source["frames"].shape[0] / FPS
                 # Source coordinates define the visible edit range. Prefix
@@ -642,9 +631,10 @@ class MiniMaxH3MasterDirector:
                 audio = choose_audio("mute" if str(audio_mode).lower() == "mute" else "source", source["audio"], source, frames.shape[0])
                 all_decoded_frames.append(frames); all_decoded_audios.append(audio); completed_clips.append(clip_item)
                 clip_chained_flags[clip_idx] = False
-                previous_tail = {"last_frame": frames[-1:], "tail_frames": frames[-min(56, frames.shape[0]):], "tail_audio": audio, "tail_latent": None}
+                context_frames = source.get("model_frames", frames)
+                previous_tail = {"last_frame": context_frames[-1:], "tail_frames": context_frames[-min(56, context_frames.shape[0]):], "tail_audio": audio, "tail_latent": None}
                 previous_av = None
-                previous_fingerprint = fingerprint_value([frames, audio])
+                previous_fingerprint = fingerprint_value([context_frames, audio])
                 run_report.append({"clip_id": clip_id, "action": "source", "frames": int(frames.shape[0])})
                 continue
             try:
@@ -874,9 +864,10 @@ class MiniMaxH3MasterDirector:
                 all_decoded_frames.append(frames)
                 all_decoded_audios.append(audio)
                 clip_chained_flags[clip_idx] = False
-                previous_tail = {"last_frame": frames[-1:].clone(), "tail_frames": frames[-min(56, frames.shape[0]):].clone(),
+                context_frames = source.get("model_frames", frames)
+                previous_tail = {"last_frame": context_frames[-1:].clone(), "tail_frames": context_frames[-min(56, context_frames.shape[0]):].clone(),
                     "tail_audio": audio, "tail_latent": None}
-                previous_fingerprint = fingerprint_value([frames, audio])
+                previous_fingerprint = fingerprint_value([context_frames, audio])
                 run_report.append({"clip_id": clip_id, "action": "source", "frames": int(frames.shape[0])})
                 continue
 

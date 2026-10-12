@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import tempfile
@@ -39,6 +40,26 @@ def migrate_timeline(value):
         if shot.get("seed") is not None:
             shot["seed"] = seed_string(shot["seed"])
         shot.setdefault("selected", False)
+    # Old hidden external context becomes an explicit predecessor on timeline.
+    converted = []
+    used = {shot.get("id") for shot in shots}
+    for shot in shots:
+        source = shot.pop("continuation_source", None)
+        if source:
+            end = float(source.get("end", 0))
+            if not math.isfinite(end) or end <= 0 or not source.get("filename"):
+                raise ValueError("Legacy continuity video must have a filename and positive end time.")
+            cid = "context_" + str(shot.get("id", len(converted)))
+            while cid in used:
+                cid += "_source"
+            used.add(cid)
+            start = max(0, end - 56 / 24)
+            converted.append({"id": cid, "name": "Imported Context Video", "type": "V2V",
+                "source": {"filename": source["filename"]}, "source_start": start, "source_end": end,
+                "duration": end - start, "locked": True, "audio_mode": "source", "selected": False,
+                "continuity": False, "prompt": "", "ref_ids": []})
+        converted.append(shot)
+    state["clips"] = converted
     return state
 
 

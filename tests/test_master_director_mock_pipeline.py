@@ -101,7 +101,7 @@ class TestMockPipeline(CacheIsolatedTestCase):
         sample.assert_not_called()
         self.assertEqual(result[0].shape[0], 10)
 
-    def test_latent_checkpoint_preserves_saved_take_context(self):
+    def test_first_clip_does_not_borrow_off_timeline_checkpoint_context(self):
         frames=torch.zeros((56,64,64,3))
         audio={"waveform":torch.zeros((1,2,112000)),"sample_rate":48000}
         checkpoint={"frames":frames,"audio":audio,"latent":{"samples":(torch.zeros(1,16,7,4,4),torch.zeros(1,32,2,12))}}
@@ -110,15 +110,15 @@ class TestMockPipeline(CacheIsolatedTestCase):
             build.return_value=([[torch.zeros(1,768),{}]],checkpoint["latent"],"text")
             self.director.execute(video_vae=self.mock_vae,audio_vae=self.mock_audio_vae,clip=self.mock_clip,
                 timeline_data=json.dumps(state),latent_checkpoint=checkpoint,generation_mode="Conditioning only",width=64,height=64)
-            self.assertEqual(build.call_args.kwargs['guide_frames'][0]['frame'].shape[0],22)
+            self.assertIsNone(build.call_args.kwargs['guide_frames'])
 
-    def test_file_continuation_builds_guides_without_checkpoint_node(self):
+    def test_legacy_file_context_becomes_preceding_timeline_video(self):
         frames = torch.zeros((56, 64, 64, 3))
         audio = {"waveform": torch.zeros((1, 2, 112000)), "sample_rate": 48000}
         state = {"generation_mode":"Conditioning only", "clips":[{"id":"external", "type":"T2V",
             "duration":2, "continuity_mode":"Motion Context (Chained)", "context_length":22,
             "audio_context_length":5, "continuation_source":{"filename":"tail.mp4", "end":60}}]}
-        with patch("core.source_media.continuation_range", return_value={"frames":frames,"audio":audio}) as load, \
+        with patch("nodes.node_director.source_range", return_value={"frames":frames,"audio":audio}) as load, \
              patch("core.executor.MasterDirectorExecutor.build_conditioning") as build:
             build.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros(1,16,7,4,4),torch.zeros(1,32,2,12))}, "text")
             self.director.execute(video_vae=self.mock_vae, audio_vae=self.mock_audio_vae,

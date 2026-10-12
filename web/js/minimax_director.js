@@ -2265,6 +2265,18 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-feedback[data-state="success"] { color:#b6edcb;border-color:#4e9270;background:#20382c; }
 .mmx-director-root .mmx-project-feedback[data-state="error"], .mmx-server-project-note[data-state="error"] { color:#ffb9c2;border-color:#b95f6c; }
 .mmx-director-root .mmx-server-project-status { flex-basis:100%;font-size:12px;color:#9fb5c7; }
+.mmx-picker-heading { color:#c6d8e7;font-size:12px;margin:14px 0 6px; }
+.mmx-picker-intro { color:#adbac7;font-size:12px; }
+.mmx-type-picker { width:min(880px,calc(100vw - 48px));max-width:880px;max-height:calc(100vh - 48px); }
+.mmx-type-picker .mmx-modal-body { padding:14px 16px;gap:8px;scrollbar-color:#536171 #1b2127;scrollbar-width:thin; }
+.mmx-type-picker .mmx-picker-heading { margin:6px 0 0;font-size:12px; }
+.mmx-type-picker .mmx-picker-intro { margin:0 0 4px; }
+.mmx-type-picker .mmx-type-modal-grid { gap:8px; }
+.mmx-type-picker .mmx-type-modal-grid > button:last-child:nth-child(odd) { grid-column:1/-1; }
+.mmx-type-picker .mmx-type-modal-btn { padding:10px 12px;background:#242b32;border-color:#4c5a67; }
+.mmx-type-picker .mmx-type-modal-btn-title { font-size:13px; }
+.mmx-type-picker .mmx-type-modal-btn-desc { font-size:12px;line-height:1.3;color:#b6c3d0; }
+.mmx-video-input-resolution { border:1px solid #414e5a;padding:12px;border-radius:6px; }
 .mmx-server-project-list { width:100%;min-height:140px;padding:8px;background:#1d2229;color:#ecedf0;border:1px solid #596979;border-radius:5px; }
 .mmx-server-project-list option { padding:10px; }
 .mmx-server-project-dialog-actions { display:flex;justify-content:flex-end;gap:12px;margin-top:16px; }
@@ -2285,6 +2297,21 @@ function injectCSS() {
   style.id = "minimax-director-styles";
   style.textContent = embeddedCSS;
   document.head.appendChild(style);
+}
+
+function migrateContinuitySources(state) {
+  const used=new Set((state.clips || []).map(clip=>clip.id)), clips=[];
+  for(const clip of state.clips || []) {
+    const source=clip.continuation_source;
+    if(source && source.filename && Number.isFinite(Number(source.end)) && Number(source.end)>0) {
+      let id=`context_${clip.id || clips.length}`;while(used.has(id))id+='_source';used.add(id);
+      const end=Number(source.end),start=Math.max(0,end-56/24);
+      clips.push({id,name:'Imported Context Video',type:'V2V',source:{filename:source.filename},source_start:start,source_end:end,duration:end-start,locked:true,audio_mode:'source',selected:false,continuity:false,prompt:'',ref_ids:[],video_input_resolution:{mode:'auto'}});
+      delete clip.continuation_source;
+    }
+    clips.push(clip);
+  }
+  state.clips=clips;
 }
 
 function mountDirectorUI(node) {
@@ -2721,6 +2748,7 @@ function mountDirectorUI(node) {
       clip.audio_context_length ??= clip.context_length;
       clip.selected ??= false;
     }
+    migrateContinuitySources(timelineState);
     timelineState.project_id ||= `project_${crypto.randomUUID()}`;
     if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
     if (builderWidget) builderWidget.value = JSON.stringify(builderState);
@@ -2893,7 +2921,7 @@ function mountDirectorUI(node) {
       const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
       if(!(info.duration>0))throw new Error("The video has no usable duration.");
       const clip={id:`source_${crypto.randomUUID()}`,name:file.name,type:"V2V",duration:info.duration,
-        source:{filename},source_start:0,source_end:info.duration,locked:true,audio_mode:"source",prompt:"",ref_ids:[],continuity:false};
+        source:{filename,width:info.width,height:info.height},video_input_resolution:{mode:"auto"},source_start:0,source_end:info.duration,locked:true,audio_mode:"source",prompt:"",ref_ids:[],continuity:false};
       timelineState.clips.push(clip);activeClipId=clip.id;syncState();renderTimeline();
     }catch(error){alert(error.message);}finally{videoFile.disabled=false;videoFile.value="";}
   };
@@ -3444,67 +3472,15 @@ function mountDirectorUI(node) {
     backdrop.className = "mmx-modal-backdrop";
 
     const panel = document.createElement("div");
-    panel.className = "mmx-modal-panel";
+    panel.className = "mmx-modal-panel mmx-type-picker";
 
+    panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Add Clip');
     panel.innerHTML = `
-      <div class="mmx-modal-header">
-        <span class="mmx-modal-title">➕ Add New Timeline Clip</span>
-        <button class="mmx-action-btn" id="modal-close-btn">✕</button>
-      </div>
-      <div class="mmx-modal-body">
-        <div style="font-size: 11px; color: #94a3b8;">
-          Choose a clip type. It stays fixed after creation. To use another type, add a new clip.
-        </div>
-        <div class="mmx-type-modal-grid">
-          <button class="mmx-type-modal-btn" data-action="import-video">
-            <span class="mmx-type-modal-btn-title">Import Video Clip</span>
-            <span class="mmx-type-modal-btn-desc">Add an existing video file as a locked clip. Keep its footage and audio; continue with generated clips after it.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="T2V">
-            <span class="mmx-type-modal-btn-title">
-              <span class="mmx-clip-mode-badge mmx-badge-t2v">T2V</span> Text to Video
-            </span>
-            <span class="mmx-type-modal-btn-desc">Pure text prompt generation. Seamlessly chains from previous clip tail when continuity is enabled.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="I2V">
-            <span class="mmx-type-modal-btn-title">
-              <span class="mmx-clip-mode-badge mmx-badge-i2v">I2V</span> Image to Video
-            </span>
-            <span class="mmx-type-modal-btn-desc">Starts from a selected reference image (or inherited previous clip tail frame).</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="FL2V">
-            <span class="mmx-type-modal-btn-title">
-              <span class="mmx-clip-mode-badge mmx-badge-fl2v">FL2V</span> First & Last Frame
-            </span>
-            <span class="mmx-type-modal-btn-desc">Interpolates smoothly between a start frame and an end frame keyframe pair.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="V2V">
-            <span class="mmx-type-modal-btn-title">
-              <span class="mmx-clip-mode-badge mmx-badge-v2v">V2V</span> Video to Video
-            </span>
-            <span class="mmx-type-modal-btn-desc">Guide video for motion transfer, style translation, or reenactment.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="REF2VA">
-            <span class="mmx-type-modal-btn-title">
-              <span class="mmx-clip-mode-badge mmx-badge-ref2va">REF2V</span> Reference to Video
-            </span>
-            <span class="mmx-type-modal-btn-desc">Full multi-modal reference generation with character identity images, audio tracks, and RefMods.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="L2VA">
-            <span class="mmx-type-modal-btn-title">L2VA · Last Frame</span>
-            <span class="mmx-type-modal-btn-desc">Generate a take ending at the selected image.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="RV2V">
-            <span class="mmx-type-modal-btn-title">RV2V · Reference Video Edit</span>
-            <span class="mmx-type-modal-btn-desc">Guide a source video using additional image and audio references.</span>
-          </button>
-          <button class="mmx-type-modal-btn" data-type="Image Inpaint">
-            <span class="mmx-type-modal-btn-title">Image Inpaint · Still Image</span>
-            <span class="mmx-type-modal-btn-desc">One reference image, a five-frame H3 pass, and one generated output image.</span>
-          </button>
-        </div>
-      </div>
-    `;
+      <div class="mmx-modal-header"><span class="mmx-modal-title">Add Clip</span><button class="mmx-action-btn" id="modal-close-btn" aria-label="Close Add Clip">×</button></div>
+      <div class="mmx-modal-body"><p class="mmx-picker-intro">Choose what this timeline clip does. Its type stays fixed after creation.</p>
+      <h3 class="mmx-picker-heading">Existing Footage</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-action="import-video"><span class="mmx-type-modal-btn-title">Add Existing Video</span><span class="mmx-type-modal-btn-desc">Place footage and audio on the timeline. Later clips can continue from its ending.</span></button></div>
+      <h3 class="mmx-picker-heading">Generate A New Video</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-type="T2V"><span class="mmx-type-modal-btn-title">Text To Video</span><span class="mmx-type-modal-btn-desc">Generate a new clip from a written prompt.</span></button><button class="mmx-type-modal-btn" data-type="I2V"><span class="mmx-type-modal-btn-title">Image To Video</span><span class="mmx-type-modal-btn-desc">Use a Reference Pack image as the opening frame.</span></button><button class="mmx-type-modal-btn" data-type="FL2V"><span class="mmx-type-modal-btn-title">First And Last Frame</span><span class="mmx-type-modal-btn-desc">Use two Reference Pack images as opening and ending frames.</span></button><button class="mmx-type-modal-btn" data-type="L2VA"><span class="mmx-type-modal-btn-title">Ending Image To Video</span><span class="mmx-type-modal-btn-desc">Generate motion ending at a Reference Pack image.</span></button><button class="mmx-type-modal-btn" data-type="REF2VA"><span class="mmx-type-modal-btn-title">Generate From References</span><span class="mmx-type-modal-btn-desc">Generate a new scene using Reference Pack images, videos or audio.</span></button></div>
+      <h3 class="mmx-picker-heading">Edit Existing Media</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-type="V2V"><span class="mmx-type-modal-btn-title">Edit Video</span><span class="mmx-type-modal-btn-desc">Transform an existing source-video range using a prompt.</span></button><button class="mmx-type-modal-btn" data-type="RV2V"><span class="mmx-type-modal-btn-title">Edit Video With References</span><span class="mmx-type-modal-btn-desc">Transform a source-video range using a prompt and extra Reference Pack assets.</span></button><button class="mmx-type-modal-btn" data-type="Image Inpaint"><span class="mmx-type-modal-btn-title">Edit Still Image</span><span class="mmx-type-modal-btn-desc">Edit one Reference Pack image; returns one image instead of a video.</span></button></div></div>`;
 
     document.body.appendChild(backdrop);
     backdrop.appendChild(panel);
@@ -3514,6 +3490,8 @@ function mountDirectorUI(node) {
     };
 
     panel.querySelector("#modal-close-btn").onclick = close;
+    backdrop.onkeydown=event=>{if(event.key==="Escape")close();event.stopPropagation();};
+    panel.querySelector("#modal-close-btn").focus();
     backdrop.onclick = (e) => {
       if (e.target === backdrop) close();
     };
@@ -3683,8 +3661,8 @@ function mountDirectorUI(node) {
     let elapsed=0;
     timelineState.clips.forEach((clip,index)=>{
       const method=clip.continuity_mode || "Independent (No Continuity)";
-      if ((index>0 || clip.continuation_source) && clip.continuity!==false && !clip.locked && !clip.source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
-        const external=!!clip.continuation_source;
+      if (index>0 && clip.continuity!==false && !clip.locked && !clip.source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
+        const external=false;
         const priorDuration=external?Number(clip.continuation_source.end || 0):Number(timelineState.clips[index-1].duration || 5);
         const rawFrames=Math.floor(priorDuration*24);
         const priorFrames=external || timelineState.clips[index-1]?.source?rawFrames:Math.max(5,5+Math.ceil((rawFrames-5)/17)*17);
@@ -4255,6 +4233,21 @@ function mountDirectorUI(node) {
     finishSection(shotExtras,"Optional changes for this clip: a model override, interior reference anchors, and grading after decode.");
 
     if (["V2V", "RV2V"].includes(activeClip.type)) {
+      const resolutionPanel=document.createElement('fieldset');resolutionPanel.className='mmx-video-input-resolution';
+      const resolutionLegend=document.createElement('legend');resolutionLegend.textContent='Video Input Resolution';resolutionPanel.append(resolutionLegend);
+      const inputResolution=activeClip.video_input_resolution ||= {mode:'auto'};
+      const resolutionMode=document.createElement('select');resolutionMode.setAttribute('aria-label','Video Input Resolution');
+      for(const [value,label] of [['auto','H3 Default'],['short_edge','Short Edge Limit'],['megapixels','Megapixel Limit']]){const option=document.createElement('option');option.value=value;option.textContent=label;resolutionMode.append(option);}
+      resolutionMode.value=inputResolution.mode;resolutionMode.onchange=()=>{inputResolution.mode=resolutionMode.value;inputResolution.short_edge ??= 512;inputResolution.megapixels ??= .5;activeClip.validated=false;invalidateFrom(timelineState.clips.indexOf(activeClip));syncState();renderTimeline();};
+      resolutionPanel.append(field('Sizing',resolutionMode,'H3 default: up to 768 px short edge and 768 × 1344 pixels; dimensions align to 32. Smaller input budgets never increase generation resolution.'));
+      if(inputResolution.mode!=='auto'){
+        const budget=document.createElement('input');budget.type='number';const mp=inputResolution.mode==='megapixels';
+        budget.min=mp?'0.001024':'32';budget.max=mp?'1.032192':'768';budget.step=mp?'0.01':'32';budget.value=mp?(inputResolution.megapixels ?? .5):(inputResolution.short_edge ?? 512);
+        budget.setAttribute('aria-label',mp?'Video Input Megapixels':'Video Input Short Edge');
+        budget.onchange=()=>{const value=Number(budget.value);if(!Number.isFinite(value)||value<Number(budget.min)||value>Number(budget.max)){budget.setCustomValidity('Enter a value within the displayed range.');budget.reportValidity();return;}budget.setCustomValidity('');inputResolution[mp?'megapixels':'short_edge']=value;activeClip.validated=false;invalidateFrom(timelineState.clips.indexOf(activeClip));syncState();renderTimeline();};
+        resolutionPanel.append(field(mp?'Megapixels':'Short Edge (Pixels)',budget,'Preserves source aspect ratio with 32-pixel alignment. 1 MP = 1,000,000 pixels.'));
+      }
+      const resolutionNote=document.createElement('p');resolutionNote.textContent='Controls model-input frames, not the original file or the output canvas. Motion guides and latent carry must still match the generated canvas when encoded.';resolutionPanel.append(resolutionNote);inspector.append(resolutionPanel);
       const sourcePanel = document.createElement("fieldset");
       const legend = document.createElement("legend"); legend.textContent = "Source video range";
       sourcePanel.appendChild(legend); inspector.appendChild(sourcePanel);
@@ -4268,7 +4261,7 @@ function mountDirectorUI(node) {
       filename.onchange=async()=>{
         if (!filename.value) return;
         const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename.value)}`);
-        activeClip.source={filename:filename.value};activeClip.source_start=0;
+        activeClip.source={filename:filename.value,width:info.width,height:info.height};activeClip.source_start=0;
         if (info.duration>0) {activeClip.source_end=info.duration;activeClip.duration=info.duration;}
         activeClip.validated=false;syncState();renderTimeline();
       };
@@ -4462,7 +4455,7 @@ function mountDirectorUI(node) {
     const continuityTitle=document.createElement("summary");continuityTitle.textContent="Continuity · context from previous clip";continuityPanel.append(continuityTitle);
     const continuityModes=["Independent (No Continuity)","Motion Context (Chained)","Latent Carry (Pinned)","FL2VA Tail Handoff"];
     const continuityMode=document.createElement("select");continuityMode.className="mmx-shot-continuity-mode";
-    for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method;continuityMode.append(option);}
+    for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method.replace(/ \(.*\)$/, "");continuityMode.append(option);}
     continuityMode.value=activeClip.continuity_mode || "Independent (No Continuity)";
     const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;activeClip.audio_context_length=Math.min(Number(activeClip.audio_context_length ?? activeClip.context_length),Number(activeClip.context_length));activeClip.validated=false;syncState();renderTimeline();};
     continuityMode.onchange=commitContinuity;
@@ -4480,44 +4473,13 @@ function mountDirectorUI(node) {
     }
     if(continuityMode.value===continuityModes[0]) {
       const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);
-    } else {
-    const continueFile=document.createElement("input");continueFile.type="file";continueFile.accept="video/*";continueFile.hidden=true;
-    const continueButton=document.createElement("button");continueButton.className="mmx-continue-video";
-    continueButton.textContent=activeClip.continuation_source?"Replace continuation video":"Continue from video";
-    continueButton.onclick=()=>continueFile.click();
-    continueFile.onchange=async()=>{
-      const file=continueFile.files?.[0];if(!file)return;continueButton.disabled=true;
-      try {
-        const data=new FormData();data.append("file",file);
-        const response=await api.fetchApi("/minimax_director/media/upload",{method:"POST",body:data});
-        const asset=await response.json();if(!response.ok)throw new Error(asset.error || "Video upload failed");
-        if(asset.media_type!=="video")throw new Error("Choose a video file for continuation.");
-        const filename=[asset.subfolder,asset.name].filter(Boolean).join("/");
-        const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
-        if(!(info.duration>0))throw new Error("The video has no usable duration.");
-        activeClip.continuation_source={filename,name:file.name,end:info.duration};
-        if(continuityMode.value===continuityModes[0])continuityMode.value=continuityModes[1];
-        commitContinuity();
-      }catch(error){alert(error.message);}finally{continueButton.disabled=false;}
-    };
-    continuityPanel.insertBefore(field("Context source",continueButton,activeClip.continuation_source?`Using ${activeClip.continuation_source.name || activeClip.continuation_source.filename}. Its ending is used as context, not added to output.`:"Uses the preceding clip by default. Choose a video to use its ending instead; that source is not added to output."),continuityPanel.children[1]);
-    continuityPanel.append(continueFile);
-    if(activeClip.continuation_source){
-      const chosen=document.createElement("div");chosen.className="mmx-field";
-      const title=document.createElement("span");title.textContent=activeClip.continuation_source.name || activeClip.continuation_source.filename;
-      const player=document.createElement("video");player.controls=true;player.preload="metadata";player.style.cssText="width:100%;max-height:160px;background:#111";
-      const path=activeClip.continuation_source.filename;const split=path.lastIndexOf("/");
-      player.src=api.apiURL(`/view?filename=${encodeURIComponent(path.slice(split+1))}&subfolder=${encodeURIComponent(split<0?"":path.slice(0,split))}&type=input`);
-      const remove=document.createElement("button");remove.textContent="Use previous timeline clip";
-      remove.onclick=()=>{delete activeClip.continuation_source;commitContinuity();};chosen.append(title,player,remove);continuityPanel.append(chosen);
-    }
     }
     if(continuityMode.value===continuityModes[3]) {
-      const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Uses one final image (0.04 s) from the context source. Audio context is off. No context-length settings apply.';continuityPanel.append(note);
+      const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Uses the preceding clip’s final image (0.04 s). Audio context is off. No context-length settings apply.';continuityPanel.append(note);
     }
     continuityMode.disabled=!!activeClip.locked;
     shotSections.prepend(continuityPanel);
-    finishSection(continuityPanel,continuityMode.value===continuityModes[0]?"Independent clips borrow no video or audio context.":timelineState.clips.indexOf(activeClip)===0?"Choose a video below to continue from its ending, or use the preceding timeline clip. Context is removed from the newly generated output.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
+    finishSection(continuityPanel,continuityMode.value===continuityModes[0]?"Independent clips borrow no video or audio context.":timelineState.clips.indexOf(activeClip)===0?"There is no preceding clip. Add a video or generate an earlier clip on the timeline to provide context.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
     titleWrap.appendChild(timingRow);
 
     // Seed controls in the clip header.

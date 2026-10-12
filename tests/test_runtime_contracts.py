@@ -263,6 +263,26 @@ class RuntimeContracts(unittest.TestCase):
         self.assertFalse(any(name=='MiniMaxH3AddGuide' for name,_ in self.native_calls))
         self.assertTrue(all(call['noise_mask'] is None for call in self.sampling_calls))
 
+    def test_imported_footage_uses_budgeted_model_frames_for_next_clip_context(self):
+        frames=torch.zeros((56,32,32,3))
+        model_frames=torch.zeros((56,32,64,3))
+        source={"frames":frames,"model_frames":model_frames,
+                "audio":{"waveform":torch.zeros((1,2,112000)),"sample_rate":48000}}
+        clips=[{"id":"footage","type":"V2V","duration":56/24,"source":{"filename":"source.mp4"},"locked":True},
+               {"id":"next","type":"T2V","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":22}]
+        with patch('nodes.node_director.source_range',return_value=source):self.execute(clips)
+        guide=next(kw for name,kw in self.native_calls if name=='MiniMaxH3AddGuide')
+        self.assertEqual(guide['image'].shape,(22,32,64,3))
+        self.assertEqual(len(self.sampling_calls),1,'Existing footage is not sampled')
+
+    def test_video_edit_reference_uses_input_budget_not_output_canvas(self):
+        source={"frames":torch.zeros((56,32,32,3)),"model_frames":torch.zeros((56,32,64,3)),
+                "audio":{"waveform":torch.zeros((1,2,112000)),"sample_rate":48000}}
+        with patch('nodes.node_director.source_range',return_value=source):
+            self.execute([{"id":"edit","type":"V2V","duration":56/24,"source":{"filename":"source.mp4"}}])
+        reference=next(kw for name,kw in self.native_calls if name=='MiniMaxH3ReferenceToVideo')
+        self.assertEqual(reference['ref_videos']['ref_video_1'].shape,(56,32,64,3))
+
     def test_tail_handoff_uses_one_image_without_motion_or_audio_guides(self):
         clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
                {"id":"two","type":"T2V","duration":2,"continuity_mode":"FL2VA Tail Handoff","context_length":56,"audio_context_length":56}]

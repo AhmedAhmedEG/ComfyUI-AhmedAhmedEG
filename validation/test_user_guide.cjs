@@ -12,7 +12,10 @@ for(const relative of manifest){
  const d=dom.window.document;
  for(const el of d.querySelectorAll('a[href],link[href],script[src],img[src]')){
   const ref=el.getAttribute(el.hasAttribute('href')?'href':'src');
-  assert(!/^(https?:|javascript:)/i.test(ref),'Documentation should work offline: '+ref);
+  assert(!/^javascript:/i.test(ref),'Documentation must not contain script links: '+ref);
+  // Source citations are optional navigation; rendering assets remain local.
+  if(el.tagName==='A' && /^https:\/\//i.test(ref))continue;
+  assert(!/^https?:/i.test(ref),'Documentation assets should work offline: '+ref);
   if(ref.startsWith('data:'))continue;
   const [file,anchor]=ref.split('#'),target=file?path.resolve(path.dirname(absolute),decodeURIComponent(file)):absolute;
   assert(fs.existsSync(target),relative+' → missing '+ref);
