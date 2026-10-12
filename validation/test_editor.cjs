@@ -15,6 +15,7 @@ w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),rem
   if (url.includes('waveform')) result={duration:5,peaks:[0,.5,1,.5]};
   if (url.includes('media/upload')) result={name:'tail.mp4',subfolder:'minimax_assets',media_type:'video'};
   if (url.includes('source/info')) result={duration:60,width:960,height:544};
+  if (url.includes('project/cache/status')) result={clips:{clip_1:{can_approve:true,has_latent:true,has_frames:true,has_audio:true}}};
   if (url.includes('forge/draft')) result={context_key:'context',count:1,shots:[{prompt:'Drafted action',type:'T2VA',duration:5}]};
   if (url.includes('forge/apply')) { const body=JSON.parse(options.body); submittedDraft=body.draft; result={timeline:{...body.timeline,clips:[{id:'clip_1',...body.draft.shots[0]}]}}; }
   return {ok:true,json:async()=>result};
@@ -174,7 +175,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.querySelector('.mmx-inspector-header input[aria-label="Clip Duration"]'));
   assert.equal(editorRoot.querySelector('.mmx-inspector-header input[aria-label="Clip Duration"]').style.width,'140px');
   assert.equal(editorRoot.querySelectorAll('.mmx-inspector-header input[type="range"]').length,0,'Duration has one number input and no slider');
-  assert.equal(editorRoot.querySelector('.mmx-clip-header-actions').children.length,4);
+  assert.equal(editorRoot.querySelector('.mmx-clip-header-actions').children.length,3);
   assert.equal(editorRoot.querySelector('.mmx-inspector-title').children.length,3,'Name, duration and seed have separate rows');
   const timecode=editorRoot.querySelector('.mmx-timecode-display');
   timecode.value='00:00:01:12';timecode.onchange();assert.equal(timecode.value,'00:00:01:12');
@@ -182,7 +183,9 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   timecode.value='0';timecode.onchange();
   const timelineZoom=editorRoot.querySelector('.mmx-zoom-slider');
   assert.equal(timelineZoom.value,'3','Short clips start at a readable timeline scale');
-  assert(editorRoot.querySelector('.mmx-shot-cover'),'Assigned pool image appears in the shot card');
+  assert(!editorRoot.querySelector('.mmx-shot-cover'),'Clip cards contain prompt text only');
+  assert(editorRoot.querySelector('.mmx-img-block img'),'References remain visible in their dedicated lane');
+  assert(!editorRoot.querySelector('.mmx-validate-toggle'),'Approval has only one control');
   timelineZoom.value='1.0'; timelineZoom.oninput();
   assert.equal(node.properties.mmx_timeline_zoom,1);node.__mmxDirectorRefresh();
   assert.equal(Number(timelineZoom.value),1,'Refresh preserves timeline zoom');
@@ -223,12 +226,31 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const audioContext=editorRoot.querySelector('.mmx-shot-audio_context_length');audioContext.value='5';audioContext.onchange();
   assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.video').dataset.frames,'39');
   assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.audio').dataset.frames,'5');
-  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.video').textContent,'V 1.63s');
-  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.audio').textContent,'A 0.21s');
+  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.video').textContent,'Video 1.63s');
+  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.audio').textContent,'Audio 0.21s');
   const shortAudioWidth=parseFloat(editorRoot.querySelector('.mmx-continuity-overlay.audio').style.width);
   const audioLonger=editorRoot.querySelector('.mmx-shot-audio_context_length');audioLonger.value='22';audioLonger.onchange();
   assert(parseFloat(editorRoot.querySelector('.mmx-continuity-overlay.audio').style.width)>shortAudioWidth,'Audio overlay grows when audio context grows');
-  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.audio').textContent,'A 0.92s');
+  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.audio').textContent,'Audio 0.92s');
+  assert(editorRoot.querySelector('.mmx-continuity-extension .mmx-continuity-overlay.video'),'Context parts share one extending rectangle');
+  if(process.env.MMX_APPROVAL_AUDIT_CAPTURE) {
+    const approval=editorRoot.querySelector('.mmx-shot-block .mmx-clip-selection input');approval.click();
+    const state=JSON.parse(timeline.value),running=state.clips.at(-1);
+    node.__mmxShotHandler({detail:{node:String(node.id),project_id:state.project_id,clip_id:running.id,phase:'sampling',index:3,total:3}});
+    const sections=['.mmx-toolbar','.mmx-multitrack-panel','.mmx-shared-prompt','.mmx-inspector-header'].map(selector=>{
+      const source=editorRoot.querySelector(selector),clone=source.cloneNode(true);
+      [...source.querySelectorAll('input,textarea,select')].forEach((control,index)=>{
+        const target=clone.querySelectorAll('input,textarea,select')[index];
+        if(control.tagName==='INPUT'){target.setAttribute('value',control.value);if(control.checked)target.setAttribute('checked','');else target.removeAttribute('checked');}
+        if(control.tagName==='TEXTAREA')target.textContent=control.value;
+        if(control.tagName==='SELECT')[...target.options].forEach(option=>{if(option.value===control.value)option.setAttribute('selected','');else option.removeAttribute('selected');});
+      });
+      for(const image of clone.querySelectorAll('img'))image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="56"><rect width="80" height="56" fill="#263b4d"/><circle cx="40" cy="21" r="12" fill="#92b1c6"/><path d="M17 56c0-24 46-24 46 0" fill="#6489a2"/></svg>');
+      return clone.outerHTML;
+    }).join('');
+    fs.writeFileSync('.validation/approval-ui-audit.html',`<!doctype html><meta charset="utf-8"><style>body{margin:20px;background:#13171b;font:14px Arial;color:#d8e1ea}h1{font-size:15px;font-weight:500;color:#a8b7c6}.mmx-director-root{width:1200px!important;height:auto!important;max-height:none!important;overflow:visible!important}</style>${w.document.head.innerHTML}<h1>Isolated UI audit · production editor DOM and styles</h1><div class="mmx-director-root">${sections}</div>`);
+    listeners.get('executing')({type:'executing',detail:{node:null}});editorRoot.querySelector('.mmx-shot-block .mmx-clip-selection input').click();
+  }
   const reduceVideo=editorRoot.querySelector('.mmx-shot-context_length');reduceVideo.value='5';reduceVideo.onchange();
   assert.equal(JSON.parse(timeline.value).clips.at(-1).audio_context_length,5,'Audio setting reflects the real video-context cap');
   assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.audio').dataset.frames,'5');
@@ -243,7 +265,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(!editorRoot.textContent.includes('Seam redraw strength'));
   assert(!editorRoot.querySelector('.mmx-continue-video'));
   assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.video').dataset.frames,'1');
-  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.video').textContent,'V 0.04s');
+  assert.equal(editorRoot.querySelector('.mmx-continuity-overlay.video').textContent,'Video 0.04s');
   assert(!editorRoot.querySelector('.mmx-continuity-overlay.audio'));
   assert([...editorRoot.querySelectorAll('details.mmx-section > summary')].some(s=>s.textContent.includes('Continuity')));
   const off=editorRoot.querySelector('.mmx-shot-continuity-mode');off.value='Independent (No Continuity)';off.onchange();
@@ -298,6 +320,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const newClip=JSON.parse(timeline.value).clips.at(-1);
   assert.equal(newClip.selected,false,'New clips are unchecked by default');
   assert.equal(newClip.type,'T2V');assert.deepStrictEqual(newClip.ref_ids,[],'New clips do not inherit incompatible references');
+  assert(editorRoot.querySelector('.mmx-shot-block.active .mmx-clip-selection input').disabled,'An empty new clip cannot be approved');
   assert.equal(JSON.parse(timeline.value).clips[0].type,initial.clips[0].type,'Adding a new task type preserves the original clip');
   assert(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('T2V'));
   assert(editorRoot.querySelector('.mmx-local-refs-pool').hidden,'Text-only clips do not offer references');
@@ -311,18 +334,30 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const selectedClipBefore=JSON.parse(timeline.value).clips.at(-1);
   const selectBox=editorRoot.querySelector('.mmx-shot-block .mmx-clip-selection input');
   assert(selectBox && !selectBox.checked,'Selection defaults to unchecked on legacy clips without a flag');
+  assert(!selectBox.disabled,'A server-confirmed generated result can be approved');
   assert(!editorRoot.querySelector('.mmx-inspector-header input[type="checkbox"]'),'Selection belongs to the timeline clip');
   selectBox.dispatchEvent(new w.MouseEvent('pointerdown',{button:0,bubbles:true}));
   assert.equal(editorRoot.querySelectorAll('.mmx-dragging').length,0,'Checkbox interaction does not reorder the clip');
   selectBox.click();
-  assert(selectBox.closest('.mmx-shot-block').classList.contains('generation-selected'),'Checked clips turn green');
+  assert(editorRoot.querySelector('.mmx-shot-block').classList.contains('validated'),'Checked clips turn green and are approved');
   assert.equal(editorRoot.querySelector('.mmx-playhead-needle').style.height,'auto','Playhead does not inflate timeline scroll height');
-  assert.equal(JSON.parse(timeline.value).clips[0].selected,true);
+  assert.equal(JSON.parse(timeline.value).clips[0].validated,true);
   assert.equal(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('T2V'),true,'Checking another clip does not switch the inspected clip');
   timeline.value=timeline.value;node.__mmxDirectorRefresh();
   assert(editorRoot.querySelector('.mmx-clip-selection input').checked,'Explicit selections survive refresh');
   editorRoot.querySelector('.mmx-clip-selection input').click();
-  assert(!editorRoot.querySelector('.mmx-shot-block').classList.contains('generation-selected'),'Unchecking restores its normal color');
+  assert(!editorRoot.querySelector('.mmx-shot-block').classList.contains('validated'),'Unchecking restores its normal color');
+  const executionState=JSON.parse(timeline.value),executionClip=executionState.clips.at(-1);
+  node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'sampling',index:2,total:2}});
+  assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`));
+  assert(editorRoot.querySelector('.mmx-generating-badge').textContent==='Generating');
+  assert(editorRoot.querySelector('.mmx-shot-block.active').getAttribute('aria-current')==='true');
+  listeners.get('executing')({type:'executing',detail:{node:null}});
+  assert(!editorRoot.querySelector('.mmx-generating-badge'),'Execution completion clears the running indicator');
+  const oldApproval={clips:[{id:'old',selected:true},{id:'draft',selected:false}],run_selection:false};
+  w.migrateClipApproval(oldApproval);assert.equal(oldApproval.clips[0].validated,true);assert.equal(oldApproval.clips[0].selected,false);
+  oldApproval.clips[0].validated=false;w.migrateClipApproval(oldApproval);assert.equal(oldApproval.clips[0].validated,false,'Migration cannot reapprove an edited clip');
+  assert.equal(oldApproval.run_selection,false);
   const beforeVideoImport=timeline.value;
   editorRoot.querySelector('.mmx-add-clip-card').click();
   const importChoice=w.document.querySelector('.mmx-type-modal-btn[data-action="import-video"]');
@@ -345,7 +380,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   editorRoot.querySelector('.mmx-tool-content').dispatchEvent(scrollWheel);
   assert.equal(graphWheel,0,'Panel scrolling cannot zoom the graph');
   assert(!scrollWheel.defaultPrevented,'Native panel scrolling remains enabled');w.document.body.removeEventListener('wheel',wheelListener);
-  assert(editorRoot.querySelector('.mmx-toolbar-right').textContent.includes('Selected clips only'),'Eligibility is beside generation scheduling');
+  assert(!editorRoot.querySelector('.mmx-toolbar-right').textContent.includes('Selected clips only'),'The obsolete selection filter is removed');
   const filesPanel=editorRoot.querySelector('.mmx-project-workspace .mmx-project-actions');
   assert.deepStrictEqual([...filesPanel.querySelectorAll('button')].map(el=>el.textContent),['New Project','Import Project','Export Project','Restore Last Autosave','Reset Timeline','Delete Saved Results'],'Routine file actions precede restore and destructive actions');
   assert.equal(filesPanel.querySelectorAll('.mmx-project-danger').length,2);

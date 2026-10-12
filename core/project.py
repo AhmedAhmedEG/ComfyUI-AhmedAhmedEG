@@ -34,12 +34,20 @@ def migrate_timeline(value):
     shots = state.setdefault("clips", [])
     if not isinstance(shots, list):
         raise ValueError("Timeline clips must be a list.")
+    legacy_approval = int(state.get("approval_control_version", 0)) < 1 and not state.get("run_selection", False)
     for shot in shots:
         if not isinstance(shot, dict):
             raise ValueError("Every shot must be an object.")
         if shot.get("seed") is not None:
             shot["seed"] = seed_string(shot["seed"])
         shot.setdefault("selected", False)
+        if legacy_approval and shot.get("selected") is True:
+            shot["validated"] = True
+        if legacy_approval or int(state.get("approval_control_version", 0)) >= 1:
+            shot["selected"] = False
+    if legacy_approval or int(state.get("approval_control_version", 0)) >= 1:
+        state["approval_control_version"] = 1
+        state["run_selection"] = False
     # Old hidden external context becomes an explicit predecessor on timeline.
     converted = []
     used = {shot.get("id") for shot in shots}

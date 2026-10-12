@@ -62,5 +62,22 @@ class PackSourceNumerical(unittest.TestCase):
                 self.assertEqual(len(frames),48)
                 self.assertEqual((frames[0].width,frames[0].height),(128,64))
 
+    def test_approval_status_and_media_restore_use_real_files(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            manager=ProjectCacheManager('approval_test',folder)
+            self.assertEqual(manager.result_availability(),{})
+            manager.store_clip_results('one','take',{'samples':torch.zeros((1,24,2,4,8))})
+            generation=manager._manifest['clips']['one']['generation']
+            self.assertTrue(manager.result_availability()['one']['can_approve'])
+            self.assertFalse(manager.result_availability()['one']['has_frames'])
+            manager.restore_clip_media('one',self.frames,self.audio)
+            self.assertEqual(manager._manifest['clips']['one']['generation'],generation)
+            self.assertTrue(torch.equal(manager.load_clip_frames('one'),self.frames))
+            Path(manager.get_clip_latent_path('one')).unlink()
+            self.assertTrue(manager.result_availability()['one']['can_approve'],'Decoded take still exists')
+            Path(manager.get_clip_frames_path('one')).unlink()
+            self.assertFalse(manager.result_availability()['one']['can_approve'],'Audio alone cannot approve a clip')
+
 
 if __name__=='__main__': unittest.main()

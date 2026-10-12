@@ -211,6 +211,46 @@ class RuntimeContracts(unittest.TestCase):
         self.execute(clips, steps=26)
         self.assertEqual(len(self.sampling_calls), 1)
 
+    def test_old_green_checkbox_skips_first_clip_and_completes_full_preview(self):
+        from core.preview import create_preview_plan
+        for generation in ('Next clip','All clips'):
+            with self.subTest(generation=generation):
+                pid='green_'+generation.split()[0].lower()
+                clips=[{'id':'one','type':'T2V','duration':1,'seed':10},
+                       {'id':'two','type':'T2V','duration':1,'seed':20}]
+                config={'project_id':pid}
+                self.execute(clips,config=config,generation_mode='Next clip')
+                manager=ProjectCacheManager(pid,self.temp.name)
+                original=manager._manifest['clips']['one']['generation']
+                clips[0]['selected']=True  # The old checkbox shown in the user's screenshot.
+                self.sampling_calls.clear()
+                result=self.execute(clips,config=config,generation_mode=generation)
+                self.assertEqual([call['seed'] for call in self.sampling_calls],[20])
+                manager=ProjectCacheManager(pid,self.temp.name)
+                self.assertEqual(manager._manifest['clips']['one']['generation'],original)
+                state=json.loads(result[9]);self.assertTrue(state['clips'][0]['validated'])
+                plan=create_preview_plan(state,'full',self.temp.name)
+                self.assertEqual(plan['clip_ids'],['one','two']);self.assertEqual(plan['clip_count'],2)
+
+    def test_approved_latent_only_take_restores_preview_without_sampling(self):
+        result=self.execute()
+        manager=ProjectCacheManager('regression',self.temp.name)
+        original=manager._manifest['clips']['one']['generation']
+        os.unlink(manager.get_clip_frames_path('one'));os.unlink(manager.get_clip_audio_path('one'))
+        self.assertTrue(manager.result_availability()['one']['can_approve'])
+        self.sampling_calls.clear()
+        self.execute([{'id':'one','type':'T2VA','duration':1,'validated':True}])
+        self.assertEqual(self.sampling_calls,[])
+        manager=ProjectCacheManager('regression',self.temp.name)
+        self.assertEqual(manager._manifest['clips']['one']['generation'],original)
+        self.assertTrue(manager.result_availability()['one']['has_frames'])
+
+    def test_empty_clip_cannot_reuse_or_silently_generate_an_approved_take(self):
+        self.assertEqual(ProjectCacheManager('regression',self.temp.name).result_availability(),{})
+        with self.assertRaisesRegex(ValueError,'no complete saved take'):
+            self.execute([{'id':'empty','type':'T2V','duration':1,'validated':True}])
+        self.assertEqual(self.sampling_calls,[])
+
     def test_reference_changes_preserve_approval_until_unapproved(self):
         clips = [{"id": "one", "type": "REF2VA", "duration": 1, "ref_ids": ["image_1"]}]
         self.execute(clips, ref_pack=MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 32, 32, 3)))[0])
@@ -465,6 +505,14 @@ class RuntimeContracts(unittest.TestCase):
         self.assertIs(self.native_calls[0][1]["ref_videos"]["ref_video_1"], source["frames"])
         self.assertEqual(result[7], 17)
         self.assertEqual(result[1]["waveform"].shape[-1], 34000)
+        manager=ProjectCacheManager('regression',self.temp.name)
+        generation=manager._manifest['clips']['edit']['generation']
+        os.unlink(manager.get_clip_audio_path('edit'))
+        self.sampling_calls.clear()
+        with patch("nodes.node_director.source_range", return_value=source):
+            self.execute([{'id':'edit','type':'RV2V','duration':1,'audio_mode':'source','validated':True}])
+        self.assertEqual(self.sampling_calls,[])
+        self.assertEqual(ProjectCacheManager('regression',self.temp.name)._manifest['clips']['edit']['generation'],generation)
 
     def test_unselected_source_shot_passes_through_without_sampling(self):
         source = {"frames": torch.ones((17, 32, 32, 3)),

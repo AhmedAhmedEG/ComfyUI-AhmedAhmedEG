@@ -873,10 +873,27 @@ class MiniMaxH3MasterDirector:
                 cached_frames = cache_mgr.load_clip_frames(clip_id)
                 cached_audio = cache_mgr.load_clip_audio(clip_id)
                 cached_latent = cache_mgr.load_clip_latent(clip_id)
-                if cached_frames is not None and cached_latent is not None and cached_audio is not None:
+                if approved_take and cached_latent is not None and (cached_frames is None or cached_audio is None):
+                    v_saved, a_saved = extract_streams_from_av_latent(cached_latent)
+                    if cached_frames is None:
+                        cached_frames = decode_video_latent(video_vae, v_saved)
+                        cached_frames = cached_frames[:int(cached_latent.get("_mmx_visible_end", cached_frames.shape[0]))]
+                        if canon_mode == MODE_INPAINT:
+                            cached_frames = cached_frames[-1:]
+                    if cached_audio is None:
+                        cached_audio = decode_audio_latent(audio_vae, a_saved) if audio_vae and a_saved is not None and canon_mode != MODE_INPAINT else {"waveform": torch.zeros((1,2,round(cached_frames.shape[0]/FPS*48000))),"sample_rate":48000}
+                        meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
+                        saved_audio_mode = meta.get("audio_mode", audio_mode)
+                        expected_source = meta.get("source_audio_fingerprint")
+                        if expected_source and (source is None or fingerprint_value(source["audio"]) != expected_source):
+                            raise ValueError("The approved take's original soundtrack is missing or changed. Restore its saved audio or original source.")
+                        cached_audio = choose_audio(saved_audio_mode, cached_audio, source, cached_frames.shape[0])
+                    cache_mgr.restore_clip_media(clip_id, cached_frames, cached_audio)
+                if cached_frames is not None and cached_audio is not None:
                     last_latent = cached_latent
                     previous_av = cached_latent
-                    low_carry = cached_latent.get("_selflift_low_carry")
+                    low_carry = cached_latent.get("_selflift_low_carry") if cached_latent else None
+                    clip_chained_flags[clip_idx] = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("trim_prefix", clip_chained_flags[clip_idx]))
                     log.info(f"Master Director: Clip {clip_idx + 1}/{len(clips)} [{clip_id}] is validated & cached. Skipping diffusion sampling.")
                     all_decoded_frames.append(cached_frames)
                     all_decoded_audios.append(
@@ -1067,7 +1084,8 @@ class MiniMaxH3MasterDirector:
                     validated=clip_validated,
                     pre_refine_frames=before_frames,
                 )
-                cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode})
+                cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
+                    "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
             except Exception as c_err:
                 cache_error = str(c_err)
                 log.warning(f"Master Director: Could not cache clip {clip_id}: {c_err}")

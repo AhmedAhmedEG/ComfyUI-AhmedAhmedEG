@@ -2304,6 +2304,37 @@ const embeddedCSS = `
 @container (max-width:800px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:1fr; } .mmx-director-root .mmx-project-group + .mmx-project-group { border-left:0;border-top:1px solid #414e5a;padding:14px 0 0; } .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @container (max-width:600px) { .mmx-project-workspace > summary span { display:none; } }
 
+/* Approval, inspection and execution have distinct visual states. */
+.mmx-director-root .mmx-shot-block.validated {background:#244337!important;border-color:#66b38b!important;}
+.mmx-director-root .mmx-shot-block.active,.mmx-director-root .mmx-shot-block.validated.active {outline:3px solid #f3cf78;outline-offset:-3px;box-shadow:inset 0 0 0 5px #15191ecc!important;}
+.mmx-director-root .mmx-shot-block.active::after {content:'Editing';position:absolute;bottom:5px;left:8px;color:#ffe7ac;background:#302a1be6;padding:2px 6px;border-radius:3px;font-size:10px;pointer-events:none;}
+.mmx-director-root .mmx-shot-block.generating {border-color:#65cfff!important;box-shadow:inset 0 0 0 2px #65cfff!important;}
+.mmx-generating-badge {display:inline-flex;align-items:center;gap:5px;padding:2px 6px;background:#144a63;color:#cff2ff;border-radius:3px;font-size:10px;}
+.mmx-generating-badge::before {content:'';width:7px;height:7px;border-radius:50%;background:#7ee1ff;animation:mmx-generation-pulse 1s ease-in-out infinite alternate;}
+@keyframes mmx-generation-pulse {to {opacity:.25;}}
+@media (prefers-reduced-motion:reduce) {.mmx-generating-badge::before {animation:none;}}
+.mmx-director-root .validated .mmx-clip-selection {background:#173c2a;border-color:#72c896;}
+.mmx-director-root .mmx-clip-selection:has(input:disabled) {opacity:.4;cursor:not-allowed;background:#26313a;}
+.mmx-director-root .mmx-clip-selection input:disabled {cursor:not-allowed;}
+.mmx-director-root .mmx-shot-prompt-preview {flex:1;display:-webkit-box;-webkit-line-clamp:5;line-height:1.5;padding:6px 0 26px;white-space:normal;text-align:left;align-self:stretch;color:#c5d0db!important;}
+.mmx-continuity-extension {position:absolute;top:0;height:112px;z-index:2;pointer-events:none;border:1px solid #7caec66b;border-right:0;border-radius:5px 0 0 5px;box-sizing:border-box;background:transparent;overflow:hidden;}
+.mmx-director-root .mmx-continuity-extension .mmx-continuity-overlay {left:auto;right:0;top:0;height:50%;border:0;border-radius:0;background:linear-gradient(90deg,#368dc522,#368dc566);font-size:10px;text-align:right;padding:4px;overflow:hidden;text-shadow:0 1px 2px #000;}
+.mmx-director-root .mmx-continuity-extension .mmx-continuity-overlay.audio {top:50%;background:linear-gradient(90deg,#8964c522,#8964c566);border-top:1px solid #ac8fcd55;}
+.mmx-director-root .mmx-continuity-extension.video-only .mmx-continuity-overlay.video {height:100%;}
+.mmx-director-root .mmx-timeline-audio {padding:4px 0;border:0;border-radius:0;background:transparent;display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:0;}
+.mmx-director-root .mmx-timeline-audio h3 {font-size:12px;color:#a9bac9;margin:0;}
+.mmx-director-root .mmx-timeline-audio label {display:flex;gap:7px;align-items:center;}
+.mmx-director-root .mmx-inspector-header {display:grid;grid-template-columns:minmax(360px,1fr) minmax(180px,240px);align-items:center;padding:16px;border:1px solid #45535f;border-radius:7px;background:#20272e;gap:16px;}
+.mmx-director-root .mmx-inspector-title {width:100%;}
+.mmx-director-root .mmx-inspector-title .mmx-ctrl-item {gap:10px;}
+.mmx-director-root .mmx-inspector-title .mmx-ctrl-item:first-child > label {width:60px;flex-shrink:0;}
+.mmx-director-root .mmx-inspector-title > div,.mmx-director-root .mmx-inspector-title > span {display:flex;align-items:center;gap:10px;min-height:34px;}
+.mmx-director-root .mmx-inspector-title > div > span:first-child,.mmx-director-root .mmx-inspector-title > span > span:first-child {width:60px;flex-shrink:0;}
+.mmx-director-root .mmx-clip-name-row input {width:min(300px,40vw)!important;flex:1;min-width:100px;}
+.mmx-director-root .mmx-clip-header-actions {grid-template-columns:1fr 1fr;min-width:0;gap:8px;align-self:center;}
+.mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:1/-1;}
+@container (max-width:680px) {.mmx-director-root .mmx-inspector-header {grid-template-columns:1fr;}.mmx-director-root .mmx-clip-header-actions {grid-template-columns:repeat(3,1fr);}.mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:auto;}}
+
 `;
 
 function injectCSS() {
@@ -2312,6 +2343,16 @@ function injectCSS() {
   style.id = "minimax-director-styles";
   style.textContent = embeddedCSS;
   document.head.appendChild(style);
+}
+
+function migrateClipApproval(state) {
+  if(Number(state.approval_control_version || 0)<1) {
+    // The old green checkbox was mistaken for approval. Preserve that intent
+    // only when it was not being used with the explicit generation filter.
+    for(const clip of state.clips || []) if(!state.run_selection && clip.selected===true)clip.validated=true;
+  }
+  for(const clip of state.clips || [])clip.selected=false;
+  state.run_selection=false;state.approval_control_version=1;
 }
 
 function migrateContinuitySources(state) {
@@ -2444,6 +2485,8 @@ function mountDirectorUI(node) {
     refmods: [],
     available_refs: [],
   };
+  let generatingClipId=null;
+  let cachedClipResults={},cacheStatusProject=null,cacheStatusRequest=0;
   let serverStatus=null, savedProjectSignature=null;
   const projectSignature=()=>JSON.stringify({timeline:{...timelineState,server_revision:undefined},builder:builderState});
   const updateServerStatus=()=>{
@@ -2747,6 +2790,7 @@ function mountDirectorUI(node) {
       }
     } catch (e) {}
 
+    migrateClipApproval(timelineState);
     resolveAvailableRefsFromGraph();
     if (!activeClipId || !timelineState.clips.find((c) => c.id === activeClipId)) {
       activeClipId = timelineState.clips[0]?.id || "clip_1";
@@ -2763,7 +2807,7 @@ function mountDirectorUI(node) {
       clip.audio_context_length ??= clip.context_length;
       clip.selected ??= false;
     }
-    migrateContinuitySources(timelineState);
+    migrateContinuitySources(timelineState);migrateClipApproval(timelineState);
     timelineState.project_id ||= `project_${crypto.randomUUID()}`;
     if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
     if (builderWidget) builderWidget.value = JSON.stringify(builderState);
@@ -2914,15 +2958,6 @@ function mountDirectorUI(node) {
   };
 
 
-  const selectionLabel = document.createElement("label");
-  selectionLabel.style.cssText = "display:flex;gap:6px;align-items:center;font-size:11px";
-  const runSelection = document.createElement("input");
-  runSelection.type = "checkbox";
-  runSelection.checked = !!timelineState.run_selection;
-  runSelection.onchange = () => { timelineState.run_selection = runSelection.checked; syncState(); };
-  selectionLabel.append(runSelection, document.createTextNode("Selected clips only"));
-  selectionLabel.title = "Other clips reuse matching cache or their original source video.";
-
   const progressLabel = document.createElement("span"); progressLabel.style.fontSize = "11px"; toolbarLeft.appendChild(progressLabel);
   const field = (title, control, help = "") => {
     const label = document.createElement("label"); label.className = "mmx-field";
@@ -3071,6 +3106,7 @@ function mountDirectorUI(node) {
   addProjectAction("Delete Saved Results", async () => {
     if (!confirm("Delete this project's cached generations, saved takes and last autosave? The current timeline and uploaded references are kept.")) return false;
     await requestJson("/minimax_director/project/clear_cache", {project_id: timelineState.project_id});
+    cachedClipResults={};cacheStatusRequest++;
     timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();
   });
   const exportPortable=async()=>{
@@ -3104,7 +3140,8 @@ function mountDirectorUI(node) {
   sharedPrompt.value = timelineState.shared_prompt || "";
   sharedPrompt.onchange = () => { timelineState.shared_prompt = sharedPrompt.value; syncState(); };
   projectTools.appendChild(field("Shared prompt",sharedPrompt,"Added to every clip; each clip keeps its own segment prompt."));
-  const fadeLabel = document.createElement("label"); fadeLabel.textContent = "Audio seam fade (ms) ";
+  const fadeLabel = document.createElement("label"); fadeLabel.textContent = "Join Fade (ms) ";
+  fadeLabel.title="Softens the beginning and end of assembled clip audio to reduce clicks. Does not change generation context or overlap video frames.";
   const fade = document.createElement("input"); fade.type = "number"; fade.min = "0"; fade.max = "1000"; fade.value = timelineState.audio_fade_ms ?? 15;
   fade.onchange = () => { timelineState.audio_fade_ms = Math.max(0,Math.min(1000,Number(fade.value)||0)); syncState(); }; fadeLabel.appendChild(fade); projectTools.appendChild(fadeLabel);
   const gainLabel = document.createElement("label"); const gain = document.createElement("input"); gain.type = "checkbox"; gain.checked = timelineState.audio_gain_match ?? true;
@@ -3245,7 +3282,7 @@ function mountDirectorUI(node) {
     const prior=generationWidget.callback;
     generationWidget.callback=function(value,...args){prior?.call(this,value,...args);timelineState.generation_mode=generationDisplay(value);syncState();};
   }
-  toolbarRight.append(selectionLabel);
+
   finishSection(projectTools,"Named server projects, file backups and recovery. Canvas and sampling are configured in the connected Settings node.");
   projectTools.classList.add("mmx-project-workspace");
   const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
@@ -3258,7 +3295,7 @@ function mountDirectorUI(node) {
   sharedPrompt.setAttribute("aria-label","Shared prompt");sharedPrompt.title="Applies to every clip. Placement controls whether it comes before or after the clip prompt.";
   sharedPolicy.closest(".mmx-field").classList.add("mmx-project-placement");
   fadeLabel.classList.add("mmx-project-audio-fade");
-  const audioGroup=group("Timeline Audio Joins",fadeLabel,gainLabel);
+  const audioGroup=group("Output Audio",fadeLabel,gainLabel);
   audioGroup.classList.add("mmx-timeline-audio");
   audioGroup.title="Applies when joining completed clips: fades edges to reduce clicks and matches loudness. Separate from generation and continuity context.";
   root.append(projectTools);
@@ -3344,7 +3381,7 @@ function mountDirectorUI(node) {
   multitrackPanel.appendChild(playheadNeedle);
 
   root.appendChild(multitrackPanel);
-  root.append(sharedPromptSection,audioGroup);
+  sharedPromptSection.append(audioGroup);root.append(sharedPromptSection);
 
   // 3. Active Clip Inspector (Directly below timeline - 100% pure timeline!)
   const inspector = document.createElement("div");
@@ -3405,9 +3442,10 @@ function mountDirectorUI(node) {
       ticks.appendChild(tick);
     }
     rulerTicks.appendChild(ticks);
-    for (const overlay of shotsLane.querySelectorAll('.mmx-continuity-overlay')) {
-      overlay.style.left=`${6 + (Number(overlay.dataset.start)-Number(overlay.dataset.frames)/24)*pxPerSec}px`;
-      overlay.style.width=`${Number(overlay.dataset.frames)/24*pxPerSec}px`;
+    for (const extension of shotsLane.querySelectorAll('.mmx-continuity-extension')) {
+      extension.style.left=`${6+(Number(extension.dataset.start)-Number(extension.dataset.frames)/24)*pxPerSec}px`;
+      extension.style.width=`${Number(extension.dataset.frames)/24*pxPerSec}px`;
+      for(const overlay of extension.children)overlay.style.width=`${Number(overlay.dataset.frames)/24*pxPerSec}px`;
     }
     const playheadX = Math.max(0, Math.min(width, playheadSeconds * pxPerSec));
     playheadNeedle.style.left = `${origin + playheadX}px`;
@@ -3637,7 +3675,19 @@ function mountDirectorUI(node) {
   };
   const selectionHelp = clip => ({T2V:'Text only.',VIDEO:'Choose exactly one source video.',V2V:'Choose exactly one source video.',I2V:'Choose one opening image.',L2V:'Choose one ending image.',FL2V:'Choose two images in order: opening, then ending. With continuity, one image can supply the ending.',IMG:'Choose exactly one image to edit.'})[clipCode(clip)] || (clipCode(clip)==='RV2V' ? 'The first selected video is the source. Up to 9 images, 3 videos including the source, 3 audio tracks and 12 total assets.' : 'Up to 9 images, 3 videos, 3 audio tracks and 12 total assets. Audio needs a visual reference.');
   const activeReferences = clip => (clip.ref_ids || []).map(id=>(timelineState.available_refs || []).find(row=>row.id===id)).filter(row=>row && referenceTypes(clip).includes(row.type));
+  const refreshClipResults = async () => {
+    const project=timelineState.project_id,request=++cacheStatusRequest;
+    cacheStatusProject=project;
+    try {
+      const status=await requestJson(`/minimax_director/project/cache/status?project_id=${encodeURIComponent(project)}`);
+      if(node.__mmxDisposed || request!==cacheStatusRequest || project!==timelineState.project_id)return;
+      cachedClipResults=status.clips || {};renderTimeline();
+    } catch(error) {
+      if(request===cacheStatusRequest)progressLabel.title=`Cannot confirm saved results: ${error.message}`;
+    }
+  };
   const renderTimeline = () => {
+    if(cacheStatusProject!==timelineState.project_id){cachedClipResults={};void refreshClipResults();}
     cancelTimelineDrag?.();
     refreshFileRefs();
     shotsLane.innerHTML = "";
@@ -3661,7 +3711,7 @@ function mountDirectorUI(node) {
       activeClipId = cid;
       clipTrackElements.forEach(({ clip: c, shotBlock, imgBlock, vidBlock, audBlock }) => {
         const isActive = c.id === cid;
-        shotBlock.classList.toggle("active", isActive);
+        shotBlock.classList.toggle("active", isActive);shotBlock.setAttribute("aria-current",String(isActive));
         imgBlock.classList.toggle("active", isActive);
         vidBlock.classList.toggle("active", isActive);
         audBlock.classList.toggle("active", isActive);
@@ -3681,9 +3731,16 @@ function mountDirectorUI(node) {
         const grid=[56,39,22,5].find(count=>count<=priorFrames && count<=Number(clip.context_length || 22)) || 0;
         const video=method==="FL2VA Tail Handoff"?1:grid;
         const audio=method==="FL2VA Tail Handoff"?0:Math.min(video,Number(clip.audio_context_length ?? video));
-        for (const [kind,frames] of [["video",video],["audio",audio]]) if (frames>0) {
-          const overlay=document.createElement("div");overlay.className=`mmx-continuity-overlay ${kind}`;overlay.dataset.start=external?elapsed+frames/24:elapsed;overlay.dataset.frames=frames;overlay.dataset.external=String(external);
-          overlay.textContent=`${kind==='video'?'V':'A'} ${(frames/24).toFixed(2)}s`;overlay.title=`${clip.name || 'Clip '+(index+1)} uses ${(frames/24).toFixed(2)}s of ${kind} context from ${external ? "an external video" : "the preceding clip"}`;shotsLane.append(overlay);
+        if(video>0 || audio>0) {
+          const extension=document.createElement('div');extension.className='mmx-continuity-extension'+(audio===0?' video-only':'');
+          extension.dataset.start=elapsed;extension.dataset.frames=Math.max(video,audio);extension.dataset.clipId=clip.id;
+          for(const [kind,frames] of [['video',video],['audio',audio]]) if(frames>0) {
+            const overlay=document.createElement('div');overlay.className=`mmx-continuity-overlay ${kind}`;overlay.dataset.frames=frames;
+            overlay.textContent=`${kind==='video'?'Video':'Audio'} ${(frames/24).toFixed(2)}s`;
+            overlay.title=`${clip.name || 'Clip '+(index+1)} borrows ${(frames/24).toFixed(2)}s of ${kind} context from the previous clip`;
+            extension.append(overlay);
+          }
+          shotsLane.append(extension);
         }
       }
       elapsed+=Number(clip.duration)||5;
@@ -3706,7 +3763,8 @@ function mountDirectorUI(node) {
       // Track 1: Clip Block (Header info + Prompt preview)
       // ============================================
       const shotBlock = document.createElement("div");
-      shotBlock.className = `mmx-subtrack-block mmx-shot-block${isActive ? " active" : ""}${isValidated ? " validated" : ""}${clip.selected === true ? " generation-selected" : ""}`;
+      shotBlock.className = `mmx-subtrack-block mmx-shot-block${isActive ? " active" : ""}${isValidated ? " validated" : ""}${clip.id===generatingClipId ? " generating" : ""}`;
+      shotBlock.dataset.clipId=clip.id;shotBlock.setAttribute("aria-current",isActive ? "true" : "false");
       shotBlock.style.width = `${baseWidth}px`;
       shotBlock.title = `Clip ${idx + 1}: ${clip.name || "Untitled"} (${dur.toFixed(1)}s) - Click to inspect`;
 
@@ -3730,6 +3788,8 @@ function mountDirectorUI(node) {
       shotTopBar.appendChild(modeBadge);
       shotTopBar.appendChild(title);
       shotTopBar.appendChild(durTag);
+      if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent='Generating';shotTopBar.append(running);}
+
 
       if (clip.continuity && idx > 0) {
         const contIcon = document.createElement("span");
@@ -3739,40 +3799,15 @@ function mountDirectorUI(node) {
         shotTopBar.appendChild(contIcon);
       }
 
-      if (clip.validated) {
-        const valBadge = document.createElement("span");
-        valBadge.className = "mmx-clip-val-badge";
-        valBadge.style.fontSize = "9px";
-        valBadge.style.color = "#34d399";
-        valBadge.style.fontWeight = "bold";
-        valBadge.style.background = "rgba(16, 185, 129, 0.15)";
-        valBadge.style.border = "1px solid rgba(16, 185, 129, 0.4)";
-        valBadge.style.borderRadius = "3px";
-        valBadge.style.padding = "1px 4px";
-        valBadge.textContent = "✓";
-        valBadge.title = "Clip is validated (cached and skipped on re-render)";
-        shotTopBar.appendChild(valBadge);
-      }
-
       const delBtn = document.createElement("button");
       delBtn.className = "mmx-clip-del-btn";
       delBtn.textContent = "×";
-      delBtn.title = `Delete ${clip.name || "shot"}`;
+      delBtn.title = `Delete ${clip.name || 'Clip '+(idx+1)}`;
       delBtn.setAttribute("aria-label", delBtn.title);
       delBtn.onclick = e => { e.stopPropagation(); deleteClip(clip); };
       shotTopBar.appendChild(delBtn);
 
       shotBlock.appendChild(shotTopBar);
-
-      const coverRef = imgRefs.find(ref => ref.type === "image" && ref.url);
-      if (coverRef) {
-        const cover = document.createElement("img");
-        cover.className = "mmx-shot-cover";
-        cover.src = coverRef.url;
-        cover.alt = coverRef.name;
-        cover.draggable = false;
-        shotBlock.appendChild(cover);
-      }
 
       // Bottom Bar: Prompt Preview Snippet
       const promptSnippet = document.createElement("div");
@@ -3783,10 +3818,12 @@ function mountDirectorUI(node) {
       promptSnippet.style.fontStyle = hasPrompt ? "normal" : "italic";
       shotBlock.appendChild(promptSnippet);
       const selectLabel=document.createElement('label');selectLabel.className='mmx-clip-selection';
-      selectLabel.title='Select This Clip For Generation';
-      const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=clip.selected===true;
-      selectInput.setAttribute('aria-label',`Select ${clip.name || `Clip ${idx+1}`} For Generation`);
-      selectInput.onchange=()=>{clip.selected=selectInput.checked;shotBlock.classList.toggle('generation-selected',clip.selected);syncState();};
+      selectLabel.title='Approve Clip: reuse its saved result and skip generation. Uncheck to generate a new take.';
+      const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=clip.validated===true;
+      selectInput.disabled=!clip.validated && !cachedClipResults[clip.id]?.can_approve;
+      if(selectInput.disabled)selectLabel.title='Generate this clip first. Approval requires a saved result or latent on the server.';
+      selectInput.setAttribute('aria-label',`Approve ${clip.name || `Clip ${idx+1}`}`);
+      selectInput.onchange=()=>{clip.validated=selectInput.checked;syncState();renderTimeline();};
       for(const event of ['pointerdown','mousedown','click'])selectLabel.addEventListener(event,e=>e.stopPropagation());
       selectLabel.append(selectInput);shotBlock.append(selectLabel);
 
@@ -4143,29 +4180,15 @@ function mountDirectorUI(node) {
 
 
 
-    // 1. Validated Toggle Badge in Header (Prevents re-generation, reuses cached output)
-    const valBtn = document.createElement("button");
-    valBtn.className = "mmx-validate-toggle " + (activeClip.validated ? "validated" : "unvalidated");
-    valBtn.title = "Mark clip as validated. Validated clips reuse cached output and skip re-generation.";
-    valBtn.textContent = activeClip.validated ? "Unapprove Clip" : "Approve Clip";
-    valBtn.setAttribute("aria-pressed",String(!!activeClip.validated));
-    valBtn.onclick = () => {
-      activeClip.validated = !activeClip.validated;
-      syncState();
-      renderTimeline();
-      renderInspector();
-    };
-    headerActions.appendChild(valBtn);
-
     // 2. Duplicate Clip Button in Inspector Header
     const dupShotBtn = document.createElement("button");
     dupShotBtn.className = "mmx-action-btn";
-    dupShotBtn.innerHTML = "<span>📋</span><span>Duplicate Clip</span>";
+    dupShotBtn.textContent="Duplicate Clip";
     dupShotBtn.title = `Duplicate "${activeClip.name}" with all its prompt and reference settings`;
     dupShotBtn.onclick = () => duplicateClip(activeClip);
     headerActions.appendChild(dupShotBtn);
 
-    if (!activeClip.locked) for (const [offset, label] of [[-1, "← Move earlier"], [1, "Move later →"]]) {
+    if (!activeClip.locked) for (const [offset, label] of [[-1, "Move Earlier"], [1, "Move Later"]]) {
       const button = document.createElement("button"); button.className = "mmx-action-btn";
       button.textContent = label;
       const index = timelineState.clips.indexOf(activeClip), adjacent = timelineState.clips[index + offset];
@@ -4496,7 +4519,7 @@ function mountDirectorUI(node) {
 
     const seedInput = document.createElement("input");
     seedInput.type = "text";
-    seedInput.style.width = "145px";
+    seedInput.style.width = "200px";
     seedInput.setAttribute("aria-label","Clip Seed");
     seedInput.style.background = "var(--comfy-input-bg, #333333)";
     seedInput.style.border = "1px solid var(--border-color, #4a4a4a)";
@@ -5031,6 +5054,7 @@ function mountDirectorUI(node) {
     resolveAvailableRefsFromGraph();
     syncState();
     renderTimeline();
+    void refreshClipResults();
     if (activeClipId) renderInspector();
   };
 
@@ -5067,6 +5091,7 @@ function mountDirectorUI(node) {
     const savedZoom = Number(node.properties?.mmx_timeline_zoom);
     if(Number.isFinite(savedZoom) && savedZoom >= 0.5 && savedZoom <= 3) { zoomLevel=savedZoom; zoomSlider.value=String(savedZoom); }
     renderTimeline();
+    void refreshClipResults();
 
   };
 
@@ -5075,7 +5100,11 @@ function mountDirectorUI(node) {
   node.__mmxShotHandler = event => {
     const detail = event.detail;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
-    progressLabel.textContent = `${detail.phase} · ${detail.clip_id} · ${detail.index || ""}/${detail.total || ""}`;
+    const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
+    const phaseLabel=({sampling:'Generating',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
+    progressLabel.textContent = `${phaseLabel}: ${eventClip?.name || 'Clip '+(timelineState.clips.indexOf(eventClip)+1)}${detail.index ? ` (${detail.index}/${detail.total || timelineState.clips.length})` : ''}`;
+    if(detail.phase==='sampling') {generatingClipId=detail.clip_id;renderTimeline();}
+    if(detail.phase==='completed' && generatingClipId===detail.clip_id){generatingClipId=null;renderTimeline();}
     if(detail.phase==='source_ready') {
       const clip=timelineState.clips.find(value=>value.id===detail.clip_id);
       if(clip?.source?.ref_id===detail.ref_id && Number(clip.source_start || 0)===Number(detail.requested_start || 0) && (clip.source_end ?? null)===(detail.requested_end ?? null)) {
@@ -5083,6 +5112,7 @@ function mountDirectorUI(node) {
       }
     }
     if (detail.phase === "completed") {
+      void refreshClipResults();
 
       const clip = timelineState.clips.find(value => value.id === detail.clip_id);
       if (clip) {
@@ -5095,6 +5125,13 @@ function mountDirectorUI(node) {
   if (!node.__mmxShotListener) {
     node.__mmxShotListener = event => node.__mmxShotHandler?.(event);
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
+    const clearGenerating=event=>{
+      if(!generatingClipId)return;
+      if(event?.type==='executing' && event.detail?.node!=null)return;
+      if(event?.type==='execution_error' && event.detail?.node_id && String(event.detail.node_id)!==String(node.id))return;
+      generatingClipId=null;renderTimeline();
+    };
+    for(const name of ['execution_error','execution_interrupted','executing'])api.addEventListener(name,clearGenerating);
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
       node.__mmxDisposed = true;
@@ -5104,6 +5141,7 @@ function mountDirectorUI(node) {
       node.__mmxProjectDialog?.remove();
 
           api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
+      for(const name of ['execution_error','execution_interrupted','executing'])api.removeEventListener(name,clearGenerating);
       node.__mmxShotHandler = null; node.__mmxShotListener = null;
       return removed?.apply(this, args);
     };

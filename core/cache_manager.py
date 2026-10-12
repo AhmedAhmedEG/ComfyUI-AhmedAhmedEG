@@ -309,6 +309,34 @@ class ProjectCacheManager:
         return torch.load(path, map_location="cpu", weights_only=True)
 
     @_locked
+    def result_availability(self):
+        """Small filesystem-backed status; never loads large tensors for UI polling."""
+        self._manifest = self._load_manifest()
+        rows = {}
+        for cid, meta in self._manifest.get("clips", {}).items():
+            frames = os.path.isfile(self.get_clip_frames_path(cid))
+            audio = os.path.isfile(self.get_clip_audio_path(cid))
+            latent = os.path.isfile(self.get_clip_latent_path(cid))
+            rows[cid] = {"has_frames": frames, "has_audio": audio, "has_latent": latent,
+                         "can_approve": latent or frames and audio, "generation": meta.get("generation")}
+        return rows
+
+    @_locked
+    def restore_clip_media(self, clip_id, frames, audio):
+        """Repair preview artifacts from an existing latent without creating a new take."""
+        self._manifest = self._load_manifest()
+        if clip_id not in self._manifest.get("clips", {}) or not os.path.isfile(self.get_clip_latent_path(clip_id)):
+            raise ValueError("Cannot restore media without a saved clip latent.")
+        self._atomic_save(frames.cpu(), self.get_clip_frames_path(clip_id))
+        self._atomic_save({**audio, "waveform": audio["waveform"].cpu()}, self.get_clip_audio_path(clip_id))
+        metadata = {"has_frames": True, "has_audio": True, "width": int(frames.shape[2]), "height": int(frames.shape[1])}
+        self._manifest["clips"][clip_id].update(metadata)
+        generation = self._manifest["clips"][clip_id].get("generation")
+        if generation in self._manifest.get("takes", {}):
+            self._manifest["takes"][generation].update(metadata)
+        self.save_manifest()
+
+    @_locked
     def update_clip_metadata(self, clip_id, metadata):
         clip_id = safe_component(clip_id)
         self._manifest = self._load_manifest()

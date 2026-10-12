@@ -19,7 +19,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.4.19"
+__version__ = "1.4.20"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -354,6 +354,14 @@ if getattr(PromptServer, "instance", None) is not None:
                 if clip_id is None or value.get("clip_id") == clip_id]
             return web.json_response(sorted(rows, key=lambda row: row.get("updated_at", 0), reverse=True))
         except ValueError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+    @routes.get("/minimax_director/project/cache/status")
+    async def project_cache_status(request):
+        try:
+            mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
+            return web.json_response({"project_id": mgr.project_id, "clips": await asyncio.to_thread(mgr.result_availability)})
+        except (ValueError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
 
     @routes.post("/minimax_director/project/merge")

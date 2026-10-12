@@ -12,9 +12,12 @@ torch = setup_mock_torch_if_needed()
 
 
 class Consolidation(unittest.TestCase):
-    def test_clip_selection_defaults_off_and_preserves_explicit_choices(self):
+    def test_legacy_green_checks_migrate_to_approval_once(self):
         state = migrate_timeline({"clips": [{"id": "new"}, {"id": "yes", "selected": True}, {"id": "no", "selected": False}]})
-        self.assertEqual([clip["selected"] for clip in state["clips"]], [False, True, False])
+        self.assertEqual([clip["selected"] for clip in state["clips"]], [False, False, False])
+        self.assertTrue(state["clips"][1]["validated"])
+        state["clips"][1]["validated"] = False
+        self.assertFalse(migrate_timeline(state)["clips"][1]["validated"])
 
     def test_starter_uses_separate_preview_and_attention_switching(self):
         from nodes import NODE_CLASS_MAPPINGS

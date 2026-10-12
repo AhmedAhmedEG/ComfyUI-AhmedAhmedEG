@@ -469,7 +469,7 @@ class TestMockPipeline(CacheIsolatedTestCase):
                         state = {**json.loads(timeline_data), "project_id": "test_val_cache"}
                         self.assertEqual(create_preview_plan(state, "full", tmp_dir)["clip_ids"], ["c1", "c2"])
                         self.assertEqual(create_preview_plan(state, "latest", tmp_dir)["clip_ids"], ["c2"])
-                        with patch.object(ProjectCacheManager, "load_clip_frames", return_value=None):
+                        with patch.object(ProjectCacheManager, "load_clip_frames", return_value=None), patch.object(ProjectCacheManager, "load_clip_latent", return_value=None):
                             with self.assertRaisesRegex(ValueError, "Approved clip.*no complete saved take"):
                                 self.director.execute(model=self.mock_model, video_vae=self.mock_vae,
                                     audio_vae=self.mock_audio_vae, clip=self.mock_clip,
