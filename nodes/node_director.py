@@ -86,7 +86,7 @@ class MiniMaxH3MasterDirector:
                 "sigmas": ("SIGMAS", {"forceInput": True, "tooltip": "External sigma schedule override."}),
                 "latent_checkpoint": ("MMX_CONTINUATION", {"tooltip": "Advanced: continue the first chained clip from saved audiovisual latent data. Video-file continuation is configured per clip in the timeline."}),
                 "model_pack": ("MMX_MODEL_PACK", {"tooltip": "Advanced: named models for per-clip overrides."}),
-                "generation_mode": (["Next clip", "All clips", "Conditioning only"], {"default": "Next clip", "tooltip": "Next clip preserves approved takes and generates one unapproved clip. All clips processes the sequence. Conditioning only prepares inputs for an external sampler."}),
+                "generation_mode": (["Next clip", "All clips", "Conditioning only"], {"default": "Next clip", "tooltip": "Next clip preserves approved takes and generates one unapproved clip. All clips preserves approved takes and generates every eligible unapproved clip. Conditioning only prepares inputs for an external sampler."}),
                 "timeline_data": ("STRING", {"default": "{\"version\":1,\"clips\":[]}", "multiline": False}),
                 "builder_state": ("STRING", {"default": "{}", "multiline": False}),
             },
@@ -828,8 +828,11 @@ class MiniMaxH3MasterDirector:
 
             # If clip is validated and stored in server cache, skip diffusion sampling!
             skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
-            approved_take = clip_validated and run_mode == "clip_by_clip"
-            if approved_take or ((clip_validated or skip_requested) and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp)):
+            # Approval accepts the saved take in both generation modes, even
+            # after global settings change. Only unapproved skipped clips need
+            # a matching fingerprint; missing approved results must not sample.
+            approved_take = clip_validated
+            if approved_take or (skip_requested and cache_mgr.is_clip_cached_and_valid(clip_id, clip_fp)):
                 cached_frames = cache_mgr.load_clip_frames(clip_id)
                 cached_audio = cache_mgr.load_clip_audio(clip_id)
                 cached_latent = cache_mgr.load_clip_latent(clip_id)

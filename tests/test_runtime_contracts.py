@@ -149,7 +149,7 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(result[1]["waveform"].shape[-1], round(result[7] / result[6] * 48000))
         self.assertEqual(result[2]["loaded_frame_count"], result[7])
 
-    def test_cache_reuse_after_user_validates_and_settings_invalidate(self):
+    def test_approval_preserves_take_after_settings_change(self):
         clips = [{"id": "one", "type": "T2VA", "duration": 1, "prompt": "walk"}]
         self.execute(clips)
         clips[0]["validated"] = True
@@ -157,30 +157,44 @@ class RuntimeContracts(unittest.TestCase):
         self.execute(clips)
         self.assertEqual(self.sampling_calls, [])
         self.execute(clips, steps=26)
+        self.assertEqual(self.sampling_calls, [])
+        clips[0]["validated"] = False
+        self.execute(clips, steps=26)
         self.assertEqual(len(self.sampling_calls), 1)
 
-    def test_reference_contents_invalidate_cache(self):
-        clips = [{"id": "one", "type": "REF2VA", "duration": 1, "validated": True, "ref_ids": ["image_1"]}]
+    def test_reference_changes_preserve_approval_until_unapproved(self):
+        clips = [{"id": "one", "type": "REF2VA", "duration": 1, "ref_ids": ["image_1"]}]
         self.execute(clips, ref_pack=MiniMaxH3RefPack().pack(image_1=torch.zeros((1, 32, 32, 3)))[0])
+        clips[0]["validated"] = True
         self.sampling_calls.clear()
+        self.execute(clips, ref_pack=MiniMaxH3RefPack().pack(image_1=torch.ones((1, 32, 32, 3)))[0])
+        self.assertEqual(self.sampling_calls, [])
+        clips[0]["validated"] = False
         self.execute(clips, ref_pack=MiniMaxH3RefPack().pack(image_1=torch.ones((1, 32, 32, 3)))[0])
         self.assertEqual(len(self.sampling_calls), 1)
 
-    def test_upstream_change_invalidates_chained_cache(self):
-        clips = [{"id": "one", "type": "T2VA", "duration": 1, "seed": 1, "validated": True},
-                 {"id": "two", "type": "T2VA", "duration": 1, "seed": 2, "validated": True}]
+    def test_upstream_changes_preserve_approved_successors(self):
+        clips = [{"id": "one", "type": "T2VA", "duration": 1, "seed": 1},
+                 {"id": "two", "type": "T2VA", "duration": 1, "seed": 2}]
         self.execute(clips)
+        for clip in clips:
+            clip["validated"] = True
         self.sampling_calls.clear()
         self.execute(clips)
         self.assertEqual(len(self.sampling_calls), 0)
         clips[0]["seed"] = 3
         self.execute(clips)
+        self.assertEqual(self.sampling_calls, [])
+        for clip in clips:
+            clip["validated"] = False
+        self.execute(clips)
         self.assertEqual([x["seed"] for x in self.sampling_calls], [3, 2])
 
     def test_independent_mode_does_not_invalidate_later_clip(self):
-        clips = [{"id": "one", "type": "T2VA", "duration": 1, "seed": 1, "validated": True},
-                 {"id": "two", "type": "T2VA", "duration": 1, "seed": 2, "validated": True}]
+        clips = [{"id": "one", "type": "T2VA", "duration": 1, "seed": 1},
+                 {"id": "two", "type": "T2VA", "duration": 1, "seed": 2}]
         self.execute(clips, continuity_mode="Independent (No Continuity)")
+        clips[1]["validated"] = True
         self.sampling_calls.clear()
         clips[0]["seed"] = 3
         self.execute(clips, continuity_mode="Independent (No Continuity)")

@@ -449,23 +449,31 @@ class TestMockPipeline(CacheIsolatedTestCase):
                     timeline_data=json.dumps(warm), config={"project_id": "test_val_cache"})
                 sampled_seeds.clear()
 
-                res = self.director.execute(
-                    model=self.mock_model,
-                    video_vae=self.mock_vae,
-                    audio_vae=self.mock_audio_vae,
-                    clip=self.mock_clip,
-                    timeline_data=timeline_data,
-                    config={"project_id": "test_val_cache", "steps": 8},
-                    run_mode="clip_by_clip",
-                )
-                with patch.object(ProjectCacheManager, "load_clip_frames", return_value=None):
-                    with self.assertRaisesRegex(ValueError, "Approved clip.*no complete saved take"):
-                        self.director.execute(model=self.mock_model, video_vae=self.mock_vae,
+                from core.preview import create_preview_plan
+                accepted_generation = ProjectCacheManager("test_val_cache", tmp_dir)._manifest["clips"]["c1"]["generation"]
+                for mode in ("Next clip", "All clips"):
+                    with self.subTest(generation_mode=mode):
+                        sampled_seeds.clear()
+                        self.director.execute(
+                            model=self.mock_model, video_vae=self.mock_vae,
                             audio_vae=self.mock_audio_vae, clip=self.mock_clip,
-                            timeline_data=timeline_data, config={"project_id":"test_val_cache", "steps":8},
-                            run_mode="clip_by_clip")
-                # Only shot 2 (seed 888) should have been sampled! Shot 1 was skipped from cache!
-                self.assertEqual(sampled_seeds, [888])
+                            timeline_data=timeline_data,
+                            config={"project_id": "test_val_cache", "steps": 8},
+                            generation_mode=mode,
+                        )
+                        self.assertEqual(sampled_seeds, [888])
+                        manager = ProjectCacheManager("test_val_cache", tmp_dir)
+                        self.assertEqual(manager._manifest["clips"]["c1"]["generation"], accepted_generation)
+                        state = {**json.loads(timeline_data), "project_id": "test_val_cache"}
+                        self.assertEqual(create_preview_plan(state, "full", tmp_dir)["clip_ids"], ["c1", "c2"])
+                        self.assertEqual(create_preview_plan(state, "latest", tmp_dir)["clip_ids"], ["c2"])
+                        with patch.object(ProjectCacheManager, "load_clip_frames", return_value=None):
+                            with self.assertRaisesRegex(ValueError, "Approved clip.*no complete saved take"):
+                                self.director.execute(model=self.mock_model, video_vae=self.mock_vae,
+                                    audio_vae=self.mock_audio_vae, clip=self.mock_clip,
+                                    timeline_data=timeline_data, config={"project_id":"test_val_cache", "steps":8},
+                                    generation_mode=mode)
+                        self.assertEqual(sampled_seeds, [888])
 
     def test_preview_mode_unvalidated_only(self):
         """Verify preview_mode='unvalidated' returns only unvalidated clips."""
@@ -501,6 +509,12 @@ class TestMockPipeline(CacheIsolatedTestCase):
             mock_get_native.return_value = mock_native
 
             mock_sample.side_effect = lambda *args, **kwargs: {"samples": (torch.zeros((1, 16, 5, 16, 16)), torch.zeros((1, 32, 2, 4)))}
+
+            warm = json.loads(timeline_data)
+            warm["clips"] = [{**warm["clips"][0], "validated": False}]
+            self.director.execute(model=self.mock_model, video_vae=self.mock_vae,
+                audio_vae=self.mock_audio_vae, clip=self.mock_clip,
+                timeline_data=json.dumps(warm))
 
             res = self.director.execute(
                 model=self.mock_model,
