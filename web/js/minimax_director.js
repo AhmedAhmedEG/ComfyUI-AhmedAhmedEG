@@ -2229,7 +2229,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-placement select { width:150px!important; }
 .mmx-director-root .mmx-project-audio-fade { display:flex;align-items:center;justify-content:space-between;gap:12px; }
 .mmx-director-root .mmx-project-audio-fade input { width:100px; }
-.mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:12px 0 0;border:0; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:0;border:0; }
 .mmx-director-root .mmx-project-workspace .mmx-project-actions > .mmx-field { padding:0;border:0;background:transparent;justify-content:flex-start; }
 .mmx-director-root .mmx-project-workspace .mmx-project-actions button { display:flex;align-items:center;justify-content:center;text-align:center;width:100%;box-sizing:border-box;min-height:40px; }
 .mmx-director-root .mmx-project-workspace button.mmx-project-danger { background:#3b2329;border-color:#bf5967;color:#ffd0d6;box-shadow:0 0 12px #e45c6d2b,inset 0 0 10px #e45c6d0d; }
@@ -2242,7 +2242,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-workspace .mmx-export-options input { margin:0;flex-shrink:0; }
 .mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
 .mmx-director-root .mmx-project-workspace .mmx-section > summary { padding:12px 0 0; }
-.mmx-director-root .mmx-project-library { display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 0 14px;border-bottom:1px solid #414e5a; }
+.mmx-director-root .mmx-project-library { display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0;border:0; }
 .mmx-director-root .mmx-project-library .mmx-project-name-field { display:flex;flex-direction:row;align-items:center;gap:12px;flex:1;min-width:260px;padding:0;border:0;background:transparent; }
 .mmx-director-root .mmx-project-name-field input { flex:1;min-width:120px; }
 .mmx-director-root .mmx-project-library button { min-height:40px;padding:0 18px; }
@@ -2885,8 +2885,6 @@ function mountDirectorUI(node) {
     for (const child of [...section.childNodes]) if (child!==summary) body.append(child);
     if (section===projectTools) {
       const actions=document.createElement("div");actions.className="mmx-project-actions";
-      const files=document.createElement("details");files.className="mmx-section";
-      const heading=document.createElement("summary");heading.textContent="Files & Recovery";files.append(heading);
       const actionOrder=["new","import","export","restore","reset","delete-results"];
       const buttons=[...body.children].filter(child=>child.tagName==='BUTTON').sort((a,b)=>actionOrder.indexOf(a.dataset.projectAction)-actionOrder.indexOf(b.dataset.projectAction));
       for (const button of buttons) {
@@ -2898,7 +2896,7 @@ function mountDirectorUI(node) {
           exportControl.append(button,body.querySelector('.mmx-export-options'));card.prepend(exportControl);
         }
       }
-      files.append(actions);body.append(files);
+      body.append(actions);
     }
     section.append(body);
   };
@@ -3176,7 +3174,6 @@ function mountDirectorUI(node) {
   toolbarRight.append(selectionLabel);
   finishSection(projectTools,"Named server projects, file backups and recovery. Canvas and sampling are configured in the connected Settings node.");
   projectTools.classList.add("mmx-project-workspace");
-  const projectBody=projectTools.querySelector(":scope > .mmx-section-body");
   const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
   const sharedPromptSection=document.createElement("section");sharedPromptSection.className="mmx-shared-prompt";
   const sharedPromptHeader=document.createElement("div");sharedPromptHeader.className="mmx-shared-prompt-header";
@@ -3190,8 +3187,6 @@ function mountDirectorUI(node) {
   const audioGroup=group("Timeline Audio Joins",fadeLabel,gainLabel);
   audioGroup.classList.add("mmx-timeline-audio");
   audioGroup.title="Applies when joining completed clips: fades edges to reduce clicks and matches loudness. Separate from generation and continuity context.";
-  const projectFiles=projectBody.querySelector("details");
-  projectBody.append(projectFiles);
   root.append(projectTools);
 
 

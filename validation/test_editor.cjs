@@ -85,7 +85,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   chooseTool('Look').onkeydown({key:'ArrowRight',preventDefault(){}});
   assert.equal(chooseTool('LoRAs').getAttribute('aria-selected'),'true','Keyboard moves between tool tabs');
   assert.equal(chooseTool('Project'),null,'Project is not a clip-specific tool');
-  assert.equal(w.document.querySelectorAll('.mmx-section').length,5,'Project configuration has one surface');
+  assert.equal(w.document.querySelectorAll('.mmx-section').length,4,'Project configuration has one surface');
   const globalProject=w.document.querySelector('.mmx-project-workspace');
   assert.equal(globalProject.parentElement.className,'mmx-director-root');
   assert(globalProject.compareDocumentPosition(w.document.querySelector('.mmx-multitrack-panel')) & w.Node.DOCUMENT_POSITION_FOLLOWING,'Project precedes the timeline');
@@ -106,7 +106,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(!w.document.body.textContent.includes('Canvas source'),'Canvas has one owner in Settings');
   assert(!w.document.body.textContent.includes('Choose saved take for continuation'));
   assert(!w.document.body.textContent.includes('Create project exporter'));
-  assert([...w.document.querySelectorAll('summary')].some(el=>el.textContent==='Files & Recovery'));
+  assert.equal(globalProject.querySelectorAll('details').length,0,'Project is a single panel without nested collapsibles');
   const continuationFile=w.document.querySelector('.mmx-continue-video').closest('.mmx-section-body').querySelector('input[type="file"]');
   Object.defineProperty(continuationFile,'files',{value:[new w.File(['video'],'ending.mp4',{type:'video/mp4'})],configurable:true});
   await continuationFile.onchange();
@@ -283,7 +283,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(graphWheel,0,'Panel scrolling cannot zoom the graph');
   assert(!scrollWheel.defaultPrevented,'Native panel scrolling remains enabled');w.document.body.removeEventListener('wheel',wheelListener);
   assert(editorRoot.querySelector('.mmx-toolbar-right').textContent.includes('Selected clips only'),'Eligibility is beside generation scheduling');
-  const filesPanel=[...editorRoot.querySelectorAll('details')].find(el=>el.querySelector(':scope > summary')?.textContent==='Files & Recovery');
+  const filesPanel=editorRoot.querySelector('.mmx-project-workspace .mmx-project-actions');
   assert.deepStrictEqual([...filesPanel.querySelectorAll('button')].map(el=>el.textContent),['New Project','Import Project','Export Project','Restore Last Autosave','Reset Timeline','Delete Saved Results'],'Routine file actions precede restore and destructive actions');
   assert.equal(filesPanel.querySelectorAll('.mmx-project-danger').length,2);
   assert(!filesPanel.textContent.includes('🗑'));
