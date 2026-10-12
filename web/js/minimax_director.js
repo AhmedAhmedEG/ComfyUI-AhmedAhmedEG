@@ -2333,6 +2333,9 @@ const embeddedCSS = `
 .mmx-director-root .mmx-clip-name-row input {width:min(300px,40vw)!important;flex:1;min-width:100px;}
 .mmx-director-root .mmx-clip-header-actions {grid-template-columns:1fr 1fr;min-width:0;gap:8px;align-self:center;}
 .mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:1/-1;}
+.mmx-director-root .mmx-clip-header-actions button {display:flex;align-items:center;justify-content:center;text-align:center;}
+.mmx-director-root .mmx-inspector-card-row {flex-wrap:wrap;}
+.mmx-director-root .mmx-inspector-header .mmx-audio-control {display:flex;align-items:center;gap:10px;white-space:nowrap;}
 @container (max-width:680px) {.mmx-director-root .mmx-inspector-header {grid-template-columns:1fr;}.mmx-director-root .mmx-clip-header-actions {grid-template-columns:repeat(3,1fr);}.mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:auto;}}
 
 `;
@@ -4174,7 +4177,7 @@ function mountDirectorUI(node) {
     titleWrap.style.cssText="display:flex;flex-direction:column;align-items:flex-start;gap:10px;flex:1;min-width:0";
     header.appendChild(titleWrap);
 
-    // Actions group in Inspector Header (Validated Toggle + Delete Clip)
+    // Clip actions; approval is available only on the timeline card.
     const headerActions = document.createElement("div");
     headerActions.className="mmx-clip-header-actions";
 
@@ -4188,7 +4191,7 @@ function mountDirectorUI(node) {
     dupShotBtn.onclick = () => duplicateClip(activeClip);
     headerActions.appendChild(dupShotBtn);
 
-    if (!activeClip.locked) for (const [offset, label] of [[-1, "Move Earlier"], [1, "Move Later"]]) {
+    if (!activeClip.locked) for (const [offset, label] of [[-1, "← Move Earlier"], [1, "Move Later →"]]) {
       const button = document.createElement("button"); button.className = "mmx-action-btn";
       button.textContent = label;
       const index = timelineState.clips.indexOf(activeClip), adjacent = timelineState.clips[index + offset];
@@ -4204,7 +4207,9 @@ function mountDirectorUI(node) {
     // ...
 
     const audioLabel = document.createElement("label");
-    audioLabel.textContent = "Clip audio: ";
+    audioLabel.textContent = "Clip Audio:";
+    audioLabel.className="mmx-audio-control";
+    audioLabel.title="Applies only to this clip. Join Fade finishes audio joins across the timeline after generation.";
     const audioMode = document.createElement("select");
     for (const [value, label] of [["generate", "Generate"], ["source", "Keep source audio"], ["mute", "Mute"]]) {
       const option = document.createElement("option"); option.value = value; option.textContent = label;
@@ -4212,7 +4217,8 @@ function mountDirectorUI(node) {
     }
     audioMode.value = activeClip.audio_mode || "generate";
     audioMode.onchange = () => { activeClip.audio_mode = audioMode.value; syncState(); };
-    audioLabel.appendChild(audioMode); inspector.appendChild(audioLabel);
+    audioMode.setAttribute("aria-label","Clip Audio");
+    audioLabel.appendChild(audioMode);
 
     const shotSections = document.createElement("div");
     shotSections.className = "mmx-shot-sections";
@@ -4472,6 +4478,7 @@ function mountDirectorUI(node) {
     durItem.appendChild(durNum);
     durItem.appendChild(durUnit);
     timingRow.appendChild(durItem);
+    timingRow.appendChild(audioLabel);
 
     const continuityPanel=document.createElement("details");continuityPanel.open=true;
     continuityPanel.hidden=!!activeClip.locked || ["V2V","RV2V","IMAGE INPAINT","INPAINT"].includes(String(activeClip.type).toUpperCase());
@@ -4912,10 +4919,7 @@ function mountDirectorUI(node) {
     // change. Tool panels scroll independently of the prompt and timeline.
     const workspace=document.createElement("div");workspace.className="mmx-edit-workspace";
     const writing=document.createElement("div");writing.className="mmx-edit-main";
-    const basic=document.createElement("div");basic.className="mmx-basic-controls";
-    audioLabel.className="mmx-audio-control";
-    basic.append(audioLabel);
-    writing.append(refsPoolWrap,promptWrap,basic);
+    writing.append(refsPoolWrap,promptWrap);
     const sourcePanel=inspector.querySelector("fieldset");
     if(sourcePanel)writing.append(sourcePanel);
     const tools=document.createElement("aside");tools.className="mmx-edit-tools"+(showToolHelp?" mmx-show-help":"");
