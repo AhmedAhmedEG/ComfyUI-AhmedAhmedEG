@@ -253,6 +253,35 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(guides[0]["image"].shape[0],39)
         self.assertIsNone(guides[0].get("audio"))
 
+    def test_independent_bypasses_tail_guides_and_carry(self):
+        clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
+               {"id":"two","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"}]
+        self.execute(clips)
+        builders=[kw for name,kw in self.native_calls if name=='MiniMaxH3ImageToVideo']
+        self.assertEqual(len(builders),2)
+        self.assertTrue(all(kw['first_frame'] is None for kw in builders))
+        self.assertFalse(any(name=='MiniMaxH3AddGuide' for name,_ in self.native_calls))
+        self.assertTrue(all(call['noise_mask'] is None for call in self.sampling_calls))
+
+    def test_tail_handoff_uses_one_image_without_motion_or_audio_guides(self):
+        clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
+               {"id":"two","type":"T2V","duration":2,"continuity_mode":"FL2VA Tail Handoff","context_length":56,"audio_context_length":56}]
+        self.execute(clips)
+        builders=[kw for name,kw in self.native_calls if name=='MiniMaxH3ImageToVideo']
+        self.assertEqual(builders[1]['first_frame'].shape[0],1)
+        self.assertFalse(any(name=='MiniMaxH3AddGuide' for name,_ in self.native_calls))
+        self.assertTrue(all(call['noise_mask'] is None for call in self.sampling_calls))
+        self.assertEqual(ProjectCacheManager('regression',self.temp.name)._manifest['clips']['two']['trim_prefix'],1)
+
+    def test_motion_context_slices_audio_independently_and_trims_borrowed_prefix(self):
+        clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
+               {"id":"two","type":"T2V","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":39,"audio_context_length":5}]
+        self.execute(clips)
+        guide=next(kw for name,kw in self.native_calls if name=='MiniMaxH3AddGuide')
+        self.assertEqual(guide['image'].shape[0],39)
+        self.assertEqual(guide['audio']['waveform'].shape[-1],round(5/24*guide['audio']['sample_rate']))
+        self.assertEqual(ProjectCacheManager('regression',self.temp.name)._manifest['clips']['two']['trim_prefix'],39)
+
     def test_master_timeline_generation_mode_overrides_config(self):
         clips=[{"id":"one","type":"T2VA","duration":1},{"id":"two","type":"T2VA","duration":1}]
         self.execute(timeline_data=json.dumps({"version":2,"project_id":"regression","generation_mode":"Next shot","clips":clips}),run_mode="full_batch")

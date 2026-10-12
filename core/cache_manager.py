@@ -12,6 +12,7 @@ import re
 import tempfile
 import threading
 import uuid
+import shutil
 from functools import wraps
 from typing import Any, Dict, List, Optional
 
@@ -341,6 +342,15 @@ class ProjectCacheManager:
     @_locked
     def clear_project_cache(self):
         """Wipe cached latents for this project."""
+        # Encoded previews are saved results too. Check the resolved directory
+        # before removing it, so a symlink cannot redirect cleanup elsewhere.
+        previews = os.path.join(self.project_dir, "previews")
+        if os.path.isdir(previews):
+            root = os.path.realpath(self.project_dir)
+            target = os.path.realpath(previews)
+            if os.path.islink(previews) or os.path.commonpath([root, target]) != root or target == root:
+                raise ValueError("Preview directory is outside this project's cache.")
+            shutil.rmtree(previews)
         for f in os.listdir(self.project_dir):
             p = os.path.join(self.project_dir, f)
             if os.path.isfile(p):

@@ -2089,7 +2089,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-generation-bar .mmx-field { display:grid;grid-template-columns:150px 200px 1fr;align-items:center; }
 .mmx-director-root .mmx-generation-mode { padding:7px;border:1px solid #849eb8;border-radius:4px;background:#202b38;color:white; }
 .mmx-director-root .mmx-shots-lane { position:relative; }
-.mmx-director-root .mmx-continuity-overlay { position:absolute;top:35px;height:24px;box-sizing:border-box;z-index:5;pointer-events:none;border:1px dashed #7ab3df;background:repeating-linear-gradient(135deg,#335e80cc 0px,#335e80cc 4px,#224765cc 4px,#224765cc 8px);color:white;font:10px ui-monospace,monospace;text-align:center;overflow:hidden; }
+.mmx-director-root .mmx-continuity-overlay { position:absolute;top:35px;height:24px;box-sizing:border-box;z-index:5;pointer-events:none;border:1px dashed #7ab3df;background:repeating-linear-gradient(135deg,#335e80cc 0px,#335e80cc 4px,#224765cc 4px,#224765cc 8px);color:white;font:10px ui-monospace,monospace;text-align:center;white-space:nowrap;overflow:visible;text-shadow:0 1px 3px #000; }
 .mmx-director-root .mmx-continuity-overlay.audio { top:63px;border-color:#b29ce6;background:repeating-linear-gradient(135deg,#645087cc 0px,#645087cc 4px,#463563cc 4px,#463563cc 8px); }
 /* Compact editing desk: timeline first, readable segment prompt below. */
 .mmx-director-root:not(.mmx-preview-node) { gap:8px; padding:8px; overflow-y:auto; }
@@ -2147,6 +2147,9 @@ const embeddedCSS = `
 .mmx-director-root .mmx-shot-top-bar .mmx-clip-mode-badge { display:inline-flex;background:#3b5367;color:#d9ebfa;font-size:10px;padding:2px 5px;border-radius:3px; }
 .mmx-director-root .mmx-add-clip-card { border-radius:5px;color:#a5b7c8; }
 .mmx-director-root .mmx-inspector { gap:14px;padding:0;background:transparent;border:0; }
+.mmx-director-root .mmx-clip-name-row { display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
+.mmx-director-root .mmx-clip-header-actions { display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:8px;align-self:center; }
+.mmx-director-root .mmx-clip-header-actions button { width:100%;min-height:38px; }
 .mmx-director-root .mmx-inspector-header { gap:10px;padding:2px 0 12px;border-bottom:1px solid #444b53; }
 .mmx-director-root .mmx-inspector-title { flex:1;gap:10px; }
 .mmx-director-root .mmx-inspector-title > span { font-size:13px!important;color:#b5c3d2!important; }
@@ -2251,6 +2254,12 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-library button:active:not(:disabled), .mmx-server-project-dialog-actions button:active:not(:disabled) { background:#263e53;box-shadow:inset 0 2px 5px #0006; }
 .mmx-director-root .mmx-project-library button:focus-visible, .mmx-server-project-dialog-actions button:focus-visible { outline:2px solid #8ab9df;outline-offset:3px; }
 .mmx-director-root .mmx-project-library button:disabled, .mmx-server-project-dialog-actions button:disabled { opacity:.65;cursor:wait; }
+.mmx-director-root .mmx-project-actions button { cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s; }
+.mmx-director-root .mmx-project-actions button:hover:not(:disabled) { background:#435d76;border-color:#8ab9df;box-shadow:0 0 12px #78b7eb33; }
+.mmx-director-root .mmx-project-actions button:active:not(:disabled) { background:#263e53;box-shadow:inset 0 2px 5px #0006; }
+.mmx-director-root .mmx-project-actions button:focus-visible { outline:2px solid #8ab9df;outline-offset:3px; }
+.mmx-director-root .mmx-project-actions button:disabled { opacity:.65;cursor:wait; }
+.mmx-director-root .mmx-project-actions button.mmx-project-danger:hover:not(:disabled) { background:#512932;border-color:#f0808d;box-shadow:0 0 16px #e45c6d55; }
 .mmx-director-root .mmx-project-feedback { flex-basis:100%;padding:9px 12px;border:1px solid #596979;border-radius:5px;background:#1d2833;color:#c9e5fa;font-size:13px; }
 .mmx-director-root .mmx-project-feedback:empty { display:none; }
 .mmx-director-root .mmx-project-feedback[data-state="success"] { color:#b6edcb;border-color:#4e9270;background:#20382c; }
@@ -2776,16 +2785,18 @@ function mountDirectorUI(node) {
   const includeMedia=document.createElement("input");includeMedia.type="checkbox";includeMedia.checked=true;
   includeMedia.className="mmx-export-media";
   exportBtn.onclick = async () => {
-    exportBtn.disabled=true;
+    if(exportBtn.disabled)return;
+    exportBtn.disabled=true;exportBtn.textContent='Exporting…';exportBtn.setAttribute('aria-busy','true');
+    showProjectFeedback('busy','Preparing Project Download…');
     try {
-      if(includeMedia.checked){await exportPortable();return;}
+      if(includeMedia.checked){await exportPortable();showProjectFeedback('success','Project Download Prepared With Source And Reference Media. Generated Results Stay On Server.');return;}
       const res = await api.fetchApi("/minimax_director/project/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           project_id: timelineState.project_id || String(node.id ?? "default_director"),
           timeline: { ...timelineState, builder_state: builderWidget?.value || "{}" },
-          name: "MiniMaxProject",
+          name: timelineState.project_name || "MiniMaxProject",
         }),
       });
       const data = await res.json();
@@ -2798,10 +2809,11 @@ function mountDirectorUI(node) {
         a.download = `minimax_project_${Date.now()}.mmxproj.json`;
         a.click();
         URL.revokeObjectURL(url);
+        showProjectFeedback('success','Project JSON Download Prepared. Media And Generated Results Stay On Server.');
       }
     } catch (err) {
-      alert("Failed to export project: " + err);
-    } finally { exportBtn.disabled=false; }
+      showProjectFeedback('error',`Export Failed: ${err.message}`);
+    } finally { exportBtn.disabled=false;exportBtn.textContent='Export Project';exportBtn.removeAttribute('aria-busy'); }
   };
 
 
@@ -2810,14 +2822,22 @@ function mountDirectorUI(node) {
   importBtn.textContent = "Import Project";importBtn.dataset.projectAction="import";
   importBtn.title = "Load a JSON timeline or a portable archive; choose append or overwrite.";
   importBtn.onclick = () => {
+    if(importBtn.disabled)return;
+    showProjectFeedback('busy','Choose A Project File To Import.');
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = ".json,.mmxproj,.zip";
+    fileInput.oncancel=()=>showProjectFeedback('idle','Import Cancelled.');
     fileInput.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      const policy = prompt("Import policy: append or overwrite", "overwrite");
+      if(!policy){showProjectFeedback('idle','Import Cancelled.');return;}
+      if(!['append','overwrite'].includes(policy)){showProjectFeedback('error','Import Policy Must Be append Or overwrite.');return;}
+      importBtn.disabled=true;importBtn.textContent='Importing…';importBtn.setAttribute('aria-busy','true');
+      showProjectFeedback('busy','Importing Project…');
       try {
-        if(!file.name.toLowerCase().endsWith(".json")){await importPortable(file);return;}
+        if(!file.name.toLowerCase().endsWith(".json")){await importPortable(file,policy);showProjectFeedback('success','Project Imported With Media. Generated Results Are Not Included In Portable Archives.');return;}
         const text = await file.text();
         const projectData = JSON.parse(text);
         const res = await api.fetchApi("/minimax_director/project/import", {
@@ -2828,7 +2848,6 @@ function mountDirectorUI(node) {
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Project import failed");
         if (data.ok && data.timeline) {
-          const policy = prompt("Import policy: append or overwrite", "overwrite"); if (!policy) return;
           const merged = await requestJson("/minimax_director/project/merge", {current:timelineState,incoming:data.timeline,policy});
           timelineState = merged.timeline;
           if (timelineState.builder_state !== undefined) builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state;
@@ -2841,11 +2860,12 @@ function mountDirectorUI(node) {
           }
           refreshFileRefs(); syncState();
           activeClipId=timelineState.clips?.[0]?.id;renderTimeline();
-          alert("Project imported successfully!");
+          showProjectFeedback('success','Project Imported. Existing Results Reconnect Only When They Exist On This Server.');
         }
       } catch (err) {
-        alert("Failed to import project: " + err);
+        showProjectFeedback('error',`Import Failed: ${err.message}`);
       }
+      finally{importBtn.disabled=false;importBtn.textContent='Import Project';importBtn.removeAttribute('aria-busy');}
     };
     fileInput.click();
   };
@@ -2981,8 +3001,9 @@ function mountDirectorUI(node) {
           const timeline=JSON.stringify(project.timeline),builder=typeof project.timeline.builder_state==='string'
             ? project.timeline.builder_state : JSON.stringify(project.timeline.builder_state || {});
           master.widgets_values_named={...master.widgets_values_named,timeline_data:timeline,builder_state:builder};
-          master.widgets_values_named.generation_mode=timelineState.generation_mode;
-          master.widgets_values=[timelineState.generation_mode,timeline,builder];
+          const savedMode={"Next shot":"Next clip","All shots":"All clips"}[project.timeline.generation_mode] || project.timeline.generation_mode || 'Next clip';
+          master.widgets_values_named.generation_mode=savedMode;
+          master.widgets_values=[savedMode,timeline,builder];
           const filename=`MiniMax Project ${project.name.replace(/[\\/:*?"<>|]/g,'_')} ${project.project_id}.json`;
           const opened=await app.loadGraphData(workflow,true,true,filename);
           if(opened===false)throw new Error('ComfyUI could not open this project. Check the workflow loading error.');
@@ -3012,11 +3033,18 @@ function mountDirectorUI(node) {
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];
     if(label==="Delete Saved Results")button.classList.add("mmx-project-danger");
     button.title=({"Delete Saved Results":"Delete cached generations, saved takes and the last autosave for this project. Keep the current timeline and uploaded references.","Restore Last Autosave":"Replace the current timeline with the snapshot saved after the last generated clip. Does not resume rendering.","New Project":"Start a blank timeline with a new project ID and fresh shared/audio settings. Existing server-side saved results are kept."})[label] || label;
-    button.onclick = async () => { button.disabled = true; try { await handler(); } catch (error) { alert(error.message); } finally { button.disabled = false; } };
+    button.onclick = async () => {
+      if(button.disabled)return;
+      button.disabled=true;button.textContent=({"Delete Saved Results":"Deleting…","Restore Last Autosave":"Restoring…","New Project":"Creating…"})[label] || `${label}…`;button.setAttribute('aria-busy','true');
+      showProjectFeedback('busy',`${label}…`);
+      try{const changed=await handler();showProjectFeedback(changed===false?'idle':'success',changed===false?`${label} Cancelled.`:({"Delete Saved Results":"Saved Results And Previews Deleted. Timeline And Uploaded References Kept.","Restore Last Autosave":"Last Generated Timeline Snapshot Restored. Rendering Has Not Started.","New Project":"New Unsaved Project Created. Previous Saved Results Kept."})[label]);}
+      catch(error){showProjectFeedback('error',`${label} Failed: ${error.message}`);}
+      finally{button.disabled=false;button.textContent=label;button.removeAttribute('aria-busy');}
+    };
     projectTools.appendChild(button);
   };
   addProjectAction("Delete Saved Results", async () => {
-    if (!confirm("Delete this project's cached generations, saved takes and last autosave? The current timeline and uploaded references are kept.")) return;
+    if (!confirm("Delete this project's cached generations, saved takes and last autosave? The current timeline and uploaded references are kept.")) return false;
     await requestJson("/minimax_director/project/clear_cache", {project_id: timelineState.project_id});
     timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();
   });
@@ -3027,13 +3055,12 @@ function mountDirectorUI(node) {
     const link = document.createElement("a"); link.href = url; link.download = "MiniMaxProject.mmxproj"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const importPortable=async(file)=>{
+  const importPortable=async(file,policy)=>{
         const data = new FormData(); data.append("project", file);
         const response = await api.fetchApi("/minimax_director/project/portable/import", { method: "POST", body: data });
         const result = await response.json(); if (!response.ok) throw new Error(result.error || "Import failed");
-        const policy = prompt("Import policy: append or overwrite", "append"); if (!policy) return;
         const merged = await requestJson("/minimax_director/project/merge", { current: timelineState, incoming: result.timeline, policy });
-        timelineState = { ...merged.timeline, project_id: timelineState.project_id };
+        timelineState = merged.timeline;
         if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
         builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state || builderState;activeClipId=timelineState.clips?.[0]?.id; refreshFileRefs(); syncState(); renderTimeline();
   };
@@ -3134,7 +3161,8 @@ function mountDirectorUI(node) {
       playheadSeconds = 0.0;
       syncState();
       renderTimeline();
-    }
+      showProjectFeedback('success','Timeline Reset To One Blank Clip. Saved Results And Project Settings Kept.');
+    }else{showProjectFeedback('idle','Reset Timeline Cancelled.');}
   };
   projectTools.appendChild(clearBtn);
 
@@ -3655,14 +3683,17 @@ function mountDirectorUI(node) {
     let elapsed=0;
     timelineState.clips.forEach((clip,index)=>{
       const method=clip.continuity_mode || "Independent (No Continuity)";
-      if (index>0 && clip.continuity!==false && !clip.locked && !clip.source && !clip.continuation_source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
-        const priorFrames=Math.floor((Number(timelineState.clips[index-1].duration)||5)*24);
+      if ((index>0 || clip.continuation_source) && clip.continuity!==false && !clip.locked && !clip.source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
+        const external=!!clip.continuation_source;
+        const priorDuration=external?Number(clip.continuation_source.end || 0):Number(timelineState.clips[index-1].duration || 5);
+        const rawFrames=Math.floor(priorDuration*24);
+        const priorFrames=external || timelineState.clips[index-1]?.source?rawFrames:Math.max(5,5+Math.ceil((rawFrames-5)/17)*17);
         const grid=[56,39,22,5].find(count=>count<=priorFrames && count<=Number(clip.context_length || 22)) || 0;
         const video=method==="FL2VA Tail Handoff"?1:grid;
         const audio=method==="FL2VA Tail Handoff"?0:Math.min(video,Number(clip.audio_context_length ?? video));
         for (const [kind,frames] of [["video",video],["audio",audio]]) if (frames>0) {
-          const overlay=document.createElement("div");overlay.className=`mmx-continuity-overlay ${kind}`;overlay.dataset.start=elapsed;overlay.dataset.frames=frames;
-          overlay.textContent=`${kind==='video'?'V':'A'} ${frames}f`;overlay.title=`${clip.name || 'Clip '+(index+1)} borrows ${(frames/24).toFixed(2)}s of ${kind} context`;shotsLane.append(overlay);
+          const overlay=document.createElement("div");overlay.className=`mmx-continuity-overlay ${kind}`;overlay.dataset.start=external?elapsed+frames/24:elapsed;overlay.dataset.frames=frames;overlay.dataset.external=String(external);
+          overlay.textContent=`${kind==='video'?'V':'A'} ${(frames/24).toFixed(2)}s`;overlay.title=`${clip.name || 'Clip '+(index+1)} uses ${(frames/24).toFixed(2)}s of ${kind} context from ${external ? "an external video" : "the preceding clip"}`;shotsLane.append(overlay);
         }
       }
       elapsed+=Number(clip.duration)||5;
@@ -4085,7 +4116,8 @@ function mountDirectorUI(node) {
     shotLabel.style.color = "#94a3b8";
     const clipIdx = timelineState.clips.indexOf(activeClip) + 1;
     shotLabel.textContent = "Clip:";
-    titleWrap.appendChild(shotLabel);
+    const nameRow=document.createElement("div");nameRow.className="mmx-clip-name-row";
+    nameRow.appendChild(shotLabel);
 
     const nameInput = document.createElement("input");
     nameInput.style.background = "var(--comfy-input-bg, #333333)";
@@ -4103,7 +4135,7 @@ function mountDirectorUI(node) {
       const cardTitle = shotsLane.querySelector(".mmx-subtrack-block.active .mmx-clip-title");
       if (cardTitle) cardTitle.textContent = activeClip.name;
     };
-    titleWrap.appendChild(nameInput);
+    nameRow.appendChild(nameInput);
 
     const clipTypeLabel = document.createElement("span");
     clipTypeLabel.className = "mmx-clip-type-label";
@@ -4121,16 +4153,13 @@ function mountDirectorUI(node) {
     clipTypeLabel.textContent=modes.find(mode=>mode.id===displayType)?.label || activeClip.type;
     clipTypeLabel.dataset.type=activeClip.type;
     clipTypeLabel.title="Clip type is fixed. Use Add Clip to create a clip with a different type.";
-    titleWrap.appendChild(clipTypeLabel);
-    titleWrap.style.cssText="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1";
+    nameRow.appendChild(clipTypeLabel);titleWrap.appendChild(nameRow);
+    titleWrap.style.cssText="display:flex;flex-direction:column;align-items:flex-start;gap:10px;flex:1;min-width:0";
     header.appendChild(titleWrap);
 
     // Actions group in Inspector Header (Validated Toggle + Delete Clip)
     const headerActions = document.createElement("div");
-    headerActions.style.display = "flex";
-    headerActions.style.alignItems = "center";
-    headerActions.style.gap = "8px";
-    headerActions.style.flexWrap = "wrap";
+    headerActions.className="mmx-clip-header-actions";
 
 
 
@@ -4394,21 +4423,13 @@ function mountDirectorUI(node) {
     durLabel.textContent = "Duration:";
     durItem.appendChild(durLabel);
 
-    const durSlider = document.createElement("input");
-    durSlider.type = "range";
-    durSlider.min = "0.5";
-    durSlider.max = "30.0";
-    durSlider.step = "0.1";
-    durSlider.value = String(activeClip.duration || 5.0);
-    durSlider.style.width = "75px";
-
     const durNum = document.createElement("input");
     durNum.type = "number";
     durNum.min = "0.5";
     durNum.max = "60.0";
     durNum.step = "0.1";
     durNum.value = String(activeClip.duration || 5.0);
-    durNum.style.width = "56px";
+    durNum.style.width = "140px";
     durNum.style.background = "var(--comfy-input-bg, #333333)";
     durNum.setAttribute("aria-label","Clip Duration");
     durNum.style.border = "1px solid var(--border-color, #4a4a4a)";
@@ -4421,49 +4442,19 @@ function mountDirectorUI(node) {
     durUnit.className = "mmx-ctrl-unit";
     durUnit.textContent = "s";
 
-    const durFramesBadge = document.createElement("span");
-    durFramesBadge.style.fontSize = "10px";
-    durFramesBadge.style.color = "#94a3b8";
-    durFramesBadge.style.marginLeft = "2px";
-    durFramesBadge.textContent = `(${Math.round((activeClip.duration || 5.0) * 24)}f)`;
-
-    ["mousedown", "pointerdown", "touchstart"].forEach((evt) => {
-      durSlider.addEventListener(evt, (e) => e.stopPropagation());
-      durNum.addEventListener(evt, (e) => e.stopPropagation());
-    });
-
-    durSlider.oninput = () => {
-      const v = Math.max(0.5, Math.min(60.0, parseFloat(durSlider.value) || 5.0));
-      activeClip.duration = v; activeClip.validated = false;
-      durNum.value = String(v);
-      durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
-      const activeBlock = shotsLane.querySelector(`.mmx-subtrack-block.active`);
-      if (activeBlock) {
-        const baseW = v * timelineGeometry().pxPerSec - 4;
-        activeBlock.style.width = `${baseW}px`;
-      }
-    };
-
-    durSlider.onchange = () => {
-      syncState();
-      renderTimeline();
-      drawRuler();
-    };
+    ["mousedown", "pointerdown", "touchstart"].forEach(evt => durNum.addEventListener(evt, e => e.stopPropagation()));
 
     durNum.onchange = () => {
       const v = Math.max(0.5, Math.min(60.0, parseFloat(durNum.value) || 5.0));
       activeClip.duration = v; activeClip.validated = false;
-      durSlider.value = String(v);
-      durFramesBadge.textContent = `(${Math.round(v * 24)}f)`;
+      durNum.value = String(v);
       syncState();
       renderTimeline();
       drawRuler();
     };
 
-    durItem.appendChild(durSlider);
     durItem.appendChild(durNum);
     durItem.appendChild(durUnit);
-    durItem.appendChild(durFramesBadge);
     timingRow.appendChild(durItem);
 
     const continuityPanel=document.createElement("details");continuityPanel.open=true;
@@ -4473,20 +4464,23 @@ function mountDirectorUI(node) {
     const continuityMode=document.createElement("select");continuityMode.className="mmx-shot-continuity-mode";
     for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method;continuityMode.append(option);}
     continuityMode.value=activeClip.continuity_mode || "Independent (No Continuity)";
-    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;activeClip.validated=false;syncState();renderTimeline();};
+    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;activeClip.audio_context_length=Math.min(Number(activeClip.audio_context_length ?? activeClip.context_length),Number(activeClip.context_length));activeClip.validated=false;syncState();renderTimeline();};
     continuityMode.onchange=commitContinuity;
     continuityPanel.append(field("Method",continuityMode,"Independent starts fresh. Motion guides new sampling with decoded frames. Latent Carry pins previous latent data. FL2VA hands off one final frame."));
-    for (const [key,title,choices,fallback] of [["context_length","Video context (frames)",[5,22,39,56],22],["audio_context_length","Audio context (frames)",[0,5,22,39,56],22]]) {
+    if([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) for (const [key,title,choices,fallback] of [["context_length","Video Context (Seconds)",[5,22,39,56],22],["audio_context_length","Audio Context (Seconds)",[0,5,22,39,56],22]]) {
       const input=document.createElement("select");input.className="mmx-shot-"+key;
-      for (const value of choices){const option=document.createElement("option");option.value=value;option.textContent=value===0?"Off":`${value} frames · ${(value/24).toFixed(2)} s`;input.append(option);}
-      input.value=activeClip[key] ?? fallback;input.disabled=!!activeClip.locked || [continuityModes[0],continuityModes[3]].includes(continuityMode.value);
+      for (const value of choices){const option=document.createElement("option");option.value=value;option.textContent=value===0?"Off":`${(value/24).toFixed(2)} s`;option.disabled=key==='audio_context_length' && value>Number(activeClip.context_length || 22);input.append(option);}
+      input.value=key==='audio_context_length'?Math.min(Number(activeClip[key] ?? fallback),Number(activeClip.context_length || 22)):activeClip[key] ?? fallback;input.disabled=!!activeClip.locked || [continuityModes[0],continuityModes[3]].includes(continuityMode.value);
       input.onchange=()=>{activeClip[key]=Number(input.value);commitContinuity();};
       continuityPanel.append(field(title,input,key==="audio_context_length"?"Audio context is capped at the video context. No previous audio means no audio carry.":"Context is sampled before the new clip and removed from its delivered frames."));
     }
     if (continuityMode.value===continuityModes[2]){
-      const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="1";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
+      const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="0.95";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
       redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Seam redraw strength",redraw,"0 pins the seam most strongly; 1 permits full redraw."));
     }
+    if(continuityMode.value===continuityModes[0]) {
+      const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);
+    } else {
     const continueFile=document.createElement("input");continueFile.type="file";continueFile.accept="video/*";continueFile.hidden=true;
     const continueButton=document.createElement("button");continueButton.className="mmx-continue-video";
     continueButton.textContent=activeClip.continuation_source?"Replace continuation video":"Continue from video";
@@ -4517,9 +4511,13 @@ function mountDirectorUI(node) {
       const remove=document.createElement("button");remove.textContent="Use previous timeline clip";
       remove.onclick=()=>{delete activeClip.continuation_source;commitContinuity();};chosen.append(title,player,remove);continuityPanel.append(chosen);
     }
+    }
+    if(continuityMode.value===continuityModes[3]) {
+      const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Uses one final image (0.04 s) from the context source. Audio context is off. No context-length settings apply.';continuityPanel.append(note);
+    }
     continuityMode.disabled=!!activeClip.locked;
     shotSections.prepend(continuityPanel);
-    finishSection(continuityPanel,timelineState.clips.indexOf(activeClip)===0?"Choose a video below to continue from its ending, or use the preceding timeline clip. Context is removed from the newly generated output.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
+    finishSection(continuityPanel,continuityMode.value===continuityModes[0]?"Independent clips borrow no video or audio context.":timelineState.clips.indexOf(activeClip)===0?"Choose a video below to continue from its ending, or use the preceding timeline clip. Context is removed from the newly generated output.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
     titleWrap.appendChild(timingRow);
 
     // Seed controls in the clip header.

@@ -54,6 +54,24 @@ class ServerProjects(unittest.TestCase):
         self.assertEqual(self.store.load("project_a")["revision"], second["revision"])
         self.assertEqual(len(self.store.list()), 1)
 
+    def test_delete_results_removes_takes_autosave_and_previews_only(self):
+        cache = ProjectCacheManager("project_a", str(self.root / "cache"))
+        directory = Path(cache.project_dir)
+        (directory / "clip_one_latent.pt").write_bytes(b"latent")
+        (directory / "autosave.json").write_text('{}')
+        previews = directory / "previews"
+        previews.mkdir()
+        (previews / "preview.mp4").write_bytes(b"video")
+        sibling = ProjectCacheManager("project_b", str(self.root / "cache"))
+        untouched = Path(sibling.project_dir) / "clip_other_latent.pt"
+        untouched.write_bytes(b"other project")
+        self.save()
+        cache.clear_project_cache()
+        self.assertEqual(sorted(p.name for p in directory.iterdir()), ["manifest.json"])
+        self.assertEqual(cache._manifest["clips"], {})
+        self.assertEqual(untouched.read_bytes(), b"other project")
+        self.assertEqual(self.store.load("project_a")["name"], "My Film")
+
     def test_multiple_projects_same_names_remain_distinct(self):
         self.save(); self.save("project_b")
         self.assertEqual({row["project_id"] for row in self.store.list()}, {"project_a", "project_b"})
