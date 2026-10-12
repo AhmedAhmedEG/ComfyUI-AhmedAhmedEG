@@ -771,6 +771,16 @@
           "name": "audio_2",
           "type": "AUDIO",
           "link": null
+        },
+        {
+          "name": "video_1_audio",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "video_2_audio",
+          "type": "AUDIO",
+          "link": null
         }
       ],
       "outputs": [
@@ -797,7 +807,9 @@
         "",
         "",
         "None",
-        "None"
+        "None",
+        24.0,
+        24.0
       ],
       "widgets_values_named": {
         "image_1_name": "",
@@ -811,7 +823,9 @@
         "refmod_1_name": "",
         "refmod_2_name": "",
         "refmod_1": "None",
-        "refmod_2": "None"
+        "refmod_2": "None",
+        "video_1_fps": 24.0,
+        "video_2_fps": 24.0
       }
     },
     {

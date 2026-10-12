@@ -133,12 +133,27 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(!w.document.querySelector('.mmx-continue-video'),'Continuity only uses preceding timeline clips');
   assert([...w.document.querySelector('.mmx-shot-continuity-mode').options].every(option=>!option.textContent.includes('(')));
   const freshMethod=w.document.querySelector('.mmx-shot-continuity-mode');freshMethod.value='Independent (No Continuity)';freshMethod.onchange();
-  const videoImport=w.document.querySelector('.mmx-video-import-file');
-  Object.defineProperty(videoImport,'files',{value:[new w.File(['video'],'existing.mp4',{type:'video/mp4'})],configurable:true});
-  await videoImport.onchange();
-  const imported=JSON.parse(timeline.value).clips[1];assert(imported.locked && imported.type==='V2V');
-  assert.equal(imported.source.filename,'minimax_assets/tail.mp4');
-  assert.equal(imported.duration,60);
+  const previousLookup=w.app.graph.getNodeById;
+  const videoSlot=refPool.inputs.find(row=>row.name==='video_1');videoSlot.link=12;
+  const secondVideo={name:'video_2',link:13};refPool.inputs.push(secondVideo);
+  w.app.graph.links[12]={origin_id:22};w.app.graph.links[13]={origin_id:23};
+  w.app.graph.getNodeById=id=>id===22 ? {id:22,type:'LoadVideo',widgets:[{name:'video',value:'existing.mp4'}]} : id===23 ? {id:23,type:'LoadVideo',widgets:[{name:'video',value:'other.mp4'}]} : previousLookup(id);
+  node.__mmxDirectorRefresh();
+  w.document.querySelector('.mmx-add-clip-card').click();w.document.querySelector('[data-type="VIDEO"]').click();
+  assert(!w.document.querySelector('.mmx-video-import-file'),'No video upload widget exists');
+  let pool=w.document.querySelector('.mmx-local-refs-pool');
+  assert.equal(pool.querySelectorAll('[data-ref-id]').length,2,'Existing video filters out images');
+  await pool.querySelector('[data-ref-id="video_1"]').onclick();
+  let imported=JSON.parse(timeline.value).clips.at(-1);
+  assert(imported.locked && imported.type==='V2V');assert.equal(imported.source.ref_id,'video_1');assert.equal(imported.duration,60);
+  assert.deepStrictEqual(imported.ref_ids,['video_1']);
+  await w.document.querySelector('[data-ref-id="video_2"]').onclick();
+  imported=JSON.parse(timeline.value).clips.at(-1);
+  assert.deepStrictEqual(imported.ref_ids,['video_2'],'A single-video clip replaces rather than accumulates sources');
+  assert.equal(imported.source.ref_id,'video_2');
+  assert.equal(w.document.querySelector('.mmx-clip-type-label').textContent,'VIDEO');
+  assert.equal([...w.document.querySelectorAll('fieldset')].find(row=>row.querySelector('legend')?.textContent==='Source video range').querySelectorAll('select').length,0,'Source has no duplicate dropdown');
+  videoSlot.link=null;refPool.inputs.pop();delete w.app.graph.links[12];delete w.app.graph.links[13];w.app.graph.getNodeById=previousLookup;
   timeline.value=JSON.stringify(initial);node.__mmxDirectorRefresh();
   assert.strictEqual(w.document.querySelector('.mmx-project-workspace'),globalProject,'Clip changes keep the same project configuration DOM');
   assert(globalProject.open,'Project expansion survives a clip refresh');
@@ -284,7 +299,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(newClip.selected,false,'New clips are unchecked by default');
   assert.equal(newClip.type,'T2V');assert.deepStrictEqual(newClip.ref_ids,[],'New clips do not inherit incompatible references');
   assert.equal(JSON.parse(timeline.value).clips[0].type,initial.clips[0].type,'Adding a new task type preserves the original clip');
-  assert(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('Text to Video'));
+  assert(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('T2V'));
   assert(editorRoot.querySelector('.mmx-local-refs-pool').hidden,'Text-only clips do not offer references');
   assert.strictEqual(problems.length,0,problems.join('\n'));
   assert.equal(editorRoot.querySelector('.mmx-smart-preview'),null,'Preview is a separate node');
@@ -303,7 +318,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(selectBox.closest('.mmx-shot-block').classList.contains('generation-selected'),'Checked clips turn green');
   assert.equal(editorRoot.querySelector('.mmx-playhead-needle').style.height,'auto','Playhead does not inflate timeline scroll height');
   assert.equal(JSON.parse(timeline.value).clips[0].selected,true);
-  assert.equal(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('Text to Video'),true,'Checking another clip does not switch the inspected clip');
+  assert.equal(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('T2V'),true,'Checking another clip does not switch the inspected clip');
   timeline.value=timeline.value;node.__mmxDirectorRefresh();
   assert(editorRoot.querySelector('.mmx-clip-selection input').checked,'Explicit selections survive refresh');
   editorRoot.querySelector('.mmx-clip-selection input').click();
@@ -311,18 +326,18 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const beforeVideoImport=timeline.value;
   editorRoot.querySelector('.mmx-add-clip-card').click();
   const importChoice=w.document.querySelector('.mmx-type-modal-btn[data-action="import-video"]');
-  assert.equal(importChoice.querySelector('.mmx-type-modal-btn-title').textContent,'Add Existing Video');
-  assert.equal(w.document.querySelectorAll('.mmx-type-modal-btn .mmx-clip-mode-badge').length,0,'Picker options use consistent plain titles');
+  assert(importChoice.querySelector('.mmx-type-modal-btn-title').textContent.includes('Add Existing Video'));
+  assert.equal(w.document.querySelectorAll('.mmx-type-modal-btn .mmx-clip-mode-badge').length,9,'Every picker option has a colored code');
   assert.equal(w.document.querySelectorAll('.mmx-picker-heading').length,3);
   if(process.env.MMX_PROJECT_AUDIT_CAPTURE)fs.writeFileSync('.validation/clip-picker-audit.html',`<!doctype html><meta charset="utf-8"><style>body{background:#14171b;color:#ecedf0;font:14px Arial}</style>${w.document.head.innerHTML}${w.document.querySelector('[aria-label="Add Clip"]').parentElement.outerHTML}`);
   assert(importChoice,'Import video is offered alongside generated clip types');
-  const videoUpload=editorRoot.querySelector('.mmx-video-import-file');let pickerOpened=false;
-  videoUpload.click=()=>{pickerOpened=true;};importChoice.click();assert(pickerOpened);
-  Object.defineProperty(videoUpload,'files',{value:[new w.File(['test'],'source.mp4',{type:'video/mp4'})],configurable:true});
-  await videoUpload.onchange();
+  assert.equal(editorRoot.querySelector('.mmx-video-import-file'),null,'Add Clip never opens a local upload');
+  importChoice.click();
   const importedVideo=JSON.parse(timeline.value).clips.at(-1);
-  assert(importedVideo.locked && importedVideo.type==='V2V');assert.equal(importedVideo.duration,60);
-  assert.equal(importedVideo.selected,false,'Imported footage starts unchecked');
+  assert(importedVideo.locked && importedVideo.type==='V2V');
+  assert.equal(importedVideo.source,undefined,'The user chooses a pack video after creating the clip');
+  assert.equal(editorRoot.querySelector('.mmx-clip-type-label').textContent,'VIDEO');
+  assert.equal(importedVideo.selected,false,'Existing footage starts unchecked');
   timeline.value=beforeVideoImport;node.__mmxDirectorRefresh();
   [...editorRoot.querySelectorAll('.mmx-shot-block')].at(-1).click();
   let graphWheel=0;const wheelListener=()=>graphWheel++;w.document.body.addEventListener('wheel',wheelListener);
@@ -488,7 +503,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(afterReset.shared_prompt,beforeReset.shared_prompt,'Reset Timeline preserves the shared prompt');
   timeline.value=JSON.stringify(beforeReset);node.__mmxDirectorRefresh();
   [...editorRoot.querySelectorAll('.mmx-shot-block')].at(-1).click();
-  assert.equal(editorRoot.querySelectorAll('input[type="file"]').length,1,'Independent hides continuation upload; video import remains');
+  assert.equal(editorRoot.querySelectorAll('input[type="file"]').length,0,'Clips never offer a file upload');
   const quick=[...editorRoot.querySelectorAll('.mmx-quick-tag-btn')].map(el=>el.textContent);
   assert.equal(quick.length,0,'No reference tokens are offered for an unassigned draft shot');
   assert(!quick.some(text=>text.includes('<Video') || text.includes('<Audio') || text.includes('<Picture 2>')));
@@ -514,7 +529,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   sourceNode.__mmxDirectorRefresh();
   const lockedRange=[...w.document.querySelectorAll('fieldset')].find(el=>el.querySelector('legend')?.textContent==='Source video range');
   assert(lockedRange,'Locked source inspector renders without referencing a removed upload control');
-  assert([...lockedRange.querySelectorAll('input,button,select')].every(el=>el.disabled));
+  assert([...lockedRange.querySelectorAll('input')].every(el=>!el.disabled),'Existing footage can be trimmed without changing its type');
   const videoSizing=w.document.querySelector('.mmx-video-input-resolution select');
   assert(!videoSizing.disabled,'Locked footage still permits model-input budget configuration');
   videoSizing.value='megapixels';videoSizing.onchange();
@@ -534,5 +549,38 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(migratedLegacy.clips[0].source.filename,'tail.mp4');
   assert(!migratedLegacy.clips[1].continuation_source);
   sourceNode.onRemoved();assert.strictEqual(listeners.size,0);
+  // A large connected pool must stay unrestricted globally but obey clip-local contracts.
+  const auditGraph=new Map();w.app.graph.links={};let linkId=1000,loaderId=2000;
+  const packs=Array.from({length:3},(_,i)=>({id:100+i,type:'MiniMaxH3RefPack',widgets:[],inputs:[]}));
+  for(let p=0;p<3;p++) {
+    for(const [kind,count] of [['image',p===2?1:4],['video',p===0?2:p===1?1:0],['audio',p===0?2:p===1?1:0]]) {
+      for(let index=1;index<=count;index++) {
+        const id=loaderId++,link=linkId++;packs[p].inputs.push({name:`${kind}_${index}`,link});
+        w.app.graph.links[link]={origin_id:id};auditGraph.set(id,{id,type:'Loader',widgets:[{name:kind,value:`asset_${id}.${kind==='image'?'png':kind==='video'?'mp4':'wav'}`}]});
+      }
+    }
+    if(p) {const link=linkId++;packs[p].inputs.push({name:'ref_pack_optional',link});w.app.graph.links[link]={origin_id:packs[p-1].id};}
+    auditGraph.set(packs[p].id,packs[p]);
+  }
+  w.app.graph.getNodeById=id=>auditGraph.get(id);const poolLink=linkId++;w.app.graph.links[poolLink]={origin_id:102};
+  const contractTimeline={name:'timeline_data',value:JSON.stringify({project_id:'contract_ui',clips:[{id:'initial',type:'T2V',duration:5}]})};
+  const contractNode={...node,id:99,widgets:[contractTimeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],inputs:[{name:'ref_pack',link:poolLink}],__mmxDirectorMounted:false,__mmxDisposed:false,__mmxShotListener:null,__mmxRefObserver:null,__mmxRefObserverSets:null,onRemoved:null};
+  w.extension.nodeCreated(contractNode);await new Promise(resolve=>setTimeout(resolve,40));
+  const contractRoot=contractNode.widgets.find(widget=>widget.name==='master_director_ui').element;
+  for(const [type,visible,max] of [['VIDEO',3,1],['T2V',0,0],['I2V',9,1],['FL2V',9,2],['L2VA',9,1],['Image Inpaint',9,1],['V2V',3,1],['REF2VA',15,12],['RV2V',15,12]]) {
+    contractRoot.querySelector('.mmx-add-clip-card').click();w.document.querySelector(`.mmx-type-modal-btn[data-type="${type}"]`).click();
+    let pool=contractRoot.querySelector('.mmx-local-refs-pool');assert.equal(pool.querySelectorAll('[data-ref-id]').length,visible,type+' filters asset types');
+    assert.equal(pool.hidden,visible===0);
+    for(const id of [...pool.querySelectorAll('[data-ref-id]')].map(item=>item.dataset.refId)) {
+      const current=contractRoot.querySelector(`[data-ref-id="${id}"]`);if(!current.disabled)await current.onclick();
+    }
+    const state=JSON.parse(contractTimeline.value),clip=state.clips.at(-1);
+    assert.equal(clip.ref_ids.length,max,type+' enforces its limit');
+    assert.equal(clip.selected,false);
+    if(type==='RV2V')assert(clip.source.ref_id && clip.ref_ids.includes(clip.source.ref_id));
+    assert(contractRoot.querySelector('.mmx-clip-type-label').className.includes('mmx-badge-'),'Header uses colored code');
+    assert(!contractRoot.querySelector('input[type="file"]'));
+  }
+  contractNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, editable timecode, persistent zoom, file continuation, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

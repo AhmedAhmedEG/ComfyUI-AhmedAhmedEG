@@ -227,7 +227,7 @@ class ProjectCacheManager:
         self,
         clip_id: str,
         fingerprint: str,
-        latent_dict: Dict[str, Any],
+        latent_dict: Optional[Dict[str, Any]],
         audio_dict: Optional[Dict[str, Any]] = None,
         decoded_frames: Optional[torch.Tensor] = None,
         validated: bool = True,
@@ -237,11 +237,12 @@ class ProjectCacheManager:
         self._manifest = self._load_manifest()
         generation = uuid.uuid4().hex
         latent_path = self._clip_artifact_path(clip_id, "latent", generation)
-        from .continuity import unpack_av_samples
-        streams, nested = unpack_av_samples(latent_dict["samples"])
-        portable = dict(latent_dict)
-        portable["samples"] = tuple(s.cpu() for s in streams) if nested else streams[0].cpu()
-        self._atomic_save(portable_tree(portable), latent_path)
+        if latent_dict is not None:
+            from .continuity import unpack_av_samples
+            streams, nested = unpack_av_samples(latent_dict["samples"])
+            portable = dict(latent_dict)
+            portable["samples"] = tuple(s.cpu() for s in streams) if nested else streams[0].cpu()
+            self._atomic_save(portable_tree(portable), latent_path)
 
         if audio_dict is not None:
             audio_path = self._clip_artifact_path(clip_id, "audio", generation)
@@ -261,6 +262,7 @@ class ProjectCacheManager:
             "validated": bool(validated),
             "updated_at": time.time(),
             "has_audio": audio_dict is not None,
+            "has_latent": latent_dict is not None,
             "has_frames": decoded_frames is not None,
             "width": int(decoded_frames.shape[2]) if decoded_frames is not None else None,
             "height": int(decoded_frames.shape[1]) if decoded_frames is not None else None,

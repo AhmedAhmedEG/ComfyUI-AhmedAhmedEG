@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -466,7 +467,7 @@ class MiniMaxH3MasterDirector:
                 if clip_active_model is None:
                     raise ValueError(f"Unknown shot model override: {clip_item['model_override']}")
             if execution_mode != "Conditioning Guide Output" and clip_active_model is None and not clip_item.get("locked"):
-                needed_type = "fl2va_model" if canon_mode in ("FL2VA", "I2VA", "L2VA", "T2VA") else "ref2va_model"
+                needed_type = f"{get_required_model_type(canon_mode)}_model"
                 raise ValueError(
                     f"MiniMaxH3MasterDirector: Shot {clip_idx + 1} ({clip_type} -> {canon_mode}) requires a model, "
                     f"but neither '{needed_type}' nor 'model' was connected."
@@ -478,17 +479,23 @@ class MiniMaxH3MasterDirector:
             local_auds = []
             local_video_audios = {}
             seen_refs = set()
+            source_ref_id = (clip_item.get("source") or {}).get("ref_id") if isinstance(clip_item.get("source"), dict) else None
+            if canon_mode in ("V2V", "RV2V") and not clip_item.get("source"):
+                source_ref_id = next((rid for rid in clip_ref_ids if ref_pool.get(rid, {}).get("type") == "video"), None)
+                if source_ref_id:
+                    clip_item["source"] = {"ref_id": source_ref_id}
+            source_ref = ref_pool.get(source_ref_id) if source_ref_id else None
             for rid in clip_ref_ids:
-                if canon_mode == "T2VA":
-                    continue
                 robj = ref_pool.get(rid)
                 if not robj:
                     raise ValueError(f"Shot {clip_idx + 1}: reference {rid!r} is not connected.")
-                # Preserve assignments when switching modes, but only consume
-                # media that belongs to the current mode's reference controls.
+                if source_ref is not None and robj is source_ref:
+                    continue
                 if canon_mode == "T2VA" or (canon_mode in ("I2VA", "L2VA", "FL2VA", MODE_INPAINT)
                                            and robj.get("type") != "image"):
-                    continue
+                    raise ValueError(f"Clip {clip_idx + 1}: {canon_mode} does not accept {robj.get('type')} references.")
+                if canon_mode == "V2V" and (source_ref_id or clip_item.get("source")):
+                    raise ValueError("Existing Video and Edit Video accept one source video only; use RV2V for additional references.")
                 if robj.get("file_reference"):
                     if rid not in file_reference_cache:
                         import folder_paths
@@ -514,8 +521,19 @@ class MiniMaxH3MasterDirector:
                     local_imgs.append(rdata)
                 elif rtype == "video":
                     local_vids.append(rdata)
+                    if robj.get("audio") is not None:
+                        local_video_audios[f"ref_video_{len(local_vids)}"] = robj["audio"]
                 elif rtype == "audio":
                     local_auds.append(rdata)
+
+            try:
+                from ..core.task_modes import validate_mode_assets
+            except ImportError:
+                from core.task_modes import validate_mode_assets
+            validate_mode_assets(canon_mode, images=local_imgs, videos=local_vids,
+                audios=local_auds, refmods=clip_refmod_items, raise_on_error=True)
+            if canon_mode == "V2V" and clip_refmod_items:
+                raise ValueError("Edit Video accepts one source video only; use RV2V for RefMods.")
 
             first_frame = None
             last_frame = None
@@ -589,11 +607,27 @@ class MiniMaxH3MasterDirector:
                 ref_videos = group.get("ref_videos", ref_videos)
                 ref_audios = group.get("ref_audios", ref_audios)
                 ref_video_audios = group.get("ref_video_audios", ref_video_audios)
-            source = source_range(clip_item, timeline, width, height) if canon_mode in ("V2V", "RV2V") else None
+            source = source_range(clip_item, timeline, width, height, ref_pool=ref_pool) if canon_mode in ("V2V", "RV2V") else None
+            if canon_mode in ("V2V", "RV2V") and source is None:
+                raise ValueError(f"{canon_mode} requires one source video from the connected Reference Pack.")
+            if canon_mode == "I2VA" and first_frame is None:
+                raise ValueError("I2V requires one opening image or a preceding clip with continuity enabled.")
+            if canon_mode == "L2VA" and last_frame is None:
+                raise ValueError("L2V requires one ending image.")
+            if canon_mode == "FL2VA" and (first_frame is None or last_frame is None):
+                raise ValueError("FL2V requires opening and ending images; continuity can supply the opening image.")
             if source is not None:
+                if source_ref_id:
+                    shot_event(unique_id, project_id, clip_id, "source_ready", ref_id=source_ref_id,
+                        requested_start=clip_item.get("source_start", 0), requested_end=clip_item.get("source_end"),
+                        start=source["start"], end=source["end"], duration=int(source["frames"].shape[0])/FPS)
+                    clip_item["source_end"] = source["end"]
+                    clip_item["duration"] = int(source["frames"].shape[0]) / FPS
                 ref_video_audios = {f"ref_video_{i+2}": ref_video_audios[key] for i, key in enumerate(ref_videos) if key in ref_video_audios}
                 ref_videos = {"ref_video_1": source.get("model_frames", source["frames"]),
                     **{f"ref_video_{i+2}": value for i, value in enumerate(ref_videos.values())}}
+                if source.get("has_audio"):
+                    ref_video_audios["ref_video_1"] = source["audio"]
                 clip_dur = source["frames"].shape[0] / FPS
                 # Source coordinates define the visible edit range. Prefix
                 # guides would consume part of that range during assembly.
@@ -635,6 +669,17 @@ class MiniMaxH3MasterDirector:
                 previous_tail = {"last_frame": context_frames[-1:], "tail_frames": context_frames[-min(56, context_frames.shape[0]):], "tail_audio": audio, "tail_latent": None}
                 previous_av = None
                 previous_fingerprint = fingerprint_value([context_frames, audio])
+                # Pack tensors have no standalone file for lazy preview to reopen.
+                # Persist their original frames/audio, without inventing a latent.
+                if source_ref_id:
+                    meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
+                    if meta.get("fingerprint") != previous_fingerprint or not meta.get("has_frames") or not os.path.isfile(cache_mgr.get_clip_frames_path(clip_id)):
+                        cache_mgr.store_clip_results(clip_id, previous_fingerprint, None, audio,
+                            source.get("original_frames", frames), validated=True)
+                        cache_mgr.update_clip_metadata(clip_id, {"mode": "VIDEO", "trim_prefix": 0, "previous_trim": 0})
+                    clip_item["duration"] = int(frames.shape[0]) / FPS
+                    timeline["clips"] = clips
+                    save_autosave(cache_mgr, timeline)
                 run_report.append({"clip_id": clip_id, "action": "source", "frames": int(frames.shape[0])})
                 continue
             try:
@@ -646,6 +691,8 @@ class MiniMaxH3MasterDirector:
                     images=list(ref_images.values()) + [m for m in clip_refmod_items if m.get("kind") == "image"],
                     videos=list(ref_videos.values()) + [m for m in clip_refmod_items if m.get("kind") == "video"],
                     audios=list(ref_audios.values()) + [m for m in clip_refmod_items if m.get("kind") == "audio"],
+                    ref_video_durations=[v.shape[0] / FPS for v in ref_videos.values()],
+                    ref_audio_durations=[a["waveform"].shape[-1] / a["sample_rate"] for a in ref_audios.values()],
                     raise_on_error=True)
 
             # Build prompt (supporting per-clip structured prompts or raw prompts)

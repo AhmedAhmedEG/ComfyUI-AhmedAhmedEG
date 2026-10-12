@@ -128,16 +128,65 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(native_outputs((1, 2)), (1, 2))
 
     def test_all_canonical_modes_route_to_correct_native_family(self):
-        for mode in ("T2VA", "I2VA", "FL2VA", "L2VA", "REF2VA", "V2V", "RV2V"):
+        for mode in ("T2VA", "I2VA", "FL2VA", "L2VA", "REF2VA", "V2V", "RV2V", "Image Inpaint"):
             self.native_calls.clear()
-            self.execute([{ "id": "one", "type": mode, "duration": 1}], execution_mode="Conditioning Guide Output")
-            expected = "MiniMaxH3ImageToVideo" if mode in ("T2VA", "I2VA", "FL2VA", "L2VA") else "MiniMaxH3ReferenceToVideo"
+            refs=[{"id":"first","type":"image","data":torch.zeros((1,32,32,3))},
+                  {"id":"last","type":"image","data":torch.ones((1,32,32,3))},
+                  {"id":"video","type":"video","data":torch.zeros((22,32,32,3))}]
+            ids=({"I2VA":["first"],"FL2VA":["first","last"],"L2VA":["last"],
+                  "V2V":["video"],"RV2V":["video","first"],"Image Inpaint":["first"]}).get(mode,[])
+            self.execute([{ "id": "one", "type": mode, "duration": 1,"ref_ids":ids}], ref_pack={"refs":refs}, execution_mode="Conditioning Guide Output")
+            expected = "MiniMaxH3ImageToVideo" if mode in ("T2VA", "I2VA", "FL2VA", "L2VA", "Image Inpaint") else "MiniMaxH3ReferenceToVideo"
             self.assertEqual(self.native_calls[0][0], expected)
+            args=self.native_calls[0][1]
+            if mode in ("I2VA","FL2VA","Image Inpaint"): self.assertIs(args["first_frame"],refs[0]["data"])
+            if mode in ("L2VA","FL2VA"): self.assertIs(args["last_frame"],refs[1]["data"])
+            if mode=="Image Inpaint": self.assertEqual(args["length"],5)
+            if mode in ("V2V","RV2V"): self.assertEqual(len(args["ref_videos"]),1,"Source is never inserted twice")
 
     def test_generic_model_never_uses_wrong_family_socket(self):
         wrong_model = SimpleNamespace(model_name="wrong-family")
         self.execute(ref2va_model=wrong_model)
         self.assertIs(self.sampling_calls[0]["model"], self.model)
+
+    def test_every_clip_type_runs_its_output_contract(self):
+        refs=[{"id":"first","type":"image","data":torch.zeros((1,32,32,3))},
+              {"id":"last","type":"image","data":torch.ones((1,32,32,3))},
+              {"id":"source","type":"video","data":torch.ones((22,32,32,3))}]
+        cases={"T2V":[],"I2V":["first"],"FL2V":["first","last"],"L2VA":["last"],
+               "REF2VA":["first","source"],"V2V":["source"],"RV2V":["source","first"],"Image Inpaint":["first"]}
+        for mode,ids in cases.items():
+            with self.subTest(mode=mode):
+                self.sampling_calls.clear();self.native_calls.clear()
+                result=self.execute([{"id":mode.replace(' ','_'),"type":mode,"duration":1,"ref_ids":ids}],ref_pack={"refs":refs})
+                self.assertEqual(len(self.sampling_calls),1)
+                self.assertEqual(result[0].shape[0],1 if mode=='Image Inpaint' else 22 if mode in ('V2V','RV2V') else align_frame_count(24))
+                self.assertIsNotNone(result[4].get('samples'))
+        self.sampling_calls.clear();self.native_calls.clear()
+        result=self.execute([{"id":"existing","type":"V2V","locked":True,"duration":1,"ref_ids":["source"]}],ref_pack={"refs":refs})
+        self.assertEqual(self.sampling_calls,[]);self.assertEqual(self.native_calls,[])
+        self.assertEqual(result[0].shape[0],22)
+        from core.preview import create_preview_plan
+        plan=create_preview_plan(json.loads(result[9]),scope='full',base_dir=self.temp.name)
+        self.assertTrue(plan['found']);self.assertEqual(plan['clip_ids'],['existing'])
+
+    def test_invalid_clip_assignments_fail_before_sampling(self):
+        refs=[{"id":f"image{i}","type":"image","data":torch.zeros((1,32,32,3))} for i in range(10)]
+        refs += [{"id":f"video{i}","type":"video","data":torch.zeros((22,32,32,3))} for i in range(4)]
+        refs += [{"id":"long_video","type":"video","data":torch.zeros((384,32,32,3))},
+                 {"id":"ten_video_a","type":"video","data":torch.zeros((240,32,32,3))},
+                 {"id":"ten_video_b","type":"video","data":torch.zeros((240,32,32,3))},
+                 {"id":"long_audio","type":"audio","data":{"waveform":torch.zeros((1,2,768000)),"sample_rate":48000}}]
+        invalid=[('T2V',['image0']),('I2V',['image0','image1']),('FL2V',['image0','image1','image2']),
+                 ('L2VA',['video0']),('Image Inpaint',['video0']),('V2V',['video0','video1']),
+                 ('RV2V',[f'video{i}' for i in range(4)]),('REF2VA',[f'image{i}' for i in range(10)]),
+                 ('I2V',[]),('FL2V',['image0']),('L2VA',[]),('V2V',[]),('RV2V',[]),
+                 ('REF2VA',['long_video']),('RV2V',['ten_video_a','ten_video_b']),
+                 ('REF2VA',['image0','long_audio']),('REF2VA',['long_audio'])]
+        for mode,ids in invalid:
+            with self.subTest(mode=mode,ids=ids),self.assertRaises(ValueError):
+                self.execute([{"id":"invalid","type":mode,"duration":1,"ref_ids":ids}],ref_pack={"refs":refs})
+        self.assertEqual(self.sampling_calls,[])
 
     def test_lazy_guide_mode_needs_no_model(self):
         self.assertEqual(self.node.check_lazy_status(config={"execution_mode": "Conditioning Guide Output"}), [])

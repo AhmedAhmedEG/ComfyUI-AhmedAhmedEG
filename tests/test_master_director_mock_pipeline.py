@@ -160,6 +160,8 @@ class TestMockPipeline(CacheIsolatedTestCase):
                     audio_vae=self.mock_audio_vae,
                     clip=self.mock_clip,
                     mode="FL2VA",
+                    timeline_data=json.dumps({"clips":[{"id":"keyframes","type":"FL2VA","duration":5,"ref_ids":["first","last"]}]}),
+                    ref_pack={"refs":[{"id":name,"type":"image","data":torch.zeros((1,64,64,3))} for name in ("first","last")]},
                     execution_mode="Conditioning Guide Output",
                     width=1344,
                     height=768,
@@ -608,12 +610,12 @@ class TestMockPipeline(CacheIsolatedTestCase):
             # 5 frames from c1 + (5 - 1) frames from c2 = 9 frames
             self.assertEqual(final_frames.shape[0], 9)
 
-    def test_v2v_multi_reference_routing_and_prompt(self):
-        """Verify V2V clips can accept multiple references (image, video, audio) and use reference prompt structure."""
+    def test_rv2v_multi_reference_routing_and_prompt(self):
+        """RV2V edits one source and uses additional image/audio references."""
         tl_v2v = json.dumps({
             "clips": [{
                 "id": "c1",
-                "type": "V2V",
+                "type": "RV2V",
                 "duration": 5.0,
                 "prompt_mode": "structured",
                 "structured_prompt": {

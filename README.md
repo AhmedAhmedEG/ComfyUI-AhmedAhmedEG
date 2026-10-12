@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.4.18** consolidates the MiniMax/video production features of
+Version **1.4.19** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -42,7 +42,7 @@ native MiniMax H3 ImageToVideo, ReferenceToVideo, AddGuide, SigmaShift and curre
 Load `workflows/MiniMax H3 Start Here.json`. It uses standard **Load Diffusion
 Model** (FL2VA + REF2VA), **Load CLIP** (type `minimax`), two **Load VAE** nodes,
 and a separate **Smart Preview** node connected to `project_state`. It previews **Latest clip** by default; **Full video** is an explicit switch in the player. H3 SLA Attention (plaguekind-nodes) patches both model families, and a stock Boolean/model switch enables the supplied REF2VA Turbo LoRA. The same toggle automatically selects 8 steps for Turbo or 25 for the base model; edit the two integer nodes to change those values. Reference media enter through **Reference Pack (Pool)**; give connected items optional names. The Master, Settings, Reference Pack and Smart Preview are this pack’s four nodes in the starter. The saved filenames match the current server’s MiniMax H3 models. Check the five selections, edit
-a shot and upload references in the Master. Both diffusion models are lazy:
+a clip and select connected Reference Pack assets in the Master. Both diffusion models are lazy:
 only the family required by the timeline’s shot modes is requested.
 
 `MiniMax H3 Consolidated.json` adds optional advanced export nodes, muted by
@@ -54,7 +54,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.4.18 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.4.19 reports 23 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.
@@ -76,7 +76,7 @@ Project Video to control playback/export FPS while keeping audio timing explicit
   equal split, scene detection, merge boundaries, selection, per-shot prompts,
   exact 64-bit seeds, shared prompt and references, LoRAs with previews, named
   model overrides, timestamped native guides, and structured/free prompts.
-- **References:** upload/drop/paste/replace, content-addressed assets, media
+- **References:** connected Reference Pack assets with per-clip type/count limits, media
   playback and trim, real waveform handles, draggable crop preview, exposure/
   contrast/saturation, scaling/divisible crop, roles/descriptions, frame picking,
   embedded video V/A/V+A switching, and RefMod bundles/library descriptions.
@@ -150,7 +150,7 @@ Install only the providers you use in ComfyUI's environment:
 
 ## Validation and license
 
-The 1.4.18 review passes **145 regression tests**, with editor, preview and documentation checks. The remote installation and starter graph contracts are verified. GPU sampling, actual optional model weights and RTX SDK execution remain unverified. Code consolidation does not establish visual quality or performance.
+The 1.4.19 review passes **147 regression tests**, with editor, preview and documentation checks. The remote installation and starter graph contracts are verified. GPU sampling, actual optional model weights and RTX SDK execution remain unverified. Code consolidation does not establish visual quality or performance.
 
 ```sh
 python -m unittest discover -s tests -v

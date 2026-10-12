@@ -36,36 +36,70 @@ def video_input_dimensions(width, height, settings=None):
             max(32, min(height // 32 * 32, snap(height * scale / 32) * 32)))
 
 
-def source_range(shot, timeline, width, height, preserve_canvas=False):
+def source_range(shot, timeline, width, height, preserve_canvas=False, ref_pool=None):
     source = shot.get("source", timeline.get("source"))
     if not source:
         return None
     if isinstance(source, str):
         source = {"filename": source}
-    if not isinstance(source, dict) or not source.get("filename"):
-        raise ValueError("Source video must specify a filename in ComfyUI input.")
+    if not isinstance(source, dict) or not (source.get("filename") or source.get("ref_id")):
+        raise ValueError("Choose one source video from the connected Reference Pack.")
     start = float(shot.get("source_start", source.get("start", 0)))
     end = float(shot.get("source_end", start + float(shot.get("duration", 5))))
     if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
         raise ValueError("Source range must have finite start/end times with end > start >= 0.")
-    import folder_paths
-    root = folder_paths.get_input_directory()
-    frames = load_video(source["filename"], input_directory=root, trim_start=start,
-        trim_end=end, target_fps=FPS)
+    audio = None
+    if source.get("ref_id"):
+        entry = (ref_pool or {}).get(source["ref_id"])
+        if not entry or entry.get("type") != "video":
+            raise ValueError("The selected source video is not in the connected Reference Pack.")
+        data = entry.get("data")
+        if data is None and entry.get("file_reference") and entry.get("filename"):
+            return source_range({**shot, "source": {"filename": entry["filename"]}}, timeline,
+                                width, height, preserve_canvas=preserve_canvas)
+        frames = data.get("frames") if isinstance(data, dict) else data
+        fps = float(data.get("fps", FPS)) if isinstance(data, dict) else FPS
+        if frames is None or frames.ndim != 4 or frames.shape[0] == 0 or not math.isfinite(fps) or fps <= 0:
+            raise ValueError("Reference Pack source video must contain a nonempty IMAGE frame batch and a positive FPS.")
+        if "source_end" not in shot:
+            end = frames.shape[0] / fps
+        # Use the loader's actual frames, including its trims and processing.
+        stop = min(int(frames.shape[0]), round(end * fps))
+        begin = round(start * fps)
+        if stop <= begin:
+            raise ValueError("Source range is outside the Reference Pack video.")
+        frames = frames[begin:stop]
+        count = max(1, round(frames.shape[0] / fps * FPS))
+        if fps != FPS:
+            indices = torch.arange(count, device=frames.device).mul(fps / FPS).long().clamp(max=frames.shape[0]-1)
+            frames = frames[indices]
+        audio = data.get("audio") if isinstance(data, dict) else entry.get("audio")
+        if audio is not None:
+            rate = int(audio["sample_rate"])
+            audio = {**audio, "waveform": audio["waveform"][..., round(start*rate):round(stop/fps*rate)]}
+    else:
+        # Compatibility for projects saved before pack-only source selection.
+        import folder_paths
+        root = folder_paths.get_input_directory()
+        frames = load_video(source["filename"], input_directory=root, trim_start=start,
+            trim_end=end, target_fps=FPS)
+        try:
+            audio = load_audio(source["filename"], input_directory=root, trim_start=start, trim_end=end)
+        except ValueError as exc:
+            if "no audio stream" not in str(exc).lower():
+                raise
+    original_frames = frames
     model_frames = frames
     if not preserve_canvas:
         input_width, input_height = video_input_dimensions(frames.shape[2], frames.shape[1], shot.get("video_input_resolution"))
         model_frames = scale_tensor_image(frames, "Target", input_width, input_height)
     if not preserve_canvas:
         frames = scale_tensor_image(frames, "Fit and pad", width, height)
-    try:
-        audio = load_audio(source["filename"], input_directory=root, trim_start=start, trim_end=end)
-    except ValueError as exc:
-        if "no audio stream" not in str(exc).lower():
-            raise
+    has_audio = audio is not None
+    if audio is None:
         audio = {"waveform": torch.zeros((1, 2, round(frames.shape[0] / FPS * 48000))), "sample_rate": 48000}
-    return {"frames": frames, "model_frames": model_frames, "audio": fit_audio_duration(audio, frames.shape[0], FPS),
-        "filename": source["filename"], "start": start, "end": end}
+    return {"frames": frames, "original_frames": original_frames, "model_frames": model_frames, "audio": fit_audio_duration(audio, frames.shape[0], FPS),
+        "has_audio": has_audio, "filename": source.get("filename"), "start": start, "end": start + frames.shape[0] / FPS}
 
 
 def choose_audio(mode, generated, source, frame_count):

@@ -7,6 +7,7 @@ Clips on the timeline locally select which references they use, preventing globa
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Dict, List, Optional
 import torch
 
@@ -53,6 +54,10 @@ class MiniMaxH3RefPack:
                 # RefMod references (.safetensors character/concept models)
                 "refmod_1": ("STRING", {"default": "None", "tooltip": "RefMod name or relative path in models/refmods/."}),
                 "refmod_2": ("STRING", {"default": "None", "tooltip": "RefMod 2."}),
+                "video_1_audio": ("AUDIO", {"tooltip": "Optional soundtrack paired with video_1. IMAGE frame batches contain no audio."}),
+                "video_2_audio": ("AUDIO", {"tooltip": "Optional soundtrack paired with video_2."}),
+                "video_1_fps": ("FLOAT", {"default":24.0,"min":1.0,"max":240.0,"tooltip":"Actual rate of video_1's frame batch. Match the loader's output rate; the pack resamples to H3's 24 fps."}),
+                "video_2_fps": ("FLOAT", {"default":24.0,"min":1.0,"max":240.0,"tooltip":"Actual rate of video_2's frame batch. Match the loader's output rate."}),
             },
         }
 
@@ -119,6 +124,13 @@ class MiniMaxH3RefPack:
         ]
         for vid, slot_name, alt_id in vid_slots:
             if vid is not None:
+                fps = float(kwargs.get(f"{slot_name}_fps", 24))
+                if not math.isfinite(fps) or not 1 <= fps <= 240 or vid.ndim != 4 or vid.shape[0] == 0:
+                    raise ValueError(f"{slot_name} needs a nonempty frame batch and an FPS between 1 and 240.")
+                if fps != 24:
+                    count = max(1, round(vid.shape[0] / fps * 24))
+                    indices = torch.arange(count, device=vid.device).mul(fps / 24).long().clamp(max=vid.shape[0]-1)
+                    vid = vid[indices]
                 assigned_id = f"{id_prefix}{slot_name}"
                 refs.append({
                     "id": assigned_id,
@@ -129,6 +141,7 @@ class MiniMaxH3RefPack:
                     "name": str(kwargs.get(f"{slot_name}_name", "")).strip() or assigned_id,
                     "type": "video",
                     "data": vid,
+                    "audio": kwargs.get(f"{slot_name}_audio"),
                 })
                 base_index += 1
 

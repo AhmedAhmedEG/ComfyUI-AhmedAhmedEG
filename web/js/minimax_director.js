@@ -985,6 +985,21 @@ const embeddedCSS = `
 .mmx-badge-v2v { background: #7c3aed; }
 .mmx-badge-ref2v { background: #0891b2; }
 .mmx-badge-ref2va { background: #4f46e5; }
+.mmx-badge-l2v {background:#b45309;}
+.mmx-badge-rv2v {background:#be185d;}
+.mmx-badge-video {background:#475569;}
+.mmx-badge-img {background:#0e7490;}
+.mmx-clip-mode-badge.mmx-badge-t2v {--mmx-mode-color:#2563eb;}
+.mmx-clip-mode-badge.mmx-badge-i2v {--mmx-mode-color:#059669;}
+.mmx-clip-mode-badge.mmx-badge-fl2v {--mmx-mode-color:#d97706;}
+.mmx-clip-mode-badge.mmx-badge-v2v {--mmx-mode-color:#7c3aed;}
+.mmx-clip-mode-badge.mmx-badge-ref2v {--mmx-mode-color:#0891b2;}
+.mmx-clip-mode-badge.mmx-badge-l2v {--mmx-mode-color:#b45309;}
+.mmx-clip-mode-badge.mmx-badge-rv2v {--mmx-mode-color:#be185d;}
+.mmx-clip-mode-badge.mmx-badge-video {--mmx-mode-color:#475569;}
+.mmx-clip-mode-badge.mmx-badge-img {--mmx-mode-color:#0e7490;}
+.mmx-director-root .mmx-shot-top-bar .mmx-clip-mode-badge[class*="mmx-badge-"] {background:var(--mmx-mode-color);color:white;}
+.mmx-clip-type-label.mmx-clip-mode-badge {color:white;border:1px solid #ffffff35;padding:6px 10px;}
 
 .mmx-clip-title {
   display: none;
@@ -2909,24 +2924,6 @@ function mountDirectorUI(node) {
   selectionLabel.title = "Other clips reuse matching cache or their original source video.";
 
   const progressLabel = document.createElement("span"); progressLabel.style.fontSize = "11px"; toolbarLeft.appendChild(progressLabel);
-  const videoFile=document.createElement("input");videoFile.type="file";videoFile.accept="video/*";videoFile.hidden=true;videoFile.className='mmx-video-import-file';
-  videoFile.onchange=async()=>{
-    const file=videoFile.files?.[0];if(!file)return;videoFile.disabled=true;
-    try{
-      const form=new FormData();form.append("file",file);
-      const response=await api.fetchApi("/minimax_director/media/upload",{method:"POST",body:form});
-      const asset=await response.json();if(!response.ok)throw new Error(asset.error || "Video upload failed");
-      if(asset.media_type!=="video")throw new Error("Choose a video file.");
-      const filename=[asset.subfolder,asset.name].filter(Boolean).join("/");
-      const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename)}`);
-      if(!(info.duration>0))throw new Error("The video has no usable duration.");
-      const clip={id:`source_${crypto.randomUUID()}`,name:file.name,type:"V2V",duration:info.duration,
-        source:{filename,width:info.width,height:info.height},video_input_resolution:{mode:"auto"},source_start:0,source_end:info.duration,locked:true,audio_mode:"source",prompt:"",ref_ids:[],continuity:false};
-      timelineState.clips.push(clip);activeClipId=clip.id;syncState();renderTimeline();
-    }catch(error){alert(error.message);}finally{videoFile.disabled=false;videoFile.value="";}
-  };
-  root.append(videoFile);
-
   const field = (title, control, help = "") => {
     const label = document.createElement("label"); label.className = "mmx-field";
     const caption = document.createElement("span"); caption.textContent = title;
@@ -3478,10 +3475,15 @@ function mountDirectorUI(node) {
     panel.innerHTML = `
       <div class="mmx-modal-header"><span class="mmx-modal-title">Add Clip</span><button class="mmx-action-btn" id="modal-close-btn" aria-label="Close Add Clip">×</button></div>
       <div class="mmx-modal-body"><p class="mmx-picker-intro">Choose what this timeline clip does. Its type stays fixed after creation.</p>
-      <h3 class="mmx-picker-heading">Existing Footage</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-action="import-video"><span class="mmx-type-modal-btn-title">Add Existing Video</span><span class="mmx-type-modal-btn-desc">Place footage and audio on the timeline. Later clips can continue from its ending.</span></button></div>
+      <h3 class="mmx-picker-heading">Existing Footage</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-action="import-video" data-type="VIDEO"><span class="mmx-type-modal-btn-title">Add Existing Video</span><span class="mmx-type-modal-btn-desc">Choose one Reference Pack video. Its existing frames are played without generation; later clips can continue from its ending.</span></button></div>
       <h3 class="mmx-picker-heading">Generate A New Video</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-type="T2V"><span class="mmx-type-modal-btn-title">Text To Video</span><span class="mmx-type-modal-btn-desc">Generate a new clip from a written prompt.</span></button><button class="mmx-type-modal-btn" data-type="I2V"><span class="mmx-type-modal-btn-title">Image To Video</span><span class="mmx-type-modal-btn-desc">Use a Reference Pack image as the opening frame.</span></button><button class="mmx-type-modal-btn" data-type="FL2V"><span class="mmx-type-modal-btn-title">First And Last Frame</span><span class="mmx-type-modal-btn-desc">Use two Reference Pack images as opening and ending frames.</span></button><button class="mmx-type-modal-btn" data-type="L2VA"><span class="mmx-type-modal-btn-title">Ending Image To Video</span><span class="mmx-type-modal-btn-desc">Generate motion ending at a Reference Pack image.</span></button><button class="mmx-type-modal-btn" data-type="REF2VA"><span class="mmx-type-modal-btn-title">Generate From References</span><span class="mmx-type-modal-btn-desc">Generate a new scene using Reference Pack images, videos or audio.</span></button></div>
       <h3 class="mmx-picker-heading">Edit Existing Media</h3><div class="mmx-type-modal-grid"><button class="mmx-type-modal-btn" data-type="V2V"><span class="mmx-type-modal-btn-title">Edit Video</span><span class="mmx-type-modal-btn-desc">Transform an existing source-video range using a prompt.</span></button><button class="mmx-type-modal-btn" data-type="RV2V"><span class="mmx-type-modal-btn-title">Edit Video With References</span><span class="mmx-type-modal-btn-desc">Transform a source-video range using a prompt and extra Reference Pack assets.</span></button><button class="mmx-type-modal-btn" data-type="Image Inpaint"><span class="mmx-type-modal-btn-title">Edit Still Image</span><span class="mmx-type-modal-btn-desc">Edit one Reference Pack image; returns one image instead of a video.</span></button></div></div>`;
 
+    for (const button of panel.querySelectorAll('[data-type]')) {
+      const badge=document.createElement('span');const code=clipCode({type:button.dataset.type,locked:button.dataset.type==='VIDEO'});
+      badge.className=`mmx-clip-mode-badge mmx-badge-${code.toLowerCase()}`;badge.textContent=code;
+      button.querySelector('.mmx-type-modal-btn-title').prepend(badge,document.createTextNode(' '));
+    }
     document.body.appendChild(backdrop);
     backdrop.appendChild(panel);
 
@@ -3496,7 +3498,6 @@ function mountDirectorUI(node) {
       if (e.target === backdrop) close();
     };
 
-    panel.querySelector('[data-action="import-video"]').onclick=()=>{close();videoFile.click();};
     panel.querySelectorAll(".mmx-type-modal-btn[data-type]").forEach((btn) => {
       btn.onclick = () => {
         const type = btn.dataset.type;
@@ -3504,7 +3505,9 @@ function mountDirectorUI(node) {
         const newClip = {
           id: `clip_${Date.now()}_${newIndex}`,
           name: `Clip ${newIndex}`,
-          type: type,
+          type: type === "VIDEO" ? "V2V" : type,
+          locked: type === "VIDEO", audio_mode: type === "VIDEO" ? "source" : "generate",
+          video_input_resolution: {mode:"auto"},
           duration: 5.0,
           tail_seconds: 0.5,
           seed: Math.floor(Math.random() * 10000000000),
@@ -3618,12 +3621,21 @@ function mountDirectorUI(node) {
   };
 
   // Render Multi-Track Timeline & Clips
+  const clipCode = clip => clip.locked ? 'VIDEO' : ({T2VA:'T2V',I2VA:'I2V',FL2VA:'FL2V',L2VA:'L2V',REF2VA:'REF2V','Image Inpaint':'IMG','IMAGE INPAINT':'IMG'})[clip.type] || clip.type || 'T2V';
   const referenceTypes = clip => {
-    const mode=String(clip.type || "T2V").toUpperCase();
-    if (["T2V","T2VA","TEXT"].includes(mode)) return [];
-    if (["I2V","I2VA","FL2V","FL2VA","L2V","L2VA","IMAGE INPAINT","INPAINT"].includes(mode)) return ["image"];
-    return ["image","video","audio","refmod"];
+    const mode=clipCode(clip);
+    if (mode==='T2V') return [];
+    if (['I2V','FL2V','L2V','IMG'].includes(mode)) return ['image'];
+    if (['VIDEO','V2V'].includes(mode)) return ['video'];
+    return ['image','video','audio','refmod'];
   };
+  const selectionLimit = (clip,type) => {
+    const code=clipCode(clip);
+    if(['VIDEO','V2V','I2V','L2V','IMG'].includes(code)) return 1;
+    if(code==='FL2V') return 2;
+    return ({image:9,video:3,audio:3,refmod:12})[type] || 0;
+  };
+  const selectionHelp = clip => ({T2V:'Text only.',VIDEO:'Choose exactly one source video.',V2V:'Choose exactly one source video.',I2V:'Choose one opening image.',L2V:'Choose one ending image.',FL2V:'Choose two images in order: opening, then ending. With continuity, one image can supply the ending.',IMG:'Choose exactly one image to edit.'})[clipCode(clip)] || (clipCode(clip)==='RV2V' ? 'The first selected video is the source. Up to 9 images, 3 videos including the source, 3 audio tracks and 12 total assets.' : 'Up to 9 images, 3 videos, 3 audio tracks and 12 total assets. Audio needs a visual reference.');
   const activeReferences = clip => (clip.ref_ids || []).map(id=>(timelineState.available_refs || []).find(row=>row.id===id)).filter(row=>row && referenceTypes(clip).includes(row.type));
   const renderTimeline = () => {
     cancelTimelineDrag?.();
@@ -3703,9 +3715,9 @@ function mountDirectorUI(node) {
       shotTopBar.className = "mmx-shot-top-bar";
 
       const modeBadge = document.createElement("span");
-      const typeLower = (clip.type || "T2V").toLowerCase();
+      const typeLower = clipCode(clip).toLowerCase();
       modeBadge.className = `mmx-clip-mode-badge mmx-badge-${typeLower}`;
-      modeBadge.textContent = clip.type || "T2V";
+      modeBadge.textContent = clipCode(clip);
 
       const title = document.createElement("span");
       title.className = "mmx-clip-title";
@@ -4116,19 +4128,9 @@ function mountDirectorUI(node) {
     nameRow.appendChild(nameInput);
 
     const clipTypeLabel = document.createElement("span");
-    clipTypeLabel.className = "mmx-clip-type-label";
-    const modes = [
-      { id: "T2V", label: "T2V (Text to Video)" },
-      { id: "I2V", label: "I2V (Image to Video)" },
-      { id: "FL2V", label: "FL2V (First & Last Frame)" },
-      { id: "V2V", label: "V2V (Video to Video)" },
-      { id: "REF2VA", label: "REF2V (Reference to Video)" },
-      { id: "L2VA", label: "L2VA (Last Frame)" },
-      { id: "RV2V", label: "RV2V (Reference Video Edit)" },
-      { id: "Image Inpaint", label: "Image Inpaint (Single Image)" },
-    ];
-    const displayType=({T2VA:"T2V",I2VA:"I2V",FL2VA:"FL2V",L2V:"L2VA",REF2V:"REF2VA"})[activeClip.type] || activeClip.type;
-    clipTypeLabel.textContent=modes.find(mode=>mode.id===displayType)?.label || activeClip.type;
+    const code=clipCode(activeClip);
+    clipTypeLabel.className = `mmx-clip-type-label mmx-clip-mode-badge mmx-badge-${code.toLowerCase()}`;
+    clipTypeLabel.textContent=code;
     clipTypeLabel.dataset.type=activeClip.type;
     clipTypeLabel.title="Clip type is fixed. Use Add Clip to create a clip with a different type.";
     nameRow.appendChild(clipTypeLabel);titleWrap.appendChild(nameRow);
@@ -4251,21 +4253,9 @@ function mountDirectorUI(node) {
       const sourcePanel = document.createElement("fieldset");
       const legend = document.createElement("legend"); legend.textContent = "Source video range";
       sourcePanel.appendChild(legend); inspector.appendChild(sourcePanel);
-      const filename = document.createElement("select");
-      const blank = document.createElement("option"); blank.value = ""; blank.textContent = "Choose a video from Reference Pack"; filename.append(blank);
-      const currentSource = typeof activeClip.source === "string" ? activeClip.source : activeClip.source?.filename || "";
-      const videos = (timelineState.available_refs || []).filter(row => row.type === "video" && row.filename);
-      if (currentSource && !videos.some(row => row.filename === currentSource)) videos.push({filename:currentSource,name:"Imported source video"});
-      for (const row of videos) {const option=document.createElement("option");option.value=row.filename;option.textContent=row.name;filename.append(option);}
-      filename.value=currentSource;
-      filename.onchange=async()=>{
-        if (!filename.value) return;
-        const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(filename.value)}`);
-        activeClip.source={filename:filename.value,width:info.width,height:info.height};activeClip.source_start=0;
-        if (info.duration>0) {activeClip.source_end=info.duration;activeClip.duration=info.duration;}
-        activeClip.validated=false;syncState();renderTimeline();
-      };
-      sourcePanel.append(filename);
+      const sourceEntry=(timelineState.available_refs || []).find(row=>row.id===activeClip.source?.ref_id);
+      const filename={value:sourceEntry?.filename || (typeof activeClip.source==='string' ? activeClip.source : activeClip.source?.filename) || ''};
+      const sourceLabel=document.createElement('p');sourceLabel.textContent=sourceEntry ? `Source: ${sourceEntry.name}` : 'Choose the source video in Reference Pack Assets below.';sourcePanel.append(sourceLabel);
       let sourcePlayer = null;
       if (filename.value) {
         const video = document.createElement("video"); video.controls = true; video.preload = "metadata";
@@ -4280,7 +4270,16 @@ function mountDirectorUI(node) {
         const wrap = document.createElement("label"); wrap.textContent = `${label}: `;
         const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "0.041666667";
         input.value = activeClip[key] ?? fallback; input.style.width = "90px";
+        if(key==='source_end' && activeClip.source?.ref_id && activeClip.source_end==null) {input.value='';input.placeholder='Whole Video';}
         input.onchange = () => {
+          if(activeClip.source?.ref_id && ((key==='source_end' && input.value==='') || (key==='source_start' && activeClip.source_end==null))) {
+            if(key==='source_end')delete activeClip.source_end;
+            else {
+              if(!Number.isFinite(Number(input.value)) || Number(input.value)<0) {input.setCustomValidity('Start must be non-negative seconds.');input.reportValidity();return;}
+              activeClip.source_start=Number(input.value);
+            }
+            activeClip.validated=false;syncState();renderTimeline();return;
+          }
           const start = key === "source_start" ? Number(input.value) : Number(activeClip.source_start || 0);
           const end = key === "source_end" ? Number(input.value) : Number(activeClip.source_end ?? (Number(activeClip.source_start || 0) + Number(activeClip.duration || 5)));
           if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
@@ -4318,7 +4317,7 @@ function mountDirectorUI(node) {
         const bounds = [start, ...cuts, end];
         const clips = bounds.slice(0,-1).map((value,index) => ({ ...JSON.parse(JSON.stringify(activeClip)),
           id: `source_${crypto.randomUUID()}`, name: `${activeClip.name || "Source"} ${index+1}`, source_start: value,
-          source_end: bounds[index+1], duration: bounds[index+1]-value, validated: false, selected: false, locked: false }));
+          source_end: bounds[index+1], duration: bounds[index+1]-value, validated: false, selected: false, locked: !!activeClip.locked }));
         timelineState.clips.splice(timelineState.clips.indexOf(activeClip), 1, ...clips);
         activeClipId = clips[0].id; syncState(); renderTimeline();
       };
@@ -4336,15 +4335,16 @@ function mountDirectorUI(node) {
       const merge = document.createElement("button"); merge.textContent = "Remove next boundary / merge";
       merge.onclick = () => {
         const index = timelineState.clips.indexOf(activeClip); const next = timelineState.clips[index+1];
-        const nextFile = typeof next?.source === "string" ? next.source : next?.source?.filename;
-        if (!next || nextFile !== filename.value || Math.abs(Number(activeClip.source_end)-Number(next.source_start)) > 1/24) { alert("The next clip must use the same source and a contiguous range."); return; }
+        const nextFile = next?.source?.ref_id || (typeof next?.source === "string" ? next.source : next?.source?.filename);
+        if (!next || nextFile !== (activeClip.source?.ref_id || filename.value) || Math.abs(Number(activeClip.source_end)-Number(next.source_start)) > 1/24) { alert("The next clip must use the same source and a contiguous range."); return; }
         activeClip.source_end = next.source_end; activeClip.duration = activeClip.source_end-(activeClip.source_start || 0);
         activeClip.prompt = [activeClip.prompt, next.prompt].filter(Boolean).join("\n");
         activeClip.ref_ids = [...new Set([...(activeClip.ref_ids || []), ...(next.ref_ids || [])])];
         activeClip.validated = false; timelineState.clips.splice(index+1,1); syncState(); renderTimeline();
       }; sourcePanel.appendChild(merge);
 
-      if (activeClip.locked) for (const control of sourcePanel.querySelectorAll("input,button,select")) control.disabled = true;
+      smart.disabled=!filename.value;
+      smart.title=filename.value ? 'Detect cuts in the original video file.' : 'Scene detection needs a file-backed video.';
     }
 
     const loraPanel = document.createElement("details");
@@ -4581,10 +4581,11 @@ function mountDirectorUI(node) {
     const refsTitle = document.createElement("div");
     refsTitle.className = "mmx-local-refs-title";
     refsTitle.innerHTML = `
-      <span>LOCAL REFERENCES (FROM REF PACK):</span>
+      <span>REFERENCE PACK ASSETS</span>
       <span style="font-weight: 500; font-size: 9px; color: #64748b;">Click to assign to this clip</span>
     `;
     refsTitle.append(syncRefsBtn);refsPoolWrap.appendChild(refsTitle);
+    const selectionNote=document.createElement('p');selectionNote.className='mmx-section-intro';selectionNote.textContent=selectionHelp(activeClip);refsPoolWrap.append(selectionNote);
 
     const refsList = document.createElement("div");
     refsList.className = "mmx-local-refs-list";
@@ -4607,14 +4608,37 @@ function mountDirectorUI(node) {
       item.innerHTML = `<span>${icon}</span><span style="font-weight: 700; opacity: 0.7;">${tag}</span><span>${escapeHtml(r.name)}</span>${fnHint}`;
       if (r.filename) item.title = `${r.name} (${r.filename})`;
 
-      item.onclick = () => {
-        if (isChecked) {
-          activeClip.ref_ids = activeClip.ref_ids.filter((id) => id !== r.id);
-        } else {
-          activeClip.ref_ids.push(r.id);
+      item.dataset.refId=r.id;
+      const single=selectionLimit(activeClip,rtype)===1;
+      const selected=activeReferences(activeClip);
+      const imageFamily=['image','refmod'].includes(rtype);
+      const atLimit=selected.filter(row=>imageFamily ? ['image','refmod'].includes(row.type) : row.type===rtype).length>=(imageFamily && ['REF2V','RV2V'].includes(clipCode(activeClip)) ? 9 : selectionLimit(activeClip,rtype)) || selected.length>=12;
+      item.disabled=!isChecked && !single && atLimit;
+      if(item.disabled)item.title='Selection limit reached. Remove an asset before choosing another.';
+      if(isChecked && ['FL2V','RV2V'].includes(clipCode(activeClip))) item.title=`Selection ${activeClip.ref_ids.indexOf(r.id)+1}${r.id===activeClip.source?.ref_id ? ' · Source Video' : ''}`;
+      if(isChecked && (clipCode(activeClip)==='FL2V' || r.id===activeClip.source?.ref_id)) {
+        const inheritedOpening=timelineState.clips.indexOf(activeClip)>0 && activeClip.continuity_mode!=='Independent (No Continuity)' && selected.length===1;
+        const role=document.createElement('strong');role.textContent=r.id===activeClip.source?.ref_id ? ' · Source Video' : activeClip.ref_ids.indexOf(r.id)===0 && !inheritedOpening ? ' · Opening Frame' : ' · Ending Frame';item.append(role);
+      }
+      item.onclick = async () => {
+        if (isChecked) activeClip.ref_ids = activeClip.ref_ids.filter(id=>id!==r.id);
+        else if(single) activeClip.ref_ids=[r.id];
+        else activeClip.ref_ids.push(r.id);
+        if(['VIDEO','V2V','RV2V'].includes(clipCode(activeClip))) {
+          const source=activeReferences(activeClip).find(row=>row.type==='video');
+          if(source?.id!==activeClip.source?.ref_id) {
+            delete activeClip.source;delete activeClip.source_start;delete activeClip.source_end;
+            if(source) {
+              activeClip.source={ref_id:source.id};activeClip.source_start=0;
+              // Filename metadata is only a UI estimate; execution uses the injected frame batch.
+              if(source.filename) try {
+                const info=await requestJson(`/minimax_director/source/info?filename=${encodeURIComponent(source.filename)}`);
+                if(info.duration>0 && activeClip.source?.ref_id===source.id){activeClip.duration=info.duration;activeClip.source_end=info.duration;}
+              } catch(error) { selectionNote.textContent=`Source selected. Could not read file metadata: ${error.message}`; }
+            }
+          }
         }
-        syncState();
-        renderTimeline();
+        activeClip.validated=false;syncState();renderTimeline();
       };
       refsList.appendChild(item);
     });
@@ -5052,6 +5076,12 @@ function mountDirectorUI(node) {
     const detail = event.detail;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
     progressLabel.textContent = `${detail.phase} · ${detail.clip_id} · ${detail.index || ""}/${detail.total || ""}`;
+    if(detail.phase==='source_ready') {
+      const clip=timelineState.clips.find(value=>value.id===detail.clip_id);
+      if(clip?.source?.ref_id===detail.ref_id && Number(clip.source_start || 0)===Number(detail.requested_start || 0) && (clip.source_end ?? null)===(detail.requested_end ?? null)) {
+        clip.source_end=detail.end;clip.duration=detail.duration;syncState();renderTimeline();
+      }
+    }
     if (detail.phase === "completed") {
 
       const clip = timelineState.clips.find(value => value.id === detail.clip_id);

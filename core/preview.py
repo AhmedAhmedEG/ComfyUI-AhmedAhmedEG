@@ -29,7 +29,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         cid = safe_component(shot.get("id", f"clip_{index+1}"))
         meta = take if scope == "take" else manager._manifest.get("clips", {}).get(cid, {})
         if not meta.get("has_frames"):
-            if scope == "full" and shot.get("locked") and shot.get("source"):
+            source = shot.get("source")
+            if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):
                 rows.append({"clip_id": cid, "name": shot.get("name", cid), "source": shot,
                              "updated_at": 0, "trim_prefix": 0, "index": index})
             continue

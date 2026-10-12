@@ -78,6 +78,7 @@ def validate_mode_assets(
     refmods: List[Any] | None = None,
     ref_video_durations: List[float] | None = None,
     raise_on_error: bool = False,
+    ref_audio_durations: List[float] | None = None,
 ) -> Tuple[bool, List[str]]:
     """Validate asset limits and constraints for the selected mode.
 
@@ -95,14 +96,14 @@ def validate_mode_assets(
     if canon == MODE_INPAINT:
         if img_count != 1:
             errors.append("Image Inpaint requires exactly one image reference.")
-        if vid_count > 0 or aud_count > 0:
+        if vid_count > 0 or aud_count > 0 or mod_count > 0:
             errors.append("Image Inpaint accepts image references only (videos/audios are forbidden).")
         if raise_on_error and errors:
             raise ValueError("; ".join(errors))
         return len(errors) == 0, errors
 
     if canon in KEYFRAME_MODES:
-        if vid_count > 0 or aud_count > 0:
+        if vid_count > 0 or aud_count > 0 or mod_count > 0:
             errors.append(f"{canon} mode accepts keyframe images only; videos and standalone audio clips are not allowed.")
         if canon == MODE_T2VA and img_count > 0:
             errors.append("T2VA is text-only; no images should be attached.")
@@ -128,6 +129,11 @@ def validate_mode_assets(
                     errors.append(f"Reference video duration {d}s exceeds maximum {MAX_REF_DURATION}s.")
             if sum(ref_video_durations) > MAX_REF_TOTAL_DURATION:
                 errors.append(f"Total reference video duration {sum(ref_video_durations)}s exceeds maximum {MAX_REF_TOTAL_DURATION}s.")
+        if ref_audio_durations:
+            if any(d > MAX_REF_DURATION for d in ref_audio_durations):
+                errors.append(f"Reference audio duration exceeds maximum {MAX_REF_DURATION}s.")
+            if sum(ref_audio_durations) > MAX_REF_TOTAL_DURATION:
+                errors.append(f"Total reference audio duration exceeds maximum {MAX_REF_TOTAL_DURATION}s.")
 
     if raise_on_error and errors:
         raise ValueError("; ".join(errors))
