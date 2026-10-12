@@ -242,7 +242,7 @@
         0,
         "fixed",
         "manual",
-        1.0,
+        1,
         "16:9"
       ],
       "widgets_values_named": {
@@ -258,7 +258,7 @@
         "seed": 0,
         "control_after_generate": "fixed",
         "canvas_policy": "manual",
-        "canvas_megapixels": 1.0,
+        "canvas_megapixels": 1,
         "canvas_aspect": "16:9"
       }
     },
@@ -294,11 +294,6 @@
           "name": "clip",
           "type": "CLIP",
           "link": 9
-        },
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": null
         },
         {
           "name": "config",
@@ -341,23 +336,8 @@
           "link": null
         },
         {
-          "name": "i2v_groups",
-          "type": "MMX_DIR_GROUP",
-          "link": null
-        },
-        {
-          "name": "r2v_groups",
-          "type": "MMX_DIR_GROUP",
-          "link": null
-        },
-        {
           "name": "sigmas",
           "type": "SIGMAS",
-          "link": null
-        },
-        {
-          "name": "prompt_text",
-          "type": "STRING",
           "link": null
         },
         {
@@ -366,7 +346,7 @@
           "link": null
         },
         {
-          "name": "continuation",
+          "name": "latent_checkpoint",
           "type": "MMX_CONTINUATION",
           "link": null
         }
@@ -1010,7 +990,7 @@
       11,
       0,
       5,
-      6,
+      5,
       "MODEL"
     ],
     [
@@ -1058,7 +1038,7 @@
       12,
       0,
       5,
-      7,
+      6,
       "MODEL"
     ],
     [
@@ -1090,7 +1070,7 @@
       4,
       0,
       5,
-      4,
+      3,
       "MMX_DIRECTOR_CONFIG"
     ],
     [
@@ -1098,7 +1078,7 @@
       16,
       0,
       5,
-      5,
+      4,
       "MMX_REF_PACK"
     ],
     [

@@ -31,6 +31,26 @@ const initial = {version:2,project_id:'editor',clips:[{id:'clip_1',type:'I2VA',p
 const timeline = {name:'timeline_data',value:JSON.stringify(initial)};
 const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDirector',widgets:[timeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],inputs:[{name:'ref_pack',link:10}],outputs:[],size:[1200,800],setSize(value){this.size=value;},setDirtyCanvas(){},addWidget(type,name,value,callback,options){const widget={type,name,value,callback,options};this.widgets.push(widget);return widget;},addDOMWidget(name,type,element){w.document.body.appendChild(element); const widget={name,type,element};this.widgets.push(widget); return widget;}};
 (async()=>{
+  const migratedSockets={last_link_id:2,nodes:[
+    {id:10,type:'UNETLoader',outputs:[{links:[1]}]},
+    {id:11,type:'MiniMaxH3Checkpoint',outputs:[{links:[2]}]},
+    {id:12,type:'MiniMaxH3MasterNode',inputs:[{name:'model',link:1},{name:'fl2va_model',link:null},{name:'ref2va_model',link:null},
+      {name:'i2v_groups',link:null},{name:'r2v_groups',link:null},{name:'prompt_text',link:null},{name:'continuation',link:2}]}],
+    links:[[1,10,0,12,0,'MODEL'],[2,11,0,12,6,'MMX_CONTINUATION']]};
+  w.extension.beforeConfigureGraph(migratedSockets);
+  const inputs=migratedSockets.nodes[2].inputs;
+  assert.deepStrictEqual(inputs.map(input=>input.name),['fl2va_model','ref2va_model','latent_checkpoint']);
+  assert.notEqual(inputs[0].link,inputs[1].link,'Shared legacy model is preserved for both families');
+  assert.equal(inputs[2].link,2);
+  inputs.forEach((input,index)=>assert.equal(migratedSockets.links.find(row=>row[0]===input.link)[4],index));
+  assert.equal(migratedSockets.nodes[0].outputs[0].links.length,2);
+  w.extension.beforeConfigureGraph(migratedSockets);assert.equal(migratedSockets.links.length,3,'Migration is idempotent');
+  const legacyConnected={nodes:[{id:20,type:'MiniMaxH3DirectorGroupsCombine',outputs:[{links:[7]}]},
+    {id:21,type:'MiniMaxH3MasterNode',inputs:[{name:'i2v_groups',link:7},{name:'prompt_text',link:null}]}],links:[[7,20,0,21,0,'MMX_DIR_GROUP']]};
+  w.extension.beforeConfigureGraph(legacyConnected);
+  assert.equal(legacyConnected.nodes[1].inputs.length,1,'Unconnected duplicate sockets are retired');
+  assert.equal(legacyConnected.nodes[1].inputs[0].label,'Legacy i2v_groups','Connected authored group data is retained explicitly');
+  assert.equal(legacyConnected.nodes[1].inputs[0].link,7);
   const legacy = {nodes:[{type:'MiniMaxH3MasterDirector'}]};
   w.extension.beforeConfigureGraph(legacy); assert.strictEqual(legacy.nodes[0].type,'MiniMaxH3MasterNode');
   const settingsValues=[1344,768,24,25,1,'euler','simple',12,3,0,'All-in-One Generation','simple','full_batch','Motion Context (Chained)','22','full'];

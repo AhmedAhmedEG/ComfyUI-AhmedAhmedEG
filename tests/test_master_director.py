@@ -242,7 +242,7 @@ class TestMiniMaxH3MasterDirector(CacheIsolatedTestCase):
         """Verify check_lazy_status returns ['model'] when model is un-evaluated, and [] when evaluated."""
         from nodes.node_director import MiniMaxH3MasterDirector
         self.assertEqual(MiniMaxH3MasterDirector.check_lazy_status(model=object()), [])
-        self.assertEqual(MiniMaxH3MasterDirector.check_lazy_status(model=None), ["model"])
+        self.assertEqual(MiniMaxH3MasterDirector.check_lazy_status(model=None), ["fl2va_model"])
 
 
 if __name__ == "__main__":

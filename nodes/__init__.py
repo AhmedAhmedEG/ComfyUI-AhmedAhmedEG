@@ -83,7 +83,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3RefPack": "MiniMax H3 Reference Pack (Pool)",
     "MiniMaxH3TailFromLatent": "MiniMax H3 Tail From Latent",
     "MiniMaxH3VideoCombine": "MiniMax H3 Video Combine & Audio Muxer",
-    "MiniMaxH3ModelOverridePack": "MiniMax H3 Shot Model Pack",
+    "MiniMaxH3ModelOverridePack": "MiniMax H3 Clip Model Pack",
     "MiniMaxH3Checkpoint": "MiniMax H3 Load Take Checkpoint",
     "MiniMaxH3AdvanceCheckpoint": "MiniMax H3 Advance Staged Take",
     "MiniMaxH3PromptForge": "MiniMax H3 Prompt Forge Draft",
@@ -124,10 +124,12 @@ _MENU_GROUPS = {
         "MiniMaxH3Checkpoint",
         "MiniMaxH3AdvanceCheckpoint"
     ],
-    "Advanced graph tools": [
+    "Legacy graph authoring": [
         "MiniMaxH3DirectorGroupImageToVideo",
         "MiniMaxH3DirectorGroupReferenceToVideo",
-        "MiniMaxH3DirectorGroupsCombine",
+        "MiniMaxH3DirectorGroupsCombine"
+    ],
+    "Advanced graph tools": [
         "MiniMaxH3TailFromLatent",
         "MiniMaxH3ModelOverridePack"
     ]

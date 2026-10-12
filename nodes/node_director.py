@@ -75,7 +75,6 @@ class MiniMaxH3MasterDirector:
                 "clip": ("CLIP", {"tooltip": "MiniMax H3 Qwen3-VL CLIP model."}),
             },
             "optional": {
-                "model": ("MODEL", {"lazy": True, "tooltip": "General MiniMax H3 diffusion model (or use fl2va_model / ref2va_model sockets)."}),
                 "config": ("MMX_DIRECTOR_CONFIG", {"tooltip": "Sampling, canvas, and pipeline settings (MiniMaxH3DirectorSettings)."}),
                 "ref_pack": ("MMX_REF_PACK", {"tooltip": "Reference pool containing images, videos, and audios (MiniMaxH3RefPack)."}),
                 "fl2va_model": ("MODEL", {"lazy": True, "tooltip": "Lazy-loaded FL2VA UNET."}),
@@ -84,12 +83,9 @@ class MiniMaxH3MasterDirector:
                 "refine": ("MMX_DIR_REFINE", {"tooltip": "Optional 2nd-pass refine and upscale settings."}),
                 "face_refine": ("MMX_DIR_FACE_REFINE", {"tooltip": "Optional FaceRefine close-up tracking & stitch."}),
                 "semantic_bridge": ("MMX_DIR_SEMANTIC_BRIDGE", {"tooltip": "Optional Semantic Bridge student MLP conditioning rewrite."}),
-                "i2v_groups": ("MMX_DIR_GROUP", {"tooltip": "Optional external Image to Video groups."}),
-                "r2v_groups": ("MMX_DIR_GROUP", {"tooltip": "Optional external Reference to Video groups."}),
                 "sigmas": ("SIGMAS", {"forceInput": True, "tooltip": "External sigma schedule override."}),
-                "prompt_text": ("STRING", {"forceInput": True, "tooltip": "Newline-separated shot prompts from any text node. Blank lines are ignored."}),
-                "model_pack": ("MMX_MODEL_PACK", {"tooltip": "Named models for per-shot overrides."}),
-                "continuation": ("MMX_CONTINUATION", {"tooltip": "Explicitly selected take/checkpoint to continue."}),
+                "latent_checkpoint": ("MMX_CONTINUATION", {"tooltip": "Advanced: continue the first chained clip from saved audiovisual latent data. Video-file continuation is configured per clip in the timeline."}),
+                "model_pack": ("MMX_MODEL_PACK", {"tooltip": "Advanced: named models for per-clip overrides."}),
                 "generation_mode": (["Next clip", "All clips", "Conditioning only"], {"default": "Next clip", "tooltip": "Next clip preserves approved takes and generates one unapproved clip. All clips processes the sequence. Conditioning only prepares inputs for an external sampler."}),
                 "timeline_data": ("STRING", {"default": "{\"version\":1,\"clips\":[]}", "multiline": False}),
                 "builder_state": ("STRING", {"default": "{}", "multiline": False}),
@@ -118,35 +114,39 @@ class MiniMaxH3MasterDirector:
     ):
         """Determine which model inputs need evaluation based on active timeline clip modes."""
         settings = config if isinstance(config, dict) else {}
-        if kwargs.get("generation_mode") == "Conditioning only" or kwargs.get("execution_mode", settings.get("execution_mode")) == "Conditioning Guide Output":
-            return []
-        if model is not None:
-            return []
-        if kwargs.get("model_pack"):
-            return []
-
         try:
             tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
-            clips = tl.get("clips", []) if isinstance(tl, dict) else []
-            if clips:
-                types = {normalize_mode(c.get("type", "T2V")) for c in clips}
-            else:
-                types = set()
-        except Exception:
-            types = set()
-
-        if not types:
-            return ["model"] if model is None else []
-
-        needs_fl2va = any(get_required_model_type(t) == "fl2va" for t in types)
-        needs_ref2va = any(get_required_model_type(t) == "ref2va" for t in types)
-
+            clips = tl.get("clips", []) if isinstance(tl,dict) else []
+        except (ValueError, TypeError):
+            tl, clips = {}, []
+        generation=kwargs.get("generation_mode", tl.get("generation_mode") if isinstance(tl,dict) else None)
+        if generation == "Conditioning only" or (generation is None and
+                kwargs.get("execution_mode",settings.get("execution_mode")) == "Conditioning Guide Output"):
+            return []
+        if model is not None: # Compatibility for pre-cleanup API graphs.
+            return []
+        if kwargs.get("i2v_groups") is not None or kwargs.get("r2v_groups") is not None:
+            from .node_groups import _normalize_group
+            clips = [{"type":group.get("kind","REF2VA")} for group in
+                _normalize_group(kwargs.get("i2v_groups")) + _normalize_group(kwargs.get("r2v_groups"))]
+        if not clips:
+            clips = [{"type":"T2V"}]
+        overrides = kwargs.get("model_pack") or {}
+        types = set()
+        for item in clips:
+            if item.get("locked"):
+                continue
+            name=item.get("model_override")
+            if name:
+                if not isinstance(overrides,dict) or overrides.get(name) is None:
+                    raise ValueError(f"Unknown clip model override: {name}")
+                continue
+            types.add(normalize_mode(item.get("type","T2V")))
         needed = []
-        if needs_fl2va and fl2va_model is None:
+        if any(get_required_model_type(t)=="fl2va" for t in types) and fl2va_model is None:
             needed.append("fl2va_model")
-        if needs_ref2va and ref2va_model is None:
+        if any(get_required_model_type(t)=="ref2va" for t in types) and ref2va_model is None:
             needed.append("ref2va_model")
-
         return needed
 
     def execute(
@@ -169,6 +169,7 @@ class MiniMaxH3MasterDirector:
         prompt_text=None,
         model_pack=None,
         continuation=None,
+        latent_checkpoint=None,
         timeline_data="{}",
         builder_state="{}",
         unique_id="default_director",
@@ -385,6 +386,8 @@ class MiniMaxH3MasterDirector:
         algorithm_signature = algorithm_provenance(selflift, refine, semantic_bridge) if execution_mode != "Conditioning Guide Output" else []
         low_carry = None
         previous_av = None
+        if latent_checkpoint is not None:
+            continuation = latent_checkpoint
         if continuation is not None:
             previous_av = continuation.get("latent")
             frames = continuation.get("frames")

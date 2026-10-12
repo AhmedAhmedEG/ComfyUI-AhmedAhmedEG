@@ -1,5 +1,5 @@
 {
-  "version": "1.4.13",
+  "version": "1.4.14",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -40,7 +40,8 @@
       ],
       "extra": "<h2 id=\"editor\">Editing workspace</h2><p>The timeline comes first. Select a clip to edit its name and prompt, then write its prompt in the large left-hand area. Duration, seed, seed behavior and clip audio stay below the prompt. Drag the clip body to reorder, drag the right edge to resize, or use × / Delete Clip to remove it. Dropping outside cancels safely.</p><p>Reference Pack is the sole source of reference assets. Connect loaders to the pool and optionally name the assets. Assign actual pool items to the selected clip to reveal its prompt tokens. Empty reference tracks remain hidden; text-only mode has no reference picker.</p><h3>Controls on the right</h3><p>Continuity configures context from a preceding clip or a chosen video. Look holds model overrides, interior reference anchors and color grading. LoRAs contains adapters for the selected clip. The shared prompt textbox sits directly below the timeline. Project holds audio finishing and Files &amp; recovery. Project configuration has one entry point: the Project section above the timeline. These tabs use a bounded, independently scrolling panel, so their contents do not move the writing area. Help reveals additional explanations for each field; every field label remains visible without Help.</p><p>Generation mode stays above the timeline. Preview scope and autoplay belong to the separate Smart Preview. Canvas and sampling belong to Settings. Use Add Clip → Import Video Clip to put existing footage in the sequence; use Continue from video in Continuity to generate a new continuation without appending the source file.</p>",
       "control_descriptions": {
-        "generation_mode": "Standard Master node dropdown: Next clip preserves approved takes and generates one unapproved clip; All clips processes the sequence; Conditioning only prepares inputs for an external sampler."
+        "generation_mode": "Standard Master node dropdown: Next clip preserves approved takes and generates one unapproved clip; All clips processes the sequence; Conditioning only prepares inputs for an external sampler.",
+        "latent_checkpoint": "Advanced saved-take continuation carrying sampled latent, decoded frames and audio. Use per-clip Continuity for video-file continuation."
       },
       "output_descriptions": [
         "Assembled RGB frames for the Output selection.",
@@ -57,7 +58,8 @@
       "beginner": {
         "meaning": "This is where you direct the video. Each timeline clip has a prompt, duration, seed and optional references. The Master runs the AI and joins the completed clips. Write in the left-hand editing area; choose Continuity, Look, LoRAs or Project on the right when you need those controls.",
         "first_use": "Choose Next clip in the Generation mode dropdown above the Master timeline. Write a short description in Clip prompt on the left, set Duration to two seconds and click Run. Watch the separate Smart Preview. Use the Reference Pack for reference media; use Continuity on the right to continue a clip from an earlier clip or a video file."
-      }
+      },
+      "gotchas": []
     },
     "MiniMaxH3DirectorSettings": {
       "summary": "Canvas, sampling, noise schedules and base seed for the Master.",
@@ -281,7 +283,7 @@
     },
     "MiniMaxH3DirectorGroupImageToVideo": {
       "summary": "Packs one text/keyframe clip for the Master from graph inputs.",
-      "when": "Use it when another graph provides a prompt or endpoint images.",
+      "when": "Legacy connected group workflows only. Author new clips in the Master timeline.",
       "behavior": [
         "With no endpoint images it creates a text shot. first_frame creates I2V; both endpoints create FL2V; last_frame alone creates L2V.",
         "Returns an MMX_DIR_GROUP object. It does not sample or decode anything."
@@ -309,12 +311,12 @@
       ],
       "beginner": {
         "meaning": "This is an alternative to editing a shot inside the Master. It packages one shot’s prompt, duration and opening/closing pictures as graph inputs. You use it when another part of your graph supplies those values.",
-        "first_use": "For normal manual work, use the Master’s shot editor instead. To use this node, enter a prompt, optionally connect image frames, and connect its group output to the Master’s i2v_groups input. External groups replace the shots shown in the editor for generation."
+        "first_use": "For a new workflow, use Add Clip in the Master and Reference Pack. This node is retained for older connected group workflows; new Master nodes have no group inputs."
       }
     },
     "MiniMaxH3DirectorGroupReferenceToVideo": {
       "summary": "Packs one REF2VA clip with graph-supplied images, video frames and audio.",
-      "when": "Use it for a reference-driven graph-authored clip.",
+      "when": "Legacy connected group workflows only. Author new clips in the Master timeline.",
       "behavior": [
         "Collects connected image slots, a video-frame batch and audio into one reference-family group.",
         "Prompt, duration and reference image-size policy are preserved for Master execution."
@@ -344,12 +346,12 @@
       ],
       "beginner": {
         "meaning": "This packages one reference-guided shot outside the Master editor. Reference media show the AI what a subject, scene, style or motion should resemble. A reference is guidance, not a guarantee of an identical copy.",
-        "first_use": "Enter a prompt, connect your reference media and connect the group to the Master’s r2v_groups input. This uses the REF2VA diffusion model. For a first manual reference shot, uploading and assigning media inside the Master is easier."
+        "first_use": "For a new workflow, use Add Clip in the Master and Reference Pack. This node is retained for older connected group workflows; new Master nodes have no group inputs."
       }
     },
     "MiniMaxH3DirectorGroupsCombine": {
       "summary": "Flattens connected clip groups into a single ordered group list.",
-      "when": "Use it to put several graph-authored clips into one Master group input.",
+      "when": "Legacy connected group workflows only. Author new clips in the Master timeline.",
       "behavior": [
         "Reads group_1 through group_10 in numeric order. Each input may contain one group or a list; lists are flattened.",
         "Fails when no group is connected. This is shot-data assembly, not frame or video concatenation."
@@ -377,7 +379,7 @@
       ],
       "beginner": {
         "meaning": "This joins lists of shot instructions into one ordered list. It joins instructions before generation, not finished video files.",
-        "first_use": "Connect two group outputs to this node, then connect the combined group list to the matching Master group input. The order of connected groups determines the shot order. Use the ordinary shot editor if you do not need graph-driven shots."
+        "first_use": "For a new workflow, use Add Clip in the Master and Reference Pack. This node is retained for older connected group workflows; new Master nodes have no group inputs."
       }
     },
     "MiniMaxH3RefPack": {

@@ -38,6 +38,16 @@ class RuntimeContracts(unittest.TestCase):
     def test_model_override_pack_does_not_request_unconnected_family_models(self):
         self.assertEqual(MiniMaxH3MasterDirector.check_lazy_status(
             model_pack={"custom":object()},timeline_data=json.dumps({"clips":[{"type":"T2VA","model_override":"custom"}]})),[])
+    def test_mixed_override_pack_still_loads_unoverridden_model_families(self):
+        clips=[{"type":"T2VA","model_override":"custom"},{"type":"REF2VA"},{"type":"T2VA"}]
+        self.assertEqual(MiniMaxH3MasterDirector.check_lazy_status(model_pack={"custom":object()},
+            timeline_data=json.dumps({"clips":clips})),["fl2va_model","ref2va_model"])
+        self.assertEqual(MiniMaxH3MasterDirector.check_lazy_status(ref2va_model=object(), model_pack={"custom":object()},
+            timeline_data=json.dumps({"clips":clips})),["fl2va_model"])
+        with self.assertRaisesRegex(ValueError,"Unknown clip model override"):
+            MiniMaxH3MasterDirector.check_lazy_status(model_pack={"other":object()},
+                timeline_data=json.dumps({"clips":[{"type":"T2VA","model_override":"missing"}]}))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

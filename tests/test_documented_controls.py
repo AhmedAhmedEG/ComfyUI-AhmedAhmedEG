@@ -25,6 +25,14 @@ class DocumentedControls(unittest.TestCase):
                     or field['description'] or content['control_descriptions'].get(field['name']), (key,field['name']))
             self.assertEqual(len(cls.RETURN_TYPES),len(getattr(cls,'RETURN_NAMES',cls.RETURN_TYPES)),key)
 
+    def test_master_has_one_timeline_authoring_surface(self):
+        from nodes.node_director import MiniMaxH3MasterDirector
+        schema=MiniMaxH3MasterDirector.INPUT_TYPES()
+        names=set(schema['required']) | set(schema['optional'])
+        self.assertFalse(names & {'model','i2v_groups','r2v_groups','prompt_text','continuation'})
+        self.assertEqual(schema['optional']['latent_checkpoint'][0],'MMX_CONTINUATION')
+        self.assertTrue({'fl2va_model','ref2va_model','model_pack','sigmas'} <= names)
+
     def test_generation_mode_is_an_ordinary_visible_combo(self):
         schema = collect()['MiniMaxH3DirectorSettings']
         names = {field['name'] for field in schema['inputs']}

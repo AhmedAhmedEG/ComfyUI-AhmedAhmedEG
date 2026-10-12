@@ -5104,11 +5104,48 @@ function mountDirectorUI(node) {
 // Dynamic RefPack widget visibility (no-op as label text boxes have been removed)
 const updateRefPackWidgets = (node) => {};
 
+function migrateMasterSockets(graphData) {
+  const links=graphData.links || [];
+  const id=row=>Array.isArray(row)?row[0]:row.id;
+  const find=value=>links.find(row=>id(row)===value);
+  let nextId=Math.max(Number(graphData.last_link_id)||0,...links.map(row=>Number(id(row))||0));
+  for(const node of graphData.nodes || []) {
+    if(!["MiniMaxH3MasterNode","MiniMaxH3MasterDirector"].includes(node.type) || !Array.isArray(node.inputs))continue;
+    const generic=node.inputs.find(input=>input.name==="model"), oldLink=generic?.link!=null?find(generic.link):null;
+    if(oldLink) {
+      const families=["fl2va_model","ref2va_model"].map(name=>node.inputs.find(input=>input.name===name)).filter(input=>input && input.link==null);
+      families.forEach((input,index)=>{
+        const row=index===0?oldLink:(Array.isArray(oldLink)?[...oldLink]:{...oldLink,id:++nextId});
+        if(index && Array.isArray(row))row[0]=++nextId;
+        if(index){links.push(row);const sourceId=Array.isArray(row)?row[1]:row.origin_id, sourceSlot=Array.isArray(row)?row[2]:row.origin_slot;
+          const output=graphData.nodes.find(source=>source.id===sourceId)?.outputs?.[sourceSlot];if(output)(output.links ||= []).push(id(row));}
+        input.link=id(row);
+      });
+      if(!families.length){const index=links.indexOf(oldLink);links.splice(index,1);
+        const sourceId=Array.isArray(oldLink)?oldLink[1]:oldLink.origin_id, sourceSlot=Array.isArray(oldLink)?oldLink[2]:oldLink.origin_slot;
+        const output=graphData.nodes.find(source=>source.id===sourceId)?.outputs?.[sourceSlot];if(output)output.links=(output.links || []).filter(value=>value!==id(oldLink));}
+    }
+    node.inputs=node.inputs.filter(input=>{
+      if(input.name==="model")return false;
+      if(["i2v_groups","r2v_groups","prompt_text"].includes(input.name)){
+        if(input.link==null)return false;
+        input.label="Legacy " + input.name;
+        return true; // Keep connected legacy graphs functional; never discard linked authored data.
+      }
+      if(input.name==="continuation")input.name="latent_checkpoint";
+      return true;
+    });
+    node.inputs.forEach((input,index)=>{const row=input.link!=null?find(input.link):null;if(row){if(Array.isArray(row)){row[3]=node.id;row[4]=index;}else{row.target_id=node.id;row.target_slot=index;}}});
+  }
+  graphData.last_link_id=nextId;
+}
+
 app.registerExtension({
   name: "ComfyUI.MiniMaxH3MasterDirector",
   init: () => console.log("[DirectorUI] Extension initialized"),
 
   beforeConfigureGraph(graphData) {
+    migrateMasterSockets(graphData);
     // Upgrade saved UI workflows before ComfyUI resolves node types.
     for (const node of graphData?.nodes || []) {
       if (node.type === "MiniMaxH3MasterDirector") node.type = "MiniMaxH3MasterNode";
