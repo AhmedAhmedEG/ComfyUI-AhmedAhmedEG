@@ -234,6 +234,21 @@ class RuntimeContracts(unittest.TestCase):
         refine.assert_not_called()
         self.assertTrue(json.loads(result[9])['clips'][0]['refine_pending'])
 
+    def test_changed_continuity_settings_require_fresh_first_pass_review(self):
+        refinement={'enabled':True,'mode':'refine','confirm_first_pass':True}
+        clips=[{'id':'one','type':'T2V','duration':1},
+               {'id':'two','type':'T2V','duration':1,'continuity':True,
+                'continuity_mode':'Motion Context (Chained)','context_length':5,'audio_context_length':5}]
+        self.execute([clips[0]]);clips[0]['validated']=True
+        result=self.execute(clips,refine=refinement)
+        clips=json.loads(result[9])['clips'];clips[1]['refine_approved']=True
+        clips[1]['audio_context_length']=0
+        with patch('nodes.node_director.apply_refine_pass') as refine:
+            result=self.execute(clips,refine=refinement)
+        self.assertEqual(len(self.sampling_calls),3,'Changed continuity settings cannot reuse an approved stale stage')
+        refine.assert_not_called()
+        self.assertFalse(json.loads(result[9])['clips'][1]['refine_approved'])
+
     def test_intermediate_refine_passes_are_cached_and_previewable(self):
         from core.preview import create_preview_plan
         result=self.execute(refine={'enabled':True,'mode':'refine','backend':'sampler','passes':2,'skip_fl2v':False})

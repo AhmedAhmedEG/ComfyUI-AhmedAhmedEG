@@ -963,7 +963,10 @@ class MiniMaxH3MasterDirector:
                 'sampler':sampler,'scheduler':scheduler,'sigmas':sigmas,'shifts':(shift_video,shift_audio),
                 'model':clip_active_model,'loras':clip_lora_files,'refs':(ref_images,ref_videos,ref_video_audios,ref_audios,first_frame,last_frame,clip_refmod_items),
                 'guides':guide_frames,'selflift':selflift,'semantic':semantic_bridge,
-                'upstream':previous_fingerprint if clip_continuity else None,'redraw':clip_item.get('continuity_redraw',.1)})
+                'upstream':previous_fingerprint if clip_continuity else None,'redraw':clip_item.get('continuity_redraw',.1),
+                'continuity':(clip_continuity_mode,clip_context_length,clip_audio_context,clip_tail_sec),
+                'initial_latent':latent,'video_vae':video_vae,'audio_vae':audio_vae,'clip':clip,
+                'audio_mode':audio_mode,'source_audio':source['audio'] if source is not None else None})
             staged=cache_mgr.load_first_pass(clip_id,first_fp) if confirm_first else None
             if confirm_first and staged is None: clip_item['refine_approved']=False
             refine_pass_rows=[]
