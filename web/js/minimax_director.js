@@ -2104,8 +2104,6 @@ const embeddedCSS = `
 .mmx-director-root .mmx-generation-bar .mmx-field { display:grid;grid-template-columns:150px 200px 1fr;align-items:center; }
 .mmx-director-root .mmx-generation-mode { padding:7px;border:1px solid #849eb8;border-radius:4px;background:#202b38;color:white; }
 .mmx-director-root .mmx-shots-lane { position:relative; }
-.mmx-director-root .mmx-continuity-overlay { position:absolute;top:35px;height:24px;box-sizing:border-box;z-index:5;pointer-events:none;border:1px dashed #7ab3df;background:repeating-linear-gradient(135deg,#335e80cc 0px,#335e80cc 4px,#224765cc 4px,#224765cc 8px);color:white;font:10px ui-monospace,monospace;text-align:center;white-space:nowrap;overflow:visible;text-shadow:0 1px 3px #000; }
-.mmx-director-root .mmx-continuity-overlay.audio { top:63px;border-color:#b29ce6;background:repeating-linear-gradient(135deg,#645087cc 0px,#645087cc 4px,#463563cc 4px,#463563cc 8px); }
 /* Compact editing desk: timeline first, readable segment prompt below. */
 .mmx-director-root:not(.mmx-preview-node) { gap:8px; padding:8px; overflow-y:auto; }
 .mmx-director-root:not(.mmx-preview-node) > * { flex-shrink:0; }
@@ -2316,10 +2314,6 @@ const embeddedCSS = `
 .mmx-director-root .mmx-clip-selection:has(input:disabled) {opacity:.4;cursor:not-allowed;background:#26313a;}
 .mmx-director-root .mmx-clip-selection input:disabled {cursor:not-allowed;}
 .mmx-director-root .mmx-shot-prompt-preview {flex:1;display:-webkit-box;-webkit-line-clamp:5;line-height:1.5;padding:6px 0 26px;white-space:normal;text-align:left;align-self:stretch;color:#c5d0db!important;}
-.mmx-continuity-extension {position:absolute;top:0;height:112px;z-index:2;pointer-events:none;border:1px solid #7caec66b;border-right:0;border-radius:5px 0 0 5px;box-sizing:border-box;background:transparent;overflow:hidden;}
-.mmx-director-root .mmx-continuity-extension .mmx-continuity-overlay {left:auto;right:0;top:0;height:50%;border:0;border-radius:0;background:linear-gradient(90deg,#368dc522,#368dc566);font-size:10px;text-align:right;padding:4px;overflow:hidden;text-shadow:0 1px 2px #000;}
-.mmx-director-root .mmx-continuity-extension .mmx-continuity-overlay.audio {top:50%;background:linear-gradient(90deg,#8964c522,#8964c566);border-top:1px solid #ac8fcd55;}
-.mmx-director-root .mmx-continuity-extension.video-only .mmx-continuity-overlay.video {height:100%;}
 .mmx-director-root .mmx-timeline-audio {padding:4px 0;border:0;border-radius:0;background:transparent;display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:0;}
 .mmx-director-root .mmx-timeline-audio h3 {font-size:12px;color:#a9bac9;margin:0;}
 .mmx-director-root .mmx-timeline-audio label {display:flex;gap:7px;align-items:center;}
@@ -2336,6 +2330,17 @@ const embeddedCSS = `
 .mmx-director-root .mmx-inspector-card-row {flex-wrap:wrap;}
 .mmx-director-root .mmx-inspector-header .mmx-audio-control {display:flex;align-items:center;gap:10px;white-space:nowrap;}
 @container (max-width:680px) {.mmx-director-root .mmx-inspector-header {grid-template-columns:1fr;}.mmx-director-root .mmx-clip-header-actions {grid-template-columns:repeat(3,1fr);}.mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:auto;}}
+
+.mmx-director-root .mmx-continuity-link {position:absolute;top:45px;width:28px;height:24px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;z-index:6;color:#9fc4d9;background:#1b252e;border:1px solid #4f6d7e;border-radius:12px;pointer-events:auto;}
+.lg-node-widgets:has(.mmx-director-root:not(.mmx-preview-node)) > .lg-node-widget:not(:has(.mmx-director-root,input,textarea,select,button,[role="combobox"])) {display:none!important;}
+.mmx-director-root:not(.mmx-preview-node) > .mmx-inspector {flex:1 0 auto;min-height:480px;display:flex;flex-direction:column;}
+.mmx-director-root .mmx-edit-workspace {flex:1;min-height:360px;align-items:stretch;}
+.mmx-director-root .mmx-edit-main {min-height:0;}
+.mmx-director-root .mmx-prompt-inspector {flex:1;min-height:260px;display:flex;flex-direction:column;}
+.mmx-director-root .mmx-prompt-inspector > .mmx-textarea {flex:1 1 0!important;height:auto!important;max-height:none!important;min-height:180px!important;resize:none;}
+.mmx-director-root .mmx-prompt-inspector .mmx-structured-grid {flex:1!important;height:auto!important;max-height:none!important;}
+.mmx-director-root .mmx-edit-tools {display:flex;flex-direction:column;align-self:stretch;min-height:0;}
+.mmx-director-root .mmx-tool-content {flex:1;min-height:0;max-height:none!important;overflow-y:auto;}
 
 `;
 
@@ -2488,6 +2493,7 @@ function mountDirectorUI(node) {
     available_refs: [],
   };
   let generatingClipId=null;
+  let progressSequence=0,progressTimer=null,progressWatching=false,progressRequest=false;
   let cachedClipResults={},cacheStatusProject=null,cacheStatusRequest=0;
   let serverStatus=null, savedProjectSignature=null;
   const projectSignature=()=>JSON.stringify({timeline:{...timelineState,server_revision:undefined},builder:builderState});
@@ -3457,11 +3463,7 @@ function mountDirectorUI(node) {
       ticks.appendChild(tick);
     }
     rulerTicks.appendChild(ticks);
-    for (const extension of shotsLane.querySelectorAll('.mmx-continuity-extension')) {
-      extension.style.left=`${6+(Number(extension.dataset.start)-Number(extension.dataset.frames)/24)*pxPerSec}px`;
-      extension.style.width=`${Number(extension.dataset.frames)/24*pxPerSec}px`;
-      for(const overlay of extension.children)overlay.style.width=`${Number(overlay.dataset.frames)/24*pxPerSec}px`;
-    }
+    for (const link of shotsLane.querySelectorAll('.mmx-continuity-link')) link.style.left=`${4+Number(link.dataset.start)*pxPerSec}px`;
     const playheadX = Math.max(0, Math.min(width, playheadSeconds * pxPerSec));
     playheadNeedle.style.left = `${origin + playheadX}px`;
     // Anchor to the panel instead of inflating its scroll height when lanes hide.
@@ -3747,15 +3749,12 @@ function mountDirectorUI(node) {
         const video=method==="FL2VA Tail Handoff"?1:grid;
         const audio=method==="FL2VA Tail Handoff"?0:Math.min(video,Number(clip.audio_context_length ?? video));
         if(video>0 || audio>0) {
-          const extension=document.createElement('div');extension.className='mmx-continuity-extension'+(audio===0?' video-only':'');
-          extension.dataset.start=elapsed;extension.dataset.frames=Math.max(video,audio);extension.dataset.clipId=clip.id;
-          for(const [kind,frames] of [['video',video],['audio',audio]]) if(frames>0) {
-            const overlay=document.createElement('div');overlay.className=`mmx-continuity-overlay ${kind}`;overlay.dataset.frames=frames;
-            overlay.textContent=`${kind==='video'?'Video':'Audio'} ${(frames/24).toFixed(2)}s`;
-            overlay.title=`${clip.name || 'Clip '+(index+1)} borrows ${(frames/24).toFixed(2)}s of ${kind} context from the previous clip`;
-            extension.append(overlay);
-          }
-          shotsLane.append(extension);
+          const link=document.createElement('span');link.className='mmx-continuity-link';link.dataset.start=elapsed;link.dataset.clipId=clip.id;
+          link.dataset.videoFrames=video;link.dataset.audioFrames=audio;link.setAttribute('role','img');
+          link.title=`${clip.name || 'Clip '+(index+1)} continues from the previous clip · ${method.split(' (')[0]} · Video ${(video/24).toFixed(2)}s · Audio ${(audio/24).toFixed(2)}s`;
+          link.setAttribute('aria-label',link.title);
+          link.innerHTML='<svg width="20" height="16" viewBox="0 0 24 18" fill="none" aria-hidden="true"><rect x="1" y="5" width="13" height="8" rx="4" stroke="currentColor" stroke-width="2"/><rect x="10" y="5" width="13" height="8" rx="4" stroke="currentColor" stroke-width="2"/></svg>';
+          shotsLane.append(link);
         }
       }
       elapsed+=Number(clip.duration)||5;
@@ -3807,13 +3806,7 @@ function mountDirectorUI(node) {
       if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent='Generating';shotTopBar.append(running);}
 
 
-      if (clip.continuity && idx > 0) {
-        const contIcon = document.createElement("span");
-        contIcon.style.fontSize = "10px";
-        contIcon.title = "Auto-Tail Continuity from previous clip";
-        contIcon.textContent = "🔗";
-        shotTopBar.appendChild(contIcon);
-      }
+
 
       const delBtn = document.createElement("button");
       delBtn.className = "mmx-clip-del-btn";
@@ -4399,6 +4392,15 @@ function mountDirectorUI(node) {
     if (!Array.isArray(activeClip.loras)) activeClip.loras = [];
     const loraRows = document.createElement("div");
     loraPanel.appendChild(loraRows);
+    const commitLoRAEdit=()=>{
+      activeClip.validated=false;activeClip.refine_approved=false;activeClip.refine_pending=false;
+      const index=timelineState.clips.indexOf(activeClip);
+      for(const dependent of timelineState.clips.slice(index+1)){
+        if(dependent.locked || dependent.continuity===false || (dependent.continuity_mode || 'Independent (No Continuity)')==='Independent (No Continuity)')break;
+        dependent.validated=false;dependent.refine_approved=false;dependent.refine_pending=false;
+      }
+      syncState();renderTimeline();
+    };
     const drawLoras = () => {
       loraRows.replaceChildren();
       activeClip.loras.forEach((row, index) => {
@@ -4406,8 +4408,8 @@ function mountDirectorUI(node) {
         controls.style.cssText = "display:flex;gap:6px;margin:6px 0;align-items:center";
         const enabled = document.createElement("input");
         enabled.type = "checkbox";
-        enabled.checked = row.enabled !== false;
-        enabled.onchange = () => { row.enabled = enabled.checked; syncState(); };
+        enabled.checked = (row.enabled ?? row.active ?? true) !== false;
+        enabled.onchange = () => { row.enabled = enabled.checked; commitLoRAEdit(); };
         const name = document.createElement("select");
         name.style.cssText = "flex:1;min-width:0";
         const current = document.createElement("option");
@@ -4420,7 +4422,7 @@ function mountDirectorUI(node) {
             const option = document.createElement("option"); option.value = value; option.textContent = value; name.appendChild(option);
           }
         }).catch(error => { name.title = error.message; });
-        name.onchange = () => { row.name = name.value; syncState(); };
+        name.onchange = () => { row.name = name.value; commitLoRAEdit(); };
         const info = document.createElement("button"); info.textContent = "Info";
         info.onclick = async () => {
           try {
@@ -4435,16 +4437,16 @@ function mountDirectorUI(node) {
         const strength = document.createElement("input");
         strength.type = "number"; strength.min = "-10"; strength.max = "10"; strength.step = "0.05";
         strength.value = row.strength ?? 1; strength.style.width = "65px";
-        strength.onchange = () => { row.strength = Number(strength.value); syncState(); };
+        strength.onchange = () => { const amount=Number(strength.value);if(!Number.isFinite(amount)||amount < -10 || amount > 10){strength.setCustomValidity("Enter a strength from -10 to 10.");strength.reportValidity();return;}strength.setCustomValidity("");row.strength = amount; commitLoRAEdit(); };
         const remove = document.createElement("button"); remove.textContent = "Remove";
-        remove.onclick = () => { activeClip.loras.splice(index, 1); syncState(); drawLoras(); };
+        remove.onclick = () => { activeClip.loras.splice(index, 1); commitLoRAEdit(); drawLoras(); };
         controls.className="mmx-form-row";controls.style.cssText="";controls.append(field("Enabled",enabled),field("LoRA file",name),field("Model strength",strength),info,remove); loraRows.appendChild(controls);
       });
     };
     const addLora = document.createElement("button"); addLora.textContent = "Add LoRA";
     addLora.onclick = () => {
       if (activeClip.loras.length >= 8) return;
-      activeClip.loras.push({ name: "", strength: 1, enabled: true }); syncState(); drawLoras();
+      activeClip.loras.push({ name: "", strength: 1, enabled: true }); commitLoRAEdit(); drawLoras();
     };
     loraPanel.appendChild(addLora); drawLoras();
     finishSection(loraPanel,"Optional model adapters applied only to this clip. Choose a compatible H3 LoRA and its strength.");
@@ -4525,7 +4527,7 @@ function mountDirectorUI(node) {
     }
     continuityMode.disabled=!!activeClip.locked;
     shotSections.prepend(continuityPanel);
-    finishSection(continuityPanel,continuityMode.value===continuityModes[0]?"Independent clips borrow no video or audio context.":timelineState.clips.indexOf(activeClip)===0?"There is no preceding clip. Add a video or generate an earlier clip on the timeline to provide context.":"Blue and purple overlays show requested video and audio context from the previous clip. Short previous clips limit the usable context.");
+    finishSection(continuityPanel,continuityMode.value===continuityModes[0]?"Independent clips borrow no video or audio context.":timelineState.clips.indexOf(activeClip)===0?"There is no preceding clip. Add a video or generate an earlier clip on the timeline to provide context.":"The chain between clips shows continuity from the preceding clip. Short previous clips limit the usable video and audio context.");
     titleWrap.appendChild(timingRow);
 
     // Seed controls in the clip header.
@@ -4951,9 +4953,9 @@ function mountDirectorUI(node) {
     shotSections.className="mmx-shot-sections mmx-tool-content";
     const panels=[["Continuity",continuityPanel],["Look",shotExtras],["LoRAs",loraPanel]];
     const canContinue=!continuityPanel.hidden;
-    if(activeToolTab==="Continuity"&&!canContinue)activeToolTab="Look";
+    if((activeToolTab==="Continuity"&&!canContinue) || (activeToolTab==="LoRAs"&&activeClip.locked))activeToolTab="Look";
     const selectTool=label=>{
-      if(label==="Continuity"&&!canContinue)return;
+      if((label==="Continuity"&&!canContinue) || (label==="LoRAs"&&activeClip.locked))return;
       activeToolTab=label;
       for(const [name,panel] of panels)panel.hidden=name!==label;
       for(const button of tabs.querySelectorAll("button")){
@@ -4967,7 +4969,7 @@ function mountDirectorUI(node) {
       button.dataset.tool=label;button.tabIndex=label===activeToolTab?0:-1;
       button.setAttribute("role","tab");button.setAttribute("aria-selected",String(label===activeToolTab));
       const panelId=`mmx-${node.id}-${label.toLowerCase()}-panel`;button.id=panelId+"-tab";
-      button.setAttribute("aria-controls",panelId);button.disabled=label==="Continuity"&&!canContinue;
+      button.setAttribute("aria-controls",panelId);button.disabled=(label==="Continuity"&&!canContinue) || (label==="LoRAs"&&!!activeClip.locked);
       panel.id=panelId;panel.setAttribute("role","tabpanel");panel.setAttribute("aria-labelledby",button.id);
       panel.open=true;panel.hidden=label!==activeToolTab;shotSections.append(panel);
       button.onclick=()=>selectTool(label);
@@ -5119,11 +5121,25 @@ function mountDirectorUI(node) {
 
   };
 
+  const pollClipProgress=async()=>{
+    if(!progressWatching || progressRequest || node.__mmxDisposed)return;
+    progressRequest=true;
+    try {
+      const response=await api.fetchApi('/minimax_director/progress?'+new URLSearchParams({node:String(node.id),project_id:timelineState.project_id}));
+      const result=await response.json();
+      if(response.ok && progressWatching && !node.__mmxDisposed && result.state && Number(result.state.sequence)>progressSequence)node.__mmxShotHandler?.({detail:result.state});
+    } catch {} finally {progressRequest=false;}
+  };
+  const watchClipProgress=()=>{progressWatching=true;if(progressTimer===null)progressTimer=setInterval(pollClipProgress,2000);};
+  const stopClipProgress=()=>{progressWatching=false;if(progressTimer!==null)clearInterval(progressTimer);progressTimer=null;};
+
   // Backend updates only the clip actually completed; clip-by-clip and selection
   // do not advance unrelated clip seeds.
   node.__mmxShotHandler = event => {
     const detail = event.detail;
     if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
+    if(detail.sequence){if(Number(detail.sequence)<=progressSequence)return;progressSequence=Number(detail.sequence);}
+    if(['preparing','sampling'].includes(detail.phase))watchClipProgress();
     if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState();void refreshClipResults();renderTimeline();renderInspector();return;}
     if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState();renderTimeline();renderInspector();return; }
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
@@ -5153,17 +5169,18 @@ function mountDirectorUI(node) {
     node.__mmxShotListener = event => node.__mmxShotHandler?.(event);
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
     const clearGenerating=event=>{
-      if(!generatingClipId)return;
+      const executingNode=typeof event.detail==='object'?event.detail?.node:event.detail;
+      if(event.type==='executing' && String(executingNode)===String(node.id)){watchClipProgress();void pollClipProgress();return;}
       // ComfyUI emits executing.detail as a node ID, not a {node} object.
       // Only the terminal null event should clear the clip indicator.
       if(event?.type==='executing' && (typeof event.detail==='object' ? event.detail?.node : event.detail)!=null)return;
       if(event?.type==='execution_error' && event.detail?.node_id && String(event.detail.node_id)!==String(node.id))return;
-      generatingClipId=null;renderTimeline();
+      stopClipProgress();generatingClipId=null;renderTimeline();
     };
     for(const name of ['execution_error','execution_interrupted','executing'])api.addEventListener(name,clearGenerating);
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
-      node.__mmxDisposed = true;
+      node.__mmxDisposed = true;stopClipProgress();
       for (const observers of node.__mmxRefObserverSets || []) observers.delete(node.__mmxRefObserver);
       node.__mmxRefObserverSets?.clear();
       cancelTimelineDrag?.();

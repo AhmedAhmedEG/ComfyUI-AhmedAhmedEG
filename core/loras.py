@@ -3,6 +3,17 @@ from __future__ import annotations
 import hashlib
 import math
 
+MAX_CACHED_LORAS = 8
+
+
+def _patch_count(model):
+    patches = getattr(model, "patches", None)
+    if isinstance(patches, dict):
+        return sum(len(values) for values in patches.values())
+    if isinstance(patches, list):
+        return len(patches)
+    return None
+
 
 def normalize_loras(rows):
     if rows is None:
@@ -50,5 +61,13 @@ def apply_loras(model, files, state_cache):
         key = (row["path"], row["sha256"])
         if key not in state_cache:
             state_cache[key] = comfy.utils.load_torch_file(row["path"], safe_load=True)
-        patched, _ = comfy.sd.load_lora_for_models(patched, None, state_cache[key], row["strength"], 0)
+        state = state_cache.pop(key)
+        state_cache[key] = state
+        while len(state_cache) > MAX_CACHED_LORAS:
+            state_cache.pop(next(iter(state_cache)))
+        before = _patch_count(patched)
+        patched, _ = comfy.sd.load_lora_for_models(patched, None, state, row["strength"], 0)
+        after = _patch_count(patched)
+        if before is not None and after is not None and after <= before:
+            raise ValueError(f"LoRA {row['name']!r} has no compatible diffusion-model patches. Select a LoRA compatible with the clip's H3 checkpoint.")
     return patched

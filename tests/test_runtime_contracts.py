@@ -660,6 +660,47 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(self.sampling_calls[1]["model"].patches, [])
         self.assertEqual(base.patches, [])
 
+    def test_lora_cache_is_bounded_and_rejects_zero_matched_patches(self):
+        import sys,types,comfy
+        from core.loras import apply_loras
+        class Model(SimpleNamespace):
+            def clone(self): return Model(patches=list(self.patches))
+        sd,utils=types.ModuleType("comfy.sd"),types.ModuleType("comfy.utils")
+        def load(model,clip,state,strength_model,strength_clip):
+            model=model.clone();model.patches.append(strength_model);return model,clip
+        sd.load_lora_for_models=load;utils.load_torch_file=lambda path,**kw:{"path":path}
+        cache={}
+        with patch.dict(sys.modules,{"comfy.sd":sd,"comfy.utils":utils}),patch.object(comfy,"sd",sd),patch.object(comfy,"utils",utils):
+            for i in range(10):apply_loras(Model(patches=[]),[{"path":str(i),"sha256":str(i),"name":str(i),"strength":1}],cache)
+            self.assertEqual(len(cache),8);self.assertNotIn(("0","0"),cache)
+            sd.load_lora_for_models=lambda model,clip,*args:(model.clone(),clip)
+            with self.assertRaisesRegex(ValueError,"no compatible diffusion-model patches"):
+                apply_loras(Model(patches=[]),[{"path":"other-model","sha256":"other-model","name":"wrong-adapter","strength":1}],cache)
+
+    def test_resumed_first_pass_keeps_clip_loras_for_refinement(self):
+        import sys, types, comfy
+        class Model(SimpleNamespace):
+            def clone(self):
+                return Model(model_name=self.model_name, patches=list(self.patches))
+        base=Model(model_name="test-h3",patches=[])
+        path=os.path.join(self.temp.name,"adapter.safetensors")
+        with open(path,"wb") as stream: stream.write(b"adapter fixture")
+        sd,utils=types.ModuleType("comfy.sd"),types.ModuleType("comfy.utils")
+        def load(model,clip,state,strength_model,strength_clip):
+            model=model.clone();model.patches.append(strength_model);return model,clip
+        sd.load_lora_for_models=load;utils.load_torch_file=lambda *args,**kw:{"weights":"fixture"}
+        refinement={"enabled":True,"mode":"refine","confirm_first_pass":True}
+        clips=[{"id":"one","type":"T2VA","duration":1,"loras":[{"name":"adapter","strength":.7}]}]
+        with patch.dict(sys.modules,{"folder_paths":SimpleNamespace(get_full_path_or_raise=lambda *args:path),"comfy.sd":sd,"comfy.utils":utils}),patch.object(comfy,"sd",sd),patch.object(comfy,"utils",utils):
+            result=self.execute(clips,model=base,refine=refinement)
+            self.assertEqual(self.sampling_calls[0]["model"].patches,[.7])
+            pending=json.loads(result[9])["clips"];pending[0]["refine_approved"]=True
+            with patch("nodes.node_director.apply_refine_pass",side_effect=lambda **kw:kw["latent_dict"]) as refine:
+                self.execute(pending,model=base,refine=refinement)
+            self.assertEqual(len(self.sampling_calls),1,"The reviewed first pass must be reused")
+            self.assertEqual(refine.call_args.kwargs["model"].patches,[.7],"Refinement must retain the same clip adapters")
+            self.assertEqual(base.patches,[])
+
     def test_source_edit_binds_video_one_and_keeps_original_audio(self):
         source = {"frames": torch.ones((17, 32, 32, 3)),
             "audio": {"waveform": torch.ones((1, 2, 32000)), "sample_rate": 32000}}

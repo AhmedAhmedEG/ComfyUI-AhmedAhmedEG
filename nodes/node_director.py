@@ -545,7 +545,7 @@ class MiniMaxH3MasterDirector:
             if canon_mode == MODE_INPAINT:
                 clip_continuity = False
                 clip_dur = 5 / FPS
-            clip_lora_files = resolve_lora_files(clip_item.get("loras", [])) if clip_item.get("loras") else []
+            clip_lora_files = resolve_lora_files(clip_item.get("loras", [])) if clip_item.get("loras") and not clip_item.get("locked") else []
 
             # Select model for this clip
             clip_active_model = fl2va_model if get_required_model_type(canon_mode) == "fl2va" else ref2va_model
@@ -1003,6 +1003,10 @@ class MiniMaxH3MasterDirector:
                 run_report.append({"clip_id": clip_id, "action": "source", "frames": int(frames.shape[0])})
                 continue
 
+            # Both fresh sampling and resumed refinement need the clip's adapters.
+            # Fingerprints above describe the base model plus the effective LoRA files.
+            clip_active_model = apply_loras(clip_active_model, clip_lora_files, lora_state_cache)
+
             if staged is not None:
                 sampled_latent=staged['latent']
                 shot_event(unique_id,project_id,clip_id,'sampling',index=clip_idx+1,total=len(clips))
@@ -1014,7 +1018,6 @@ class MiniMaxH3MasterDirector:
             else:
                 # Sampling
                 shot_event(unique_id, project_id, clip_id, "sampling", index=clip_idx+1, total=len(clips), seed=str(clip_seed))
-                clip_active_model = apply_loras(clip_active_model, clip_lora_files, lora_state_cache)
 
                 try:
                     from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift

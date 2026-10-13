@@ -38,6 +38,12 @@ if getattr(PromptServer, "instance", None) is not None:
             "node_count": len(NODE_CLASS_MAPPINGS), "node_types": list(NODE_CLASS_MAPPINGS),
             "master_types": [name for name in NODE_CLASS_MAPPINGS if "Master" in name]})
 
+    @routes.get("/minimax_director/progress")
+    async def clip_progress(request):
+        from .core.progress import current_clip_progress
+        return web.json_response({"state": current_clip_progress(
+            request.query.get("node", ""), request.query.get("project_id", ""))})
+
     @routes.post("/minimax_director/media/upload")
     async def upload_media(request):
         import tempfile
