@@ -2364,7 +2364,7 @@ function migrateContinuitySources(state) {
     if(source && source.filename && Number.isFinite(Number(source.end)) && Number(source.end)>0) {
       let id=`context_${clip.id || clips.length}`;while(used.has(id))id+='_source';used.add(id);
       const end=Number(source.end),start=Math.max(0,end-56/24);
-      clips.push({id,name:'Imported Context Video',type:'V2V',source:{filename:source.filename},source_start:start,source_end:end,duration:end-start,locked:true,audio_mode:'source',selected:false,continuity:false,prompt:'',ref_ids:[],video_input_resolution:{mode:'auto'}});
+      clips.push({id,name:'Imported Context Video',type:'V2V',source:{filename:source.filename},source_start:start,source_end:end,duration:end-start,locked:true,audio_mode:'source',selected:false,continuity:false,prompt:'',ref_ids:[],video_input_resolution:{mode:'megapixels',megapixels:.5}});
       delete clip.continuation_source;
     }
     clips.push(clip);
@@ -3560,7 +3560,7 @@ function mountDirectorUI(node) {
           name: `Clip ${newIndex}`,
           type: type === "VIDEO" ? "V2V" : type,
           locked: type === "VIDEO", audio_mode: type === "VIDEO" ? "source" : "generate",
-          video_input_resolution: {mode:"auto"},
+          video_input_resolution: {mode:"megapixels",megapixels:.5},
           duration: 5.0,
           tail_seconds: 0.5,
           seed: Math.floor(Math.random() * 10000000000),
@@ -4287,18 +4287,12 @@ function mountDirectorUI(node) {
     if (["V2V", "RV2V"].includes(activeClip.type)) {
       const resolutionPanel=document.createElement('fieldset');resolutionPanel.className='mmx-video-input-resolution';
       const resolutionLegend=document.createElement('legend');resolutionLegend.textContent='Video Input Resolution';resolutionPanel.append(resolutionLegend);
-      const inputResolution=activeClip.video_input_resolution ||= {mode:'auto'};
-      const resolutionMode=document.createElement('select');resolutionMode.setAttribute('aria-label','Video Input Resolution');
-      for(const [value,label] of [['auto','H3 Default'],['short_edge','Short Edge Limit'],['megapixels','Megapixel Limit']]){const option=document.createElement('option');option.value=value;option.textContent=label;resolutionMode.append(option);}
-      resolutionMode.value=inputResolution.mode;resolutionMode.onchange=()=>{inputResolution.mode=resolutionMode.value;inputResolution.short_edge ??= 512;inputResolution.megapixels ??= .5;activeClip.validated=false;invalidateFrom(timelineState.clips.indexOf(activeClip));syncState();renderTimeline();};
-      resolutionPanel.append(field('Sizing',resolutionMode,'H3 default: up to 768 px short edge and 768 × 1344 pixels; dimensions align to 32. Smaller input budgets never increase generation resolution.'));
-      if(inputResolution.mode!=='auto'){
-        const budget=document.createElement('input');budget.type='number';const mp=inputResolution.mode==='megapixels';
-        budget.min=mp?'0.001024':'32';budget.max=mp?'1.032192':'768';budget.step=mp?'0.01':'32';budget.value=mp?(inputResolution.megapixels ?? .5):(inputResolution.short_edge ?? 512);
-        budget.setAttribute('aria-label',mp?'Video Input Megapixels':'Video Input Short Edge');
-        budget.onchange=()=>{const value=Number(budget.value);if(!Number.isFinite(value)||value<Number(budget.min)||value>Number(budget.max)){budget.setCustomValidity('Enter a value within the displayed range.');budget.reportValidity();return;}budget.setCustomValidity('');inputResolution[mp?'megapixels':'short_edge']=value;activeClip.validated=false;invalidateFrom(timelineState.clips.indexOf(activeClip));syncState();renderTimeline();};
-        resolutionPanel.append(field(mp?'Megapixels':'Short Edge (Pixels)',budget,'Preserves source aspect ratio with 32-pixel alignment. 1 MP = 1,000,000 pixels.'));
-      }
+      const previousResolution=activeClip.video_input_resolution;
+      const inputResolution=activeClip.video_input_resolution={mode:'megapixels',megapixels:previousResolution?.mode==='megapixels'?(previousResolution.megapixels ?? .5):.5};
+      const budget=document.createElement('input');budget.type='number';budget.min='0.001024';budget.max='1.032192';budget.step='0.01';budget.value=inputResolution.megapixels;
+      budget.setAttribute('aria-label','Video Input Megapixels');
+      budget.onchange=()=>{const value=Number(budget.value);if(!Number.isFinite(value)||value<Number(budget.min)||value>Number(budget.max)){budget.setCustomValidity('Enter a value within the displayed range.');budget.reportValidity();return;}budget.setCustomValidity('');inputResolution.megapixels=value;activeClip.validated=false;invalidateFrom(timelineState.clips.indexOf(activeClip));syncState();renderTimeline();};
+      resolutionPanel.append(field('Input Size (MP)',budget,'Default: 0.5 MP. Preserves source aspect ratio with 32-pixel alignment; smaller sources are not enlarged. 1 MP = 1,000,000 pixels.'));
       const resolutionNote=document.createElement('p');resolutionNote.textContent='Controls model-input frames, not the original file or the output canvas. Motion guides and latent carry must still match the generated canvas when encoded.';resolutionPanel.append(resolutionNote);inspector.append(resolutionPanel);
       const sourcePanel = document.createElement("fieldset");
       const legend = document.createElement("legend"); legend.textContent = "Source video range";

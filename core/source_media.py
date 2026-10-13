@@ -17,7 +17,7 @@ def video_input_dimensions(width, height, settings=None):
     if min(width, height) < 32:
         raise ValueError("Video input dimensions must be at least 32 pixels.")
     settings = settings or {}
-    mode = settings.get("mode", "auto")
+    mode = settings.get("mode", "megapixels")
     scale = min(1.0, 768 / min(width, height), math.sqrt((768 * 1344) / (width * height)))
     if mode == "short_edge":
         edge = float(settings.get("short_edge", 768))
@@ -25,7 +25,7 @@ def video_input_dimensions(width, height, settings=None):
             raise ValueError("Video input short edge must be between 32 and 768 pixels.")
         scale = min(scale, edge / min(width, height))
     elif mode == "megapixels":
-        mp = float(settings.get("megapixels", 1.032192))
+        mp = float(settings.get("megapixels", 0.5))
         if not math.isfinite(mp) or not .001024 <= mp <= 1.032192:
             raise ValueError("Video input budget must be between 0.001024 and 1.032192 megapixels.")
         scale = min(scale, math.sqrt(mp * 1_000_000 / (width * height)))

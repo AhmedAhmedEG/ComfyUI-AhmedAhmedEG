@@ -8,9 +8,9 @@ from core.project import migrate_timeline
 
 
 class VideoInputResolution(unittest.TestCase):
-    def test_official_default_and_small_source_do_not_upscale(self):
-        self.assertEqual(video_input_dimensions(1920, 1080), (1344, 768))
-        self.assertEqual(video_input_dimensions(3840, 2160), (1344, 768))
+    def test_half_megapixel_default_and_small_source_do_not_upscale(self):
+        self.assertEqual(video_input_dimensions(1920, 1080), (928, 512))
+        self.assertEqual(video_input_dimensions(3840, 2160), (928, 512))
         self.assertEqual(video_input_dimensions(640, 360), (640, 352))
 
     def test_custom_budgets_are_aligned_and_bounded(self):
