@@ -1,5 +1,7 @@
 # Current consolidation parity review
 
+**Historical baseline:** the findings below describe 1.4.22 before the follow-up implementation. See [the complete 1.5 audit additions](release-1.5-audit-additions.md) for what 1.5.0/1.5.1 added and the remaining verification limits.
+
 Reviewed 12 October 2026. Target: release **1.4.22**, commit `683fabf378decfa8e7aa67338d774ec3f26c13a8`.
 
 **Conclusion: the core generation union is implemented, but complete usable feature parity is not established.** The older inventory's blanket “present” statuses are no longer accurate after the interface changes. Backend code, a registered node, and a usable current workflow are different levels of support.

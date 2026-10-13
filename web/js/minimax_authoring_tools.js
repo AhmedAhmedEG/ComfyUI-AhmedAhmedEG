@@ -66,8 +66,35 @@ function refmods(node){hide(node,'library_data');const root=mount(node,"RefMod L
 }
 
 function assets(node){hide(node,'asset_edits');for(const w of node.widgets || [])if(/^(image|video|audio)_\d+_name$/.test(w.name))hide(node,w.name);const root=mount(node,"Reference Pack · Asset Editor");let data=JSON.parse(value(node,'asset_edits','{}'));data.assets ||= {};data.files ||= [];const list=element('div');root.append(list);const save=()=>persist(node,'asset_edits',data);
-  function sourceFilename(slot){const input=node.inputs?.find(i=>i.name===slot);const link=app.graph?.links?.[input?.link];const origin=link && app.graph.getNodeById(link.origin_id);return origin?.widgets?.find(w=>['image','video','audio','filename'].includes(w.name))?.value || '';}
-  const draw=()=>{list.replaceChildren();const slots=(node.inputs || []).filter(i=>/^(image|video|audio)_\d+$/.test(i.name) && i.link!=null).map(i=>({id:i.name,type:i.name.split('_')[0],filename:sourceFilename(i.name),settings:data.assets[i.name] ||= {}}));for(const f of data.files)slots.push({id:f.id,type:f.type,filename:f.filename,settings:f,file:true});for(const asset of slots){const a=asset.settings;const box=element('fieldset');box.append(element('legend',asset.id));list.append(box);
+  let selected=node.properties.mmx_asset_selection || '';
+  const picker=choice(root,'Edit Reference',[],selected,id=>{selected=id;node.properties.mmx_asset_selection=id;draw();});
+  root.insertBefore(picker.parentElement,list);
+  const watched=new WeakSet();
+  function sourceFilename(slot){
+    const graph=node.graph || app.rootGraph || app.graph;
+    let current=node.inputs?.find(i=>i.name===slot),origin=null;
+    const visited=new Set();
+    while(current?.link!=null){
+      const link=graph?.links?.[current.link];
+      const id=Array.isArray(link)?link[1]:link?.origin_id;
+      if(id==null || visited.has(id))return '';
+      visited.add(id);origin=graph.getNodeById(id);
+      if(!origin)return '';
+      if((origin.comfyClass || origin.type)==='Reroute'){current=origin.inputs?.[0];continue;}
+      break;
+    }
+    if(!origin)return '';
+    if(!watched.has(origin)){watched.add(origin);for(const w of origin.widgets || []){
+      if(!['image','video','audio','filename'].includes(w.name))continue;
+      const callback=w.callback;w.callback=function(...args){const result=callback?.apply(this,args);draw();return result;};
+    }}
+    const filename=origin.widgets?.find(w=>['image','video','audio','filename'].includes(w.name) && typeof w.value==='string')?.value;
+    return filename || '';
+  }
+  const draw=()=>{list.replaceChildren();const slots=(node.inputs || []).filter(i=>/^(image|video|audio)_\d+$/.test(i.name) && i.link!=null).map(i=>({id:i.name,type:i.name.split('_')[0],filename:sourceFilename(i.name),settings:data.assets[i.name] ||= {}}));for(const f of data.files)slots.push({id:f.id,type:f.type,filename:f.filename,settings:f,file:true});
+    if(!slots.some(a=>a.id===selected))selected=slots[0]?.id || '';
+    picker.replaceChildren();for(const asset of slots){const o=element('option',`${asset.id} · ${asset.settings.name || value(node,asset.id+'_name','') || asset.filename || asset.type}`);o.value=asset.id;picker.append(o);}picker.value=selected;picker.disabled=!slots.length;node.properties.mmx_asset_selection=selected;
+    for(const asset of slots.filter(a=>a.id===selected)){const a=asset.settings;const box=element('fieldset');box.append(element('legend',asset.id));list.append(box);
       const change=(key,v)=>{a[key]=v;save();};input(box,'Name','text',a.name ?? value(node,asset.id+'_name',''),v=>change('name',v));choice(box,'Role',['subject','place','style','keyframe','pose','custom'],a.role || 'subject',v=>change('role',v));input(box,'Description / Instructions','text',a.description || '',v=>change('description',v));
       let media=null;if(asset.filename){media=document.createElement(asset.type==='image'?'img':asset.type);media.src=viewURL(asset.filename);if(asset.type!=='image')media.controls=true;media.className='mmx-asset-preview';box.append(media);}
       if(asset.type!=='image'){
@@ -88,10 +115,10 @@ function assets(node){hide(node,'asset_edits');for(const w of node.widgets || []
       button(box,'Reset Asset Adjustments',()=>{if(asset.file){const identity={id:a.id,type:a.type,filename:a.filename,name:a.name};Object.keys(a).forEach(k=>delete a[k]);Object.assign(a,identity);}else data.assets[asset.id]={};save();draw();});
       if(asset.file)button(box,'Remove Asset',()=>{data.files=data.files.filter(f=>f.id!==asset.id);save();draw();});
     }root.__status.textContent=`${slots.length} Assets · Settings Applied When Pack Executes`;};
-  async function upload(file){const form=new FormData();form.append('file',file,file.name);const r=await api.fetchApi('/minimax_director/media/upload',{method:'POST',body:form});const result=await r.json();if(!r.ok)throw Error(result.error || 'Upload failed');data.files.push({id:'asset_'+crypto.randomUUID(),type:result.media_type || (/\.(mp4|mov|webm|mkv)$/i.test(file.name)?'video':/\.(wav|mp3|flac|ogg)$/i.test(file.name)?'audio':'image'),name:file.name,filename:[result.subfolder,result.name].filter(Boolean).join('/'),scaling:'Off',media_mode:'both'});save();draw();}
+  async function upload(file){const form=new FormData();form.append('file',file,file.name);const r=await api.fetchApi('/minimax_director/media/upload',{method:'POST',body:form});const result=await r.json();if(!r.ok)throw Error(result.error || 'Upload failed');selected='asset_'+crypto.randomUUID();data.files.push({id:selected,type:result.media_type || (/\.(mp4|mov|webm|mkv)$/i.test(file.name)?'video':/\.(wav|mp3|flac|ogg)$/i.test(file.name)?'audio':'image'),name:file.name,filename:[result.subfolder,result.name].filter(Boolean).join('/'),scaling:'Off',media_mode:'both'});save();draw();}
   const files=document.createElement('input');files.type='file';files.multiple=true;files.accept='image/*,video/*,audio/*';files.onchange=async()=>{try{for(const file of files.files)await upload(file);}catch(e){root.__status.textContent=e.message;}};field(root,'Add Pack Files',files);
   root.ondragover=e=>e.preventDefault();root.ondrop=async e=>{e.preventDefault();for(const file of e.dataTransfer.files)await upload(file);};root.onpaste=async e=>{const items=[...(e.clipboardData?.files || [])];if(items.length){e.preventDefault();for(const f of items)await upload(f);}};
-  node.__mmxReload=()=>{data=JSON.parse(value(node,'asset_edits','{}'));data.assets ||= {};data.files ||= [];draw();};button(root,'Refresh Connected Assets',draw);draw();const original=node.onConnectionsChange;node.onConnectionsChange=function(...args){const result=original?.apply(this,args);draw();return result;};
+  node.__mmxReload=()=>{data=JSON.parse(value(node,'asset_edits','{}'));data.assets ||= {};data.files ||= [];for(const i of node.inputs || [])if(/^video_\d+$/.test(i.name))i.type='VIDEO,IMAGE';if(node.size?.[1]>Math.max(1200,node.size[0]*2))node.setSize?.([node.size[0],1000]);draw();};button(root,'Refresh Connected Assets',draw);draw();const original=node.onConnectionsChange;node.onConnectionsChange=function(...args){const result=original?.apply(this,args);draw();return result;};
 }
 
 function exporter(node){const root=mount(node,'Choose Clips To Export');const getMaster=masterPicker(root,node);const list=element('div');root.append(list);button(root,'Refresh Clips',()=>{const timeline=state(getMaster());const ids=new Set(String(value(node,'clip_ids')).split(',').filter(Boolean));list.replaceChildren();for(const clip of timeline.clips || []){const check=document.createElement('input');check.type='checkbox';check.checked=ids.has(clip.id);field(list,clip.name || clip.id,check);check.onchange=()=>{check.checked?ids.add(clip.id):ids.delete(clip.id);const w=widget(node,'clip_ids');w.value=[...ids].join(',');w.callback?.(w.value);};}root.__status.textContent='Set Selection To clip_ids To Use These Checks';});}

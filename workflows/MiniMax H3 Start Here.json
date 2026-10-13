@@ -746,12 +746,12 @@
         },
         {
           "name": "video_1",
-          "type": "IMAGE",
+          "type": "VIDEO,IMAGE",
           "link": null
         },
         {
           "name": "video_2",
-          "type": "IMAGE",
+          "type": "VIDEO,IMAGE",
           "link": null
         },
         {

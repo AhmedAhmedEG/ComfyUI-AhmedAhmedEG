@@ -44,8 +44,8 @@ class MiniMaxH3RefPack:
                 "image_4": ("IMAGE", {"tooltip": "Reference image 4."}),
 
                 # Video references
-                "video_1": ("IMAGE", {"tooltip": "Reference video 1 (frame batch) for V2V / RV2V."}),
-                "video_2": ("IMAGE", {"tooltip": "Reference video 2 (frame batch)."}),
+                "video_1": ("VIDEO,IMAGE", {"tooltip": "Native VIDEO or decoded IMAGE frame batch. Native videos supply their own FPS and audio."}),
+                "video_2": ("VIDEO,IMAGE", {"tooltip": "Native VIDEO or decoded IMAGE frame batch."}),
 
                 # Audio references
                 "audio_1": ("AUDIO", {"tooltip": "Reference audio 1 (e.g. speech, music, soundscape)."}),
@@ -126,7 +126,15 @@ class MiniMaxH3RefPack:
         ]
         for vid, slot_name, alt_id in vid_slots:
             if vid is not None:
-                fps = float(kwargs.get(f"{slot_name}_fps", 24))
+                audio = kwargs.get(f"{slot_name}_audio")
+                if callable(getattr(vid, "get_components", None)):
+                    components = vid.get_components()
+                    vid = components.images
+                    fps = float(components.frame_rate)
+                    if audio is None:
+                        audio = components.audio
+                else:
+                    fps = float(kwargs.get(f"{slot_name}_fps", 24))
                 if not math.isfinite(fps) or not 1 <= fps <= 240 or vid.ndim != 4 or vid.shape[0] == 0:
                     raise ValueError(f"{slot_name} needs a nonempty frame batch and an FPS between 1 and 240.")
                 if fps != 24:
@@ -143,7 +151,7 @@ class MiniMaxH3RefPack:
                     "name": str(kwargs.get(f"{slot_name}_name", "")).strip() or assigned_id,
                     "type": "video",
                     "data": vid,
-                    "audio": kwargs.get(f"{slot_name}_audio"),
+                    "audio": audio,
                 })
                 base_index += 1
 

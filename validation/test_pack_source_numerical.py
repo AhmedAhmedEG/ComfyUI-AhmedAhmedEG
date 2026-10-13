@@ -43,6 +43,25 @@ class PackSourceNumerical(unittest.TestCase):
         pack=module.MiniMaxH3RefPack().pack(video_1=self.frames,video_1_fps=48,video_1_audio=self.audio)[0]
         video=pack['refs'][0]
         self.assertTrue(torch.equal(video['data'],self.frames[::2]));self.assertIs(video['audio'],self.audio)
+
+    def test_native_video_supplies_frames_fps_and_audio(self):
+        import importlib.util
+        from pathlib import Path
+        from types import SimpleNamespace
+        from fractions import Fraction
+        spec=importlib.util.spec_from_file_location('native_pack_node',Path(__file__).resolve().parents[1]/'nodes/node_ref_pack.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        class NativeVideo:
+            def get_components(inner):
+                return SimpleNamespace(images=self.frames,audio=self.audio,frame_rate=Fraction(48))
+        node=module.MiniMaxH3RefPack()
+        self.assertEqual(node.INPUT_TYPES()['optional']['video_1'][0],'VIDEO,IMAGE')
+        pack=node.pack(video_1=NativeVideo(),video_1_fps=12)[0]
+        video=pack['refs'][0]
+        self.assertTrue(torch.equal(video['data'],self.frames[::2]))
+        self.assertIs(video['audio'],self.audio)
+        override={'waveform':self.audio['waveform']*0,'sample_rate':48000}
+        self.assertIs(node.pack(video_1=NativeVideo(),video_1_audio=override)[0]['refs'][0]['audio'],override)
         result=source_range({'source':{'ref_id':video['id']}}, {},128,64,ref_pool={video['id']:video})
         self.assertTrue(result['has_audio']);self.assertEqual(result['audio']['waveform'].shape[-1],48000)
 
