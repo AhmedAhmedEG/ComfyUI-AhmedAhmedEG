@@ -2331,7 +2331,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-inspector-header .mmx-audio-control {display:flex;align-items:center;gap:10px;white-space:nowrap;}
 @container (max-width:680px) {.mmx-director-root .mmx-inspector-header {grid-template-columns:1fr;}.mmx-director-root .mmx-clip-header-actions {grid-template-columns:repeat(3,1fr);}.mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:auto;}}
 
-.mmx-director-root .mmx-continuity-link {position:absolute;top:45px;width:28px;height:24px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;z-index:6;color:#9fc4d9;background:#1b252e;border:1px solid #4f6d7e;border-radius:12px;pointer-events:auto;}
+.mmx-director-root .mmx-continuity-link {position:absolute;top:45px;width:28px;height:24px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;z-index:6;color:#9fc4d9;background:transparent;border:0;pointer-events:auto;}
 .lg-node-widgets:has(.mmx-director-root:not(.mmx-preview-node)) > .lg-node-widget:not(:has(.mmx-director-root,input,textarea,select,button,[role="combobox"])) {display:none!important;}
 .mmx-director-root:not(.mmx-preview-node) > .mmx-inspector {flex:1 0 auto;min-height:480px;display:flex;flex-direction:column;}
 .mmx-director-root .mmx-edit-workspace {flex:1;min-height:360px;align-items:stretch;}
