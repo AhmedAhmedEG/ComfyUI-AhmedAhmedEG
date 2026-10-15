@@ -226,7 +226,8 @@ def process_refmod_rows(
             strength = float(row.get("strength", 1.0))
         except (ValueError, TypeError):
             strength = 1.0
-        strength = max(0.0, min(1.0, strength))
+        import math
+        if not math.isfinite(strength) or not 0<=strength<=4:raise ValueError('RefMod strength must be finite and between 0 and 4.')
         if strength <= 1e-4:
             continue
 

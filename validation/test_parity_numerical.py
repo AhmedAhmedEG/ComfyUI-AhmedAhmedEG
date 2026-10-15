@@ -10,6 +10,17 @@ from core.preview import create_preview_plan,encode_preview
 from nodes.node_frame_interpolation import MiniMaxH3FrameInterpolation
 
 class ParityNumerical(unittest.TestCase):
+    def test_shared_pixel_fit_fill_and_lanczos_preserve_aspect(self):
+        from core.pixel_resize import resize_pixels
+        images=torch.ones((2,32,64,3))
+        for method in ('bicubic','lanczos'):
+            fit=resize_pixels(images,64,64,'Letterbox (Fit)',method)
+            fill=resize_pixels(images,64,64,'Center Crop (Fill)',method)
+            self.assertEqual(tuple(fit.shape),(2,64,64,3))
+            self.assertEqual(float(fit[:,:16].abs().sum()),0)
+            self.assertAlmostEqual(float(fit[:,16:48].mean()),1,delta=.001)
+            self.assertAlmostEqual(float(fill.mean()),1,delta=.001)
+
     def test_project_export_encodes_cached_pack_sources_at_enclosing_canvas(self):
         from validation import test_media_codec as codec
         codec.MediaCodec.setUp(self)

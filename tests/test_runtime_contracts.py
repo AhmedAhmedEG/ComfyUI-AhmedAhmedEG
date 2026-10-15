@@ -134,6 +134,26 @@ class RuntimeContracts(unittest.TestCase):
         for clip in clips: clip["validated"]=True
         self.assertEqual(self.node.check_lazy_status(timeline_data=json.dumps({"clips":clips})),[])
 
+    def test_latest_decoded_output_still_saves_all_clip_takes(self):
+        clips=[{'id':'one','type':'T2V','duration':2},{'id':'two','type':'T2V','duration':2}]
+        result=self.execute(clips,config={'project_id':'regression','run_mode':'full_batch','decoded_output':'latest'})
+        manager=ProjectCacheManager('regression',self.temp.name)
+        first,second=manager.load_clip_frames('one'),manager.load_clip_frames('two')
+        self.assertIsNotNone(first);self.assertIsNotNone(second)
+        prefix=manager._manifest['clips']['two'].get('trim_prefix',0)
+        self.assertEqual(result[0].shape[0],second.shape[0]-prefix)
+        self.assertEqual(json.loads(result[8])['decoded_output'],'latest')
+
+    def test_refine_policy_routes_without_invalidating_staged_first_pass(self):
+        clips=[{'id':'one','type':'T2V','duration':2,'seed':'7'}]
+        options={'enabled':True,'mode':'refine','confirm_first_pass':True,'seed_policy':'independent','refine_seed':'99','canvas_policy':'follow','megapixels':1.8,'resize_method':'Letterbox (Fit)'}
+        first=self.execute(clips,refine=options);timeline=json.loads(first[-1]);timeline['clips'][0]['refine_approved']=True
+        self.sampling_calls.clear()
+        with patch('nodes.node_director.apply_refine_pass',side_effect=lambda **kw:kw['latent_dict']) as refine:
+            self.execute(timeline_data=json.dumps(timeline),refine={**options,'refine_seed':'100'})
+        self.assertEqual(self.sampling_calls,[])
+        self.assertEqual(refine.call_args.kwargs['refine_seed_value'],'100')
+
     def test_sampling_settings_and_shared_prompt_reach_execution(self):
         timeline={"project_id":"regression","shared_prompt":"cinematic","shared_prompt_policy":"append",
                   "audio_fade_ms":27,"audio_gain_match":False,

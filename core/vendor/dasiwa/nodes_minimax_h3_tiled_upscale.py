@@ -240,7 +240,7 @@ class DaSiWaH3TiledUpscale:
                 sampler_name='euler', scheduler='simple', memory_budget_mb=0,
                 sampler=None, noise=None, upscale_precision='auto', continuity_context=None,
                 continuity_soft_refine=False, continuity_mask_strength=1.0,
-                spatial_tiling=True, temporal_chunking=True, target_width=None, target_height=None, external_sigmas=None, spike_guard=False, guard_sensitivity=4.3, guard_strength=1.0):
+                spatial_tiling=True, temporal_chunking=True, target_width=None, target_height=None, external_sigmas=None, spike_guard=False, guard_sensitivity=4.3, guard_strength=1.0, guard_mode="burn_direction", memory_planning=True, memory_reserve_pct=35.0):
         import comfy.model_management as mm
         import comfy.model_base
         import comfy.samplers
@@ -280,8 +280,6 @@ class DaSiWaH3TiledUpscale:
                 raise ValueError("Target canvas must be divisible by 32 and may not shrink either dimension.")
         if director_guide is not None and not isinstance(director_guide, dict):
             raise ValueError('director_guide must be a MiniMax H3 Director guide.')
-        if director_guide is not None and director_guide.get('mode') == 'Image Inpaint':
-            raise ValueError('H3 Tiled Upscale handles video modes, not Image Inpaint.')
         device = mm.get_torch_device()
         budget, streaming_weights, reserved = refinement_memory_budget(model, device, memory_budget_mb)
         model_bytes = int(model.model_size()) if device.type != 'cpu' else 0
@@ -295,7 +293,8 @@ class DaSiWaH3TiledUpscale:
                           streaming_weights=streaming_weights,
                           reserved_bytes=reserved + audio.numel() * (6 * audio.element_size() + 8),
                           audio_tokens=audio.shape[-2] * audio.shape[-1],
-                          latent_element_size=video.element_size(), enforce_budget=denoise > 0,
+                          latent_element_size=video.element_size(), enforce_budget=bool(memory_planning) and denoise > 0,
+                          workspace_reserve_pct=memory_reserve_pct,
                           spatial_tiling=spatial_tiling, temporal_chunking=temporal_chunking)
         ranges = temporal_ranges(video.shape[2], plan['chunk_tokens'], plan['temporal_overlap_tokens'])
         # CPU staging is bounded by the complete output+noise, not constant-memory
@@ -342,7 +341,7 @@ class DaSiWaH3TiledUpscale:
                 backend.close()
         if spike_guard and selected != 'interpolation':
             from .h3_spike_guard import spike_guard as correct_spikes
-            upscaled, guard_report = correct_spikes(video, upscaled, sensitivity=guard_sensitivity, strength=guard_strength)
+            upscaled, guard_report = correct_spikes(video, upscaled, sensitivity=guard_sensitivity, strength=guard_strength, mode=guard_mode)
         audio_cpu = audio.to('cpu')
         if continuity is not None and denoise > 0:
             from .h3_upscale_continuity import align_continuity_conditioning
@@ -379,7 +378,7 @@ class DaSiWaH3TiledUpscale:
             raise ValueError('The supplied NOISE must generate native video+audio nested tensors.')
         working = model.clone()
         if spatial_tiling:
-            wrapper = H3TiledDiffusion(plan['tile_width'], plan['tile_height'], plan['overlap'])
+            wrapper = H3TiledDiffusion(plan['tile_width'], plan['tile_height'], plan['overlap'], coordinates='local' if plan.get('tile_coordinates')=='local' else 'global')
             previous_wrapper = working.model_options.get('model_function_wrapper')
             if previous_wrapper is not None:
                 def chained(fn, args):

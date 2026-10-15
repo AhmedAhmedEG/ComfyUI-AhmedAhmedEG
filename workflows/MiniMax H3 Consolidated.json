@@ -243,7 +243,8 @@
         "fixed",
         "manual",
         1,
-        "16:9"
+        "16:9",
+        "full"
       ],
       "widgets_values_named": {
         "width": 960,
@@ -259,7 +260,8 @@
         "control_after_generate": "fixed",
         "canvas_policy": "manual",
         "canvas_megapixels": 1,
-        "canvas_aspect": "16:9"
+        "canvas_aspect": "16:9",
+        "decoded_output": "full"
       }
     },
     {

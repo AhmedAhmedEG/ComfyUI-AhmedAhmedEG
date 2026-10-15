@@ -10,6 +10,8 @@ def prepare_asset(row, settings):
     role=settings.get('role','subject')
     if role not in ROLES: raise ValueError('Unknown reference role.')
     row.update(role=role,description=str(settings.get('description','')))
+    from .forge_cast import cast_metadata
+    row.update(cast_metadata(settings))
     if 'name' in settings: row['name']=str(settings['name']).strip() or row.get('slot_id',row['id'])
     kind=row['type'];data=row.get('data')
     if kind=='refmod': return row

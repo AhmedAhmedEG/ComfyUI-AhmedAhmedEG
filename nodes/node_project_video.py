@@ -24,7 +24,7 @@ class MiniMaxH3ProjectVideo:
             "filename_prefix": ("STRING", {"default": "minimax/project"}),
             "export_individual_shots": ("BOOLEAN", {"default": True})},
             "optional": {"clip_ids": ("STRING", {"default":"", "tooltip":"Comma-separated clip IDs to export in timeline order when selection is clip_ids."}),
-                "refine_pass": ("INT", {"default":1,"min":1,"max":20}),
+                "refine_pass": ("INT", {"default":1,"min":1,"max":9999}),
                 "ref_pack": ("MMX_REF_PACK", {"tooltip":"Optional live pool for uncached original source footage."})}}
     RETURN_TYPES = ("VIDEO", "STRING")
     RETURN_NAMES = ("video", "shot_files_json")

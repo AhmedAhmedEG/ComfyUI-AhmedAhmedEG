@@ -1,5 +1,7 @@
 # Required feature union and implementation decisions
 
+> **14 October follow-up:** [The source revalidation](docs/feature-parity-revalidation-2026-10-14.md) identified narrower controls and operational gaps despite the historical “present” inventory. [The 1.6 implementation notes](docs/parity-implementation-1.6.md) record the additions, their single configuration owners, compatibility defaults and remaining GPU/foreign-cache boundaries.
+
 > **1.5.1 implementation update (13 October 2026):** The actionable exporter, external authoring, asset, Forge and refinement gaps have been addressed. The [updated parity review](docs/current-feature-parity-review.md) records owners, evidence, intentional differences and remaining GPU/foreign-cache limitations. The historical inventory below is not proof of identical upstream behavior.
 
 ## Product requirement

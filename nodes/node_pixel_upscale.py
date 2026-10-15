@@ -6,11 +6,11 @@ import torch.nn.functional as F
 class MiniMaxH3PixelUpscale:
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"images": ("IMAGE",), "provider": (["bicubic", "learned_pixel", "RTX VSR", "RTX High Bitrate"],),
+        return {"required": {"images": ("IMAGE",), "provider": (["bicubic", "learned_pixel", "RTX VSR", "RTX High Bitrate", "lanczos"],),
             "width": ("INT", {"default":1920,"min":32,"max":16384,"step":32}),
             "height": ("INT", {"default":1088,"min":32,"max":16384,"step":32}),
             "quality": (["Low","Medium","High","Ultra"],),
-            "resize_method": (["Center Crop (Fill)","Letterbox (Fit)"],),
+            "resize_method": (["Center Crop (Fill)","Letterbox (Fit)","Stretch"],),
             "denoise": ("BOOLEAN", {"default":False}), "deblur": ("BOOLEAN", {"default":False})},
             "optional": {"upscale_model": ("UPSCALE_MODEL",)}}
     RETURN_TYPES = ("IMAGE",)
@@ -23,8 +23,12 @@ class MiniMaxH3PixelUpscale:
             if upscale_model is None: raise ValueError("Learned pixel upscale requires an UPSCALE_MODEL.")
             from comfy_extras.nodes_upscale_model import ImageUpscaleWithModel
             images = ImageUpscaleWithModel().upscale(upscale_model, images)[0]
-        if provider in ("bicubic", "learned_pixel"):
-            return (F.interpolate(images[..., :3].permute(0,3,1,2), size=(height,width), mode="bicubic", align_corners=False).permute(0,2,3,1).clamp(0,1),)
+        if provider in ("bicubic", "learned_pixel", "lanczos"):
+            try:
+                from ..core.pixel_resize import resize_pixels
+            except ImportError:
+                from core.pixel_resize import resize_pixels
+            return (resize_pixels(images,width,height,resize_method,provider),)
         if provider not in ("RTX VSR", "RTX High Bitrate"): raise ValueError("Unknown pixel provider.")
         if not torch.cuda.is_available(): raise RuntimeError("RTX processing requires an NVIDIA CUDA GPU and the nvvfx SDK.")
         try:
@@ -42,6 +46,6 @@ class MiniMaxH3PixelUpscale:
                 frame = image[..., :3].permute(2,0,1).to(device=device, dtype=torch.float32).contiguous()
                 if clean: frame = _run_vfx_effect(clean,frame,device)
                 if sharp: frame = _run_vfx_effect(sharp,frame,device)
-                frame = _fit_frame_to_target_aspect(frame,width,height,resize_method)
+                if resize_method != 'Stretch': frame = _fit_frame_to_target_aspect(frame,width,height,resize_method)
                 result[position] = _run_vfx_effect(effect,frame,device).permute(1,2,0).cpu().clamp(0,1)
         return (result,)

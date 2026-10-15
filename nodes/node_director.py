@@ -381,8 +381,12 @@ class MiniMaxH3MasterDirector:
             or "full"
         ).lower()
 
-        all_decoded_frames: List[torch.Tensor] = []
-        all_decoded_audios: List[Dict[str, Any]] = []
+        try:
+            from ..core.output_retention import output_buffers
+        except ImportError:
+            from core.output_retention import output_buffers
+        decoded_output=cfg_dict.get('decoded_output','full')
+        all_decoded_frames,all_decoded_audios=output_buffers(decoded_output)
         clip_chained_flags: List[bool] = [False] * len(clips)
         previous_tail: Optional[Dict[str, Any]] = None
         last_positive = None
@@ -494,6 +498,14 @@ class MiniMaxH3MasterDirector:
             if not math.isfinite(clip_dur) or clip_dur <= 0:
                 raise ValueError(f"Shot {clip_idx + 1} duration must be positive and finite.")
             clip_prompt_text = str(clip_item.get("prompt", "") or prompt or "")
+            if clip_item.get('forge_reference_snapshot'):
+                try:
+                    from ..core.forge_mapping import mapped_prompt
+                    from ..core.forge_cast import clip_bindings
+                except ImportError:
+                    from core.forge_mapping import mapped_prompt
+                    from core.forge_cast import clip_bindings
+                clip_prompt_text=mapped_prompt(clip_item,clip_bindings({'available_refs':list(ref_pool.values()),'shared_ref_ids':timeline.get('shared_ref_ids',[])},clip_item))
             try:
                 from ..core.continuity import resolve_continuity
             except ImportError:
@@ -1123,8 +1135,11 @@ class MiniMaxH3MasterDirector:
                     refine_backend=refine.get("backend", "global"), memory_budget_mb=refine.get("memory_budget_mb", 0),
                     video_vae=video_vae, first_frame=first_frame, last_frame=last_frame,
                     upscale_precision=refine.get("upscale_precision", "auto"), pass_callback=capture_refine_pass,
+                    seed_policy=refine.get("seed_policy","legacy"),refine_seed_value=refine.get("refine_seed","0"),
+                    canvas_policy=refine.get("canvas_policy","manual"),megapixels=refine.get("megapixels",1.8),resize_method=refine.get("resize_method","Stretch"),
                     upscale_method=refine.get("upscale_method","latent"),upscale_model=refine.get("upscale_model"),
                     spike_guard=refine.get("spike_guard",False),guard_sensitivity=refine.get("guard_sensitivity",4.3),guard_strength=refine.get("guard_strength",1.),
+                    guard_mode=refine.get("guard_mode","burn_direction"), memory_planning=refine.get("memory_planning",True),memory_reserve_pct=refine.get("memory_reserve_pct",35.),
                 )
 
             # Decode
@@ -1194,6 +1209,7 @@ class MiniMaxH3MasterDirector:
                     "refine_passes":refine_pass_rows,"refinement_pending":False, "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
             except Exception as c_err:
                 cache_error = str(c_err)
+                if decoded_output=='latest':raise RuntimeError('Latest output requires durable clip caching; could not save the take.') from c_err
                 log.warning(f"Master Director: Could not cache clip {clip_id}: {c_err}")
 
             # Retain the maximum supported tail so the next shot chooses its own context.
@@ -1209,6 +1225,18 @@ class MiniMaxH3MasterDirector:
                 "tail_audio": tail_aud,
             }
             previous_fingerprint=clip_fp
+            if decoded_output=='latest':
+                # Preserve full temporal phase metadata on disk/CPU; cropping it
+                # would change motion/audio carry semantics. Release GPU residency.
+                try:
+                    from ..core.cache_manager import portable_tree,restore_tree
+                except ImportError:
+                    from core.cache_manager import portable_tree,restore_tree
+                sampled_latent=restore_tree(portable_tree(sampled_latent))
+                previous_av=last_latent=sampled_latent
+                low_carry=restore_tree(portable_tree(low_carry)) if low_carry is not None else None
+                previous_tail=restore_tree(portable_tree(previous_tail))
+                v_stream,a_stream=extract_streams_from_av_latent(sampled_latent)
             clip_item["refine_pending"]=False
             clip_item["refine_approved"]=False
             generated_count += 1
@@ -1220,6 +1248,7 @@ class MiniMaxH3MasterDirector:
             run_report.append({"clip_id": clip_id, "action": "generated", "seed": str(clip_seed),
                 "frames": int(decoded_frames.shape[0]), "trim_prefix": int(is_chained_from_previous),
                 "refine": sampled_latent.get("_mmx_refine_report", "off"), "cache_error": cache_error})
+            run_report[-1]['refined']=bool(refine_enabled)
             try:
                 from ..core.memory_lifecycle import between_clips
             except ImportError:
@@ -1242,8 +1271,9 @@ class MiniMaxH3MasterDirector:
         output_audios = all_decoded_audios
         clips = completed_clips
         out_indices = list(range(len(clips)))
+        if decoded_output=='latest':out_indices=out_indices[-1:] if output_frames else []
 
-        if preview_mode in ("unvalidated", "unvalidated_only", "new_only", "selected", "selected_only"):
+        if decoded_output!='latest' and preview_mode in ("unvalidated", "unvalidated_only", "new_only", "selected", "selected_only"):
             unval_indices = [i for i, c in enumerate(clips) if c.get("selected", False)] if preview_mode in ("selected", "selected_only") else [i for i, c in enumerate(clips) if not c.get("validated", False)]
             if unval_indices:
                 output_frames = [all_decoded_frames[i] for i in unval_indices]
@@ -1301,7 +1331,14 @@ class MiniMaxH3MasterDirector:
                 f"{prefix}_width": int(final_frames.shape[2]),
                 f"{prefix}_height": int(final_frames.shape[1])})
         status_str = json.dumps({"generated": generated_count, "output_frames": int(final_frames.shape[0]),
+            "decoded_output":decoded_output,
             "fps": frame_rate, "preview": preview_mode, "shots": run_report}, ensure_ascii=False)
+        if generated_count and any(row.get('refined') for row in run_report if row.get('action')=='generated'):
+            try:
+                from ..core.refine_controls import advance_refine_control
+            except ImportError:
+                from core.refine_controls import advance_refine_control
+            advance_refine_control(refine)
         return (
             final_frames,
             final_audio,

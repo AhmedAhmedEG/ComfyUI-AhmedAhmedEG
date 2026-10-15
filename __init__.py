@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 import os
 import weakref
 try:
@@ -19,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.5.1"
+__version__ = "1.6.0"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -222,12 +223,18 @@ if getattr(PromptServer, "instance", None) is not None:
 
     @routes.post("/minimax_director/forge/draft")
     async def forge_draft(request):
+        job_id=None
         try:
+            queue=PromptServer.instance.prompt_queue
+            running,_=queue.get_current_queue()
+            if running:raise ValueError('Prompt Forge is unavailable while ComfyUI is generating. Wait for the current run to finish.')
             import folder_paths, base64, io
             from PIL import Image
             from .core.forge import draft_prompts
             from .core.references import load_reference
             body = await request.json()
+            from .core.forge_jobs import start_job,finish_job
+            job_id,job=start_job(body.get('job_id') or str(uuid.uuid4()))
             state = body["timeline"]
             def create():
                 images = []
@@ -247,15 +254,28 @@ if getattr(PromptServer, "instance", None) is not None:
                 if body.get("backend") == "local":
                     from .core.local_llm import local_provider
                     generator = local_provider(body.get("model", ""), body.get("local_backend", "transformers"),
-                        bool(images), body.get("device", "cpu"), body.get("projection", ""))
+                        bool(images) or bool(body.get('continuation_clip_id')), body.get("device", "cpu"), body.get("projection", ""),body.get('context_length',8192),body.get('lifetime','unload_after_draft'))
                 return draft_prompts(state, body.get("instruction", ""), body.get("count", 1),
                     body.get("backend", "ollama"), body.get("endpoint", "http://localhost:11434"),
-                    body.get("model", ""), body.get("api_key", ""), generator=generator, images=images, creativity=body.get("creativity",4), detail=body.get("detail",6), shot_descriptions=body.get("shot_descriptions"))
+                    body.get("model", ""), body.get("api_key", ""), generator=generator, images=images, creativity=body.get("creativity",4), detail=body.get("detail",6), shot_descriptions=body.get("shot_descriptions"),continuation_clip_id=body.get('continuation_clip_id',''),job=job)
             return web.json_response(await asyncio.to_thread(create))
+        except asyncio.CancelledError:
+            if job_id:
+                from .core.forge_jobs import cancel_job
+                await asyncio.to_thread(cancel_job,job_id)
+            raise
         except (ValueError, TypeError, KeyError, FileNotFoundError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:
             return web.json_response({"error": str(exc)}, status=502)
+        finally:
+            if job_id:finish_job(job_id)
+
+    @routes.post('/minimax_director/forge/cancel')
+    async def forge_cancel(request):
+        from .core.forge_jobs import cancel_job
+        body=await request.json()
+        return web.json_response({'cancelled':await asyncio.to_thread(cancel_job,body.get('job_id',''))})
 
     @routes.post("/minimax_director/forge/apply")
     async def forge_apply(request):
@@ -271,14 +291,22 @@ if getattr(PromptServer, "instance", None) is not None:
         try:
             import folder_paths
             from .core.project_conversion import read_conversion
-            reader=await request.multipart();part=await reader.next()
-            if part is None or not part.filename: raise ValueError('Choose an upstream project/archive.')
-            chunks=[];size=0
-            while chunk:=await part.read_chunk():
-                size+=len(chunk)
-                if size>512*1024**2: raise ValueError('Conversion upload exceeds 512 MiB; use metadata-only JSON for large projects.')
-                chunks.append(chunk)
-            state,report=await asyncio.to_thread(read_conversion,b''.join(chunks),folder_paths.get_input_directory())
+            import tempfile
+            reader=await request.multipart();restore_cache=False;got_file=False
+            with tempfile.TemporaryDirectory(prefix='h3-import-') as root:
+                path=os.path.join(root,'project.upload')
+                async for part in reader:
+                    if part.filename:
+                        if got_file:raise ValueError('Upload one project archive at a time.')
+                        got_file=True;size=0
+                        with open(path,'wb') as dest:
+                            while chunk:=await part.read_chunk():
+                                size+=len(chunk)
+                                if size>8*1024**3:raise ValueError('Project archive exceeds 8 GiB.')
+                                dest.write(chunk)
+                    elif part.name=='restore_cache':restore_cache=(await part.text())=='true'
+                if not got_file:raise ValueError('Choose an upstream project/archive.')
+                state,report=await asyncio.to_thread(read_conversion,path,folder_paths.get_input_directory(),restore_cache=restore_cache)
             return web.json_response({'timeline':state,'report':report})
         except (ValueError,TypeError,KeyError) as exc:
             return web.json_response({'error':str(exc)},status=400)

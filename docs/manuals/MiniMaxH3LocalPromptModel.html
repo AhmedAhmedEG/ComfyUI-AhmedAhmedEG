@@ -17,3 +17,5 @@ pipeline ─→ Prompt Forge.generator
 Prompt Forge.backend = local</code></pre>
 <p>First request one short text-only draft. Then test vision with one real image and a compatible model before asking for a large shot list. Distinguish an unavailable backend package, an incomplete model directory, a wrong projection and an output-JSON parsing error; they require different fixes and do not require rerunning the H3 sampler.</p>
 <p class="source">Implementation: <a href="../../nodes/node_forge.py">loader node</a>, <a href="../../core/local_llm.py">local providers/cache</a>.</p>
+
+<h2>Compatibility and ownership in 1.6</h2><p>This node returns a lazy provider handle rather than eagerly loading weights. Unload After Draft releases local model residency after either success or failure, including graph-held handles. Keep Loaded is explicit. Changing model/provider closes the previous cached provider. Actual GPU memory savings depend on the installed backend; no benchmark is claimed.</p>

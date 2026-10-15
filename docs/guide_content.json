@@ -1,5 +1,5 @@
 {
-  "version": "1.5.1",
+  "version": "1.6.0",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -91,7 +91,8 @@
         "context_length": "Continuity context length in pixel frames: 5, 22, 39 or 56. This is unrelated to language-model context tokens.",
         "seed": "Baseline sampling-noise seed. Per-shot seed settings can override it; fixing the seed alone does not reproduce a take after changing other effective inputs.",
         "generation_mode": "Read the Generation mode section above for scheduling, cache reuse and the external-sampler behavior of Conditioning only.",
-        "continuity_mode": "Read the Continuity section above for the separate Independent, Motion Context, Latent Carry and Tail Handoff algorithms."
+        "continuity_mode": "Read the Continuity section above for the separate Independent, Motion Context, Latent Carry and Tail Handoff algorithms.",
+        "decoded_output": "Full assembles direct decoded Master output as before. Latest retains only the latest clip there; all generated takes remain on disk for Full Video in Smart Preview and Project Video export."
       },
       "output_descriptions": [
         "Configuration consumed by the Master config input."
@@ -158,13 +159,14 @@
         "Learned weights must match the supported 24-channel H3 3D architecture; image upscaler weights are not interchangeable.",
         "SIGMAS must be a finite, nonnegative, nonincreasing 1D schedule with at least two values.",
         "More passes can increase compute and drift.",
-        "Confirm First Pass creates a staged latent, not a validated final take. Review First Pass in Smart Preview and approve on its clip card before running refinement. Changing first-pass inputs requires a new approval. Every refinement pass is cached for preview/export. Spike Guard is experimental and requires learned latent weights."
+        "Confirm First Pass creates a staged latent, not a validated final take. Review First Pass in Smart Preview and approve on its clip card before running refinement. Changing first-pass inputs requires a new approval. Every refinement pass is cached for preview/export. Spike Guard is experimental and requires learned latent weights.",
+        "Auto Download H3 Upscaler streams the pinned compatible BF16 checkpoint, validates its byte count and SHA-256, and installs atomically. Existing verified weights are reused."
       ],
       "related": [
         "MiniMaxH3DirectorSelfLift",
         "MiniMaxH3PixelUpscale"
       ],
-      "extra": "<p>Optional refine_model must be compatible. SIGMAS must be 1D, finite, nonnegative and nonincreasing, with ≥2 entries. More passes (1–20) cost compute and can drift.</p><div class=\"table-wrap\"></div><p>Supported checkpoint extensions: .safetensors, .sft, .pt, .pth. Loading validates architecture. Audio stays separate from visual latent enlargement.</p>",
+      "extra": "<p>Optional refine_model must be compatible. SIGMAS must be 1D, finite, nonnegative and nonincreasing, with ≥2 entries. More passes (1–9999) cost compute and can drift.</p><div class=\"table-wrap\"></div><p>Supported checkpoint extensions: .safetensors, .sft, .pt, .pth. Loading validates architecture. Audio stays separate from visual latent enlargement.</p>",
       "control_descriptions": {
         "backend": "global uses memory-aware refinement planning; sampler uses the native sampler path with explicit tiles.",
         "steps": "Number of refinement-stage sampling steps, separate from the Master first pass.",
@@ -176,7 +178,16 @@
         "spike_guard": "Experimental learned-latent burn-signature correction, disabled by default.",
         "guard_sensitivity": "Spike detection threshold relative to the median latent anomaly score.",
         "guard_strength": "Correction amount from zero (no correction) to one (full correction).",
-        "upscale_model": "Learned pixel upscale weights used only for learned_pixel."
+        "upscale_model": "Learned pixel upscale weights used only for learned_pixel.",
+        "seed_policy": "Legacy increments the clip seed per pass; Inherit keeps it fixed; Offset adds one before the pass offset; Independent uses the separate refine seed.",
+        "refine_seed": "Unsigned 64-bit decimal string. Changing it rerolls refinement without changing first-pass approval identity.",
+        "canvas_policy": "Manual retains existing target dimensions. Follow derives the target from the actual first-pass aspect and megapixel budget.",
+        "megapixels": "Used only by Follow; target dimensions snap to the 32-pixel H3 grid.",
+        "resize_method": "Shared pixel-preparation policy: crop to fill, pad to fit, or explicitly stretch. Ignored by latent-only resizing.",
+        "seed_after_generate": "Advance the independent uint64 seed once after a successful refinement execution: fixed, increment, decrement or randomize. Never changes the clip seed.",
+        "memory_planning": "Enable conservative global refinement budget enforcement. Disabling it accepts allocation failure risk.",
+        "memory_reserve_pct": "Workspace headroom after model residency/device reservations. Default 35%; a planning heuristic, not a global allocation cap.",
+        "guard_mode": "Correct the learned burn direction only or both positive and negative anomalies. Experimental."
       },
       "output_descriptions": [
         "Latent refine/upscale stage configuration."
@@ -633,7 +644,8 @@
       "notes": [
         "Provider requests originate from the ComfyUI server. localhost refers to that server.",
         "Graph api_key fields can be saved in workflow JSON. Stale drafts are rejected on application if the source context changed.",
-        "Do not wire a Master output back into that same Master through a cyclic draft graph; use an independent snapshot or the editor draft flow."
+        "Do not wire a Master output back into that same Master through a cyclic draft graph; use an independent snapshot or the editor draft flow.",
+        "Cancel Request signals local token stopping and closes a remote streaming connection, and rejects late results. A remote service may continue computing after disconnect. Ollama requests unload after drafting. Compiled labels are tracked by asset ID and remapped at execution if slot order changes; removing an assigned reference requires review."
       ],
       "related": [
         "MiniMaxH3ApplyPromptDraft",
@@ -646,7 +658,8 @@
         "timeline": "Typed external authoring input on Master; JSON project-state input on the exporter.",
         "creativity": "Prompt variability from 1 to 10; also sets sampling temperature for supported generators.",
         "detail": "Requested prompt description density from 1 to 10; does not increase clip count.",
-        "shot_descriptions": "JSON list of individual clip instructions, in requested draft order."
+        "shot_descriptions": "JSON list of individual clip instructions, in requested draft order.",
+        "continuation_clip_id": "Select a continuation clip to include three chronological frames from its saved predecessor. Applying rejects a changed predecessor take and preserves earlier clips."
       },
       "output_descriptions": [
         "Structured draft with source-context identity.",
@@ -721,7 +734,8 @@
       "control_descriptions": {
         "backend": "transformers loads a complete local model directory; gguf loads a local GGUF file.",
         "device": "CPU or CUDA placement for the selected local LLM backend, not the H3 diffusion model.",
-        "context_length": "Language-model context budget in tokens; unrelated to H3 video-frame continuity context."
+        "context_length": "Language-model context budget in tokens; unrelated to H3 video-frame continuity context.",
+        "lifetime": "Unload After Draft releases local prompt weights after success or failure. Keep Loaded trades memory for faster subsequent drafting; switching providers releases the previous cached provider."
       },
       "output_descriptions": [
         "Loaded local prompt/vision provider pipeline."
@@ -844,7 +858,8 @@
       "control_descriptions": {
         "quality": "RTX interpolation quality preset; has no effect on Linear.",
         "provider": "Linear pixel blends or NVIDIA RTX frame generation; no silent provider fallback.",
-        "upscale_model": "Learned pixel upscale weights used only for learned_pixel."
+        "upscale_model": "Learned pixel upscale weights used only for learned_pixel.",
+        "resize_method": "All providers respect crop-to-fill, pad-to-fit, or explicit stretch. Bicubic and Lanczos share the same geometry; learned pixel upscale runs before that resize."
       },
       "output_descriptions": [
         "Upscaled RGB frame batch."
@@ -993,18 +1008,20 @@
       "summary": "Review authoring conversion before use.",
       "when": "This converter reads supported authoring metadata from current timelines, DaSiWa reference packs, AIMixer timeline lists and Tritant Extender projects.",
       "behavior": [
-        "This converter reads supported authoring metadata from current timelines, DaSiWa reference packs, AIMixer timeline lists and Tritant Extender projects. The panel accepts JSON or a project ZIP/EXT archive, then Convert And Review displays a converted timeline and warnings. Apply Converted Timeline updates a chosen local Master only after review. Alternatively, connect the typed timeline output to Master.timeline to keep the converter as its authoring owner. Do not use both authoring paths for the same Master.",
-        "Converted clips receive deterministic identities based on the source metadata and index. Repeated conversion of identical metadata produces the same identities. Approval is reset: an upstream validated flag does not establish that this package has a readable final take. Model weights, foreign latent files and sampler settings are not imported into execution. Reconfigure the Settings and model loaders, then generate new takes or use decoded video footage from the Reference Pack. The report explicitly states that caches were not imported.",
-        "Archive paths are checked before any media extraction. Absolute paths, parent traversal and unsupported archive structure are rejected. Supported embedded media is copied into a content-namespaced directory beneath the server input folder; it is not copied into the model folders. Missing media is listed in the report. JSON conversion alone cannot transfer files from another machine. AIMixer conversion requires an explicit clip, segment or group list, and unsupported rich fields require manual review. This is a metadata migration tool, not binary compatibility with every historical project serializer. Preserve your original archive and inspect prompts, media assignments and durations before running a model."
+        "Converts recognized authoring fields and lists missing files and unsupported source fields for review.",
+        "The panel streams archives to the server. Restore Compatible Takes imports validated native H3 raw audiovisual cache segments from Tritant archives without foreign pickle execution.",
+        "Recognized sampling settings are returned on config; explicit installed checkpoint bindings on model_pack require Restore Models. RefMod selections use the existing library contract."
       ],
       "steps": [
         "Configure the dedicated node, connect its typed outputs, and review the result before generation."
       ],
       "wiring": [
-        "timeline → Master.timeline, or reviewed panel apply to a local Master"
+        "timeline → Master.timeline, or reviewed panel apply to a local Master",
+        "config → Master.config; model_pack → Master.model_pack; refmods → Reference Pack.refmods"
       ],
       "notes": [
-        "Archive paths are checked before any media extraction. Absolute paths, parent traversal and unsupported archive structure are rejected. Supported embedded media is copied into a content-namespaced directory beneath the server input folder; it is not copied into the model folders. Missing media is listed in the report. JSON conversion alone cannot transfer files from another machine. AIMixer conversion requires an explicit clip, segment or group list, and unsupported rich fields require manual review. This is a metadata migration tool, not binary compatibility with every historical project serializer. Preserve your original archive and inspect prompts, media assignments and durations before running a model."
+        "Archive paths are checked before any media extraction. Absolute paths, parent traversal and unsupported archive structure are rejected. Supported embedded media is copied into a content-namespaced directory beneath the server input folder; it is not copied into the model folders. Missing media is listed in the report. JSON conversion alone cannot transfer files from another machine. AIMixer conversion requires an explicit clip, segment or group list, and unsupported rich fields require manual review. This is a metadata migration tool, not binary compatibility with every historical project serializer. Preserve your original archive and inspect prompts, media assignments and durations before running a model.",
+        "Authoring conversion alone clears approval. Only restored compatible cached takes preserve their source approval. Unnamed graph checkpoint objects, arbitrary historical formats and foreign Forge history cannot be reconstructed."
       ],
       "related": [
         "MiniMaxH3MasterNode"
@@ -1012,11 +1029,15 @@
       "extra": "",
       "control_descriptions": {
         "project_json": "Reviewed source project metadata JSON. The dedicated panel writes the converted state here.",
-        "source": "Select the source serializer, or auto-detect supported metadata markers."
+        "source": "Select the source serializer, or auto-detect supported metadata markers.",
+        "restore_models": "Load explicitly named installed diffusion checkpoints; missing or ambiguous filenames fail. No model download or substitution."
       },
       "output_descriptions": [
-        "timeline output; see the execution contract above.",
-        "conversion_report output; see the execution contract above."
+        "Converted canonical timeline.",
+        "Conversion report with warnings, imported bindings and cache status.",
+        "Recognized sampling/canvas settings; connect to Master.config.",
+        "Explicit installed checkpoints by source alias when Restore Models is enabled; connect to Master.model_pack.",
+        "Converted RefMod library; connect to Reference Pack.refmods."
       ],
       "beginner": {
         "meaning": "Review authoring conversion before use.",
