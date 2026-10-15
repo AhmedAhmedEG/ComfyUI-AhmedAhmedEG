@@ -27,6 +27,8 @@ def archive_metadata(archive,data,name):
     ext['refs_json']=refs
     clips=ext.get('clips_json',settings.get('clips_json',{'clips':[]}))
     clips=json.loads(clips) if isinstance(clips,str) else clips
+    if isinstance(clips,dict) and isinstance(clips.get('continue_existing_video'),dict):
+        source=clips['continue_existing_video'];bind(source,f'local_refs/media/{source.get("id")}.bin','video')
     for i,row in enumerate(clips.get('clips',[]) if isinstance(clips,dict) else clips,1):
         for key,kind in [('first_frame','first'),('last_frame','last')]:bind(row.get(key),f'fl2va/clip_{i}_{kind}.png','image')
         for j,guide in enumerate(row.get('guides',[]),1):bind(guide.get('frame'),f'fl2va/clip_{i}_guide_{j}.png','image')

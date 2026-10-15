@@ -21,6 +21,11 @@ def edit_images(images, edits=None, crop=None):
     saturation = float(edits.get("saturation", 1))
     if not all(math.isfinite(n) for n in (exposure, contrast, saturation)) or not -10 <= exposure <= 10 or not 0 <= min(contrast, saturation) or max(contrast, saturation) > 4:
         raise ValueError("Invalid image exposure/contrast/saturation.")
+    if edits.get('model')=='css':
+        # Tritant's CSS/FFmpeg saturate -> contrast -> brightness order.
+        gray=images[...,0:1]*.213+images[...,1:2]*.715+images[...,2:3]*.072
+        images=gray+(images-gray)*saturation
+        return ((images-.5)*contrast+.5).mul(2**exposure).clamp(0,1)
     images = images * 2**exposure
     images = (images - .5) * contrast + .5
     gray = images[..., :3].mean(dim=-1, keepdim=True)

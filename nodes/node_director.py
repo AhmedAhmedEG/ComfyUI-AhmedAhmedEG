@@ -438,6 +438,8 @@ class MiniMaxH3MasterDirector:
                     cached_frames = cached_frames[:int(cached_latent.get("_mmx_visible_end", cached_frames.shape[0]))]
                     if canon_mode == MODE_INPAINT:
                         cached_frames = cached_frames[-1:]
+                    if cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("imported_from")=="tritant":
+                        cached_frames=edit_images(cached_frames,clip_item.get("color"))
                 if cached_audio is None:
                     cached_audio = decode_audio_latent(audio_vae, a_saved) if audio_vae and a_saved is not None and canon_mode != MODE_INPAINT else {"waveform": torch.zeros((1,2,round(cached_frames.shape[0]/FPS*48000))),"sample_rate":48000}
                     meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})

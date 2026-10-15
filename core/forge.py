@@ -119,16 +119,20 @@ def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="ht
         request = urllib.request.Request(endpoint.rstrip("/") + suffix, data=json.dumps(payload).encode(), headers=headers)
         with urllib.request.urlopen(request, timeout=180) as response:
             if job:
-                job.bind_response(response);parts=[]
-                for line in response:
-                    job.check();line=line.decode('utf-8').strip()
-                    if not line or line.startswith(':'):continue
-                    if backend=='compatible':
-                        if not line.startswith('data:'):continue
-                        line=line[5:].strip()
-                        if line=='[DONE]':break
-                    row=json.loads(line)
-                    parts.append(row.get('message',{}).get('content','') if backend=='ollama' else (row.get('choices') or [{}])[0].get('delta',{}).get('content') or '')
+                job.bind_response(response);job.check();parts=[]
+                try:
+                    for line in response:
+                        job.check();line=line.decode('utf-8').strip()
+                        if not line or line.startswith(':'):continue
+                        if backend=='compatible':
+                            if not line.startswith('data:'):continue
+                            line=line[5:].strip()
+                            if line=='[DONE]':break
+                        row=json.loads(line)
+                        parts.append(row.get('message',{}).get('content','') if backend=='ollama' else (row.get('choices') or [{}])[0].get('delta',{}).get('content') or '')
+                except (OSError,ValueError):
+                    job.check()
+                    raise
                 text=''.join(parts)
             else:
                 result=json.load(response)

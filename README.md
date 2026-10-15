@@ -156,7 +156,7 @@ Install only the providers you use in ComfyUI's environment:
 
 ## Validation and license
 
-Version 1.6.0 passes **201 regression tests**, **36 real CPU tensor/media checks**,
+Version 1.6.0 passes **202 regression tests**, **36 real CPU tensor/media checks**,
 and five editor/preview/documentation interaction suites. Tests include actual
 FFmpeg assembly, staged and intermediate previews, media edits, immutable approved
 takes and typed external authoring. GPU sampling comparisons, optional real model

@@ -51,7 +51,7 @@ It adds no public Master widgets or sockets and no new node types. The existing
 
 ## Explicit remaining boundaries
 
-Recognized foreign fields are translated, not silently treated as executable graph state. Tritant raw H3 caches can be restored explicitly; arbitrary cache serializers, unnamed in-memory checkpoint objects and historical foreign Forge state are not reconstructed. AIMixer authoring packs do not contain equivalent native latent caches. Missing asset/model names remain explicit report entries. Preserve original projects.
+Recognized foreign fields are translated, not silently treated as executable graph state. Tritant raw H3 caches can be restored explicitly; arbitrary cache serializers, unnamed in-memory checkpoint objects and historical foreign Forge state are not reconstructed. AIMixer authoring packs do not contain equivalent native latent caches. Missing asset/model names remain explicit report entries. Embedded Tritant Clip 0 becomes a locked Existing Video predecessor; its CSS saturation/contrast/brightness grading order is retained when restored takes are decoded. Preserve original projects.
 
 Automatic download is opt-in for one pinned compatible latent upscaler. RTX SDKs and arbitrary checkpoints still require installation. The source-shaped tiled planner now follows the October 14 DaSiWa implementation, retaining our target canvas, external schedule, continuity and native-output adapters. Its budget is a conservative estimate, not a guarantee of fixed peak memory. Latest decoded output additionally offloads continuation state to CPU without truncating H3 temporal phases.
 
@@ -77,4 +77,4 @@ metadata, Refine mode visibility, builder ownership, exports and reviewed import
 The Master schema remains unchanged. GPU/provider operation beyond controlled
 fixtures is not included in local test results.
 
-Verified locally: **201 backend regression tests**, **36 real CPU tensor/media checks**, and **five JavaScript editor/preview/documentation suites** passed. Windows sandboxing blocked a loopback HTTP test on the first attempt; the test completed successfully when run with loopback access. No ComfyUI server or model generation was involved.
+Verified locally: **204 backend regression tests**, **36 real CPU tensor/media checks**, and **five JavaScript editor/preview/documentation suites** passed. Windows sandboxing blocked a loopback HTTP test on the first attempt; the test completed successfully when run with loopback access. No ComfyUI server or model generation was involved.

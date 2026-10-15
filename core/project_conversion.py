@@ -72,6 +72,13 @@ def convert_project(data,source='auto'):
             for guide in row.get('guides',[]):
                 if not guide.get('ref_id'):
                     guide['ref_id']=reference(guide.get('frame',guide.get('guide_frame')),'image')
+        source_video=clip_data.get('continue_existing_video') if isinstance(clip_data,dict) else None
+        if source_video:
+            rid=reference(source_video,'video')
+            seconds=float(source_video.get('duration') or float(source_video.get('frame_count',0))/float(source_video.get('fps') or 24))
+            if rid and math.isfinite(seconds) and seconds>0:
+                state['clips'].insert(0,{'id':'imported_source_video','name':'Existing Video','type':'V2V','duration':seconds,'source':{'ref_id':rid},'source_start':0,'source_end':seconds,'locked':True,'audio_mode':'source','continuity':False})
+            else:raise ValueError('Tritant Clip 0 needs a resolvable video and positive duration.')
         warnings.append('Recognized Tritant settings are exposed on the converted Config output. Restore Compatible Takes can import validated native H3 cache segments from project archives.')
     elif source=='aimixer':
         common=data.get('global',{})
@@ -139,6 +146,10 @@ def convert_project(data,source='auto'):
                 clip[key]=value
         for key in ('source','source_start','source_end','locked','audio_mode','color','continuity','continuity_redraw','seed_mode','tail_seconds'):
             if key in row: clip[key]=row[key]
+        if source=='tritant' and isinstance(row.get('color_adjustment'),dict):
+            raw=row['color_adjustment'];values={key:float(raw.get(key,100))/100 for key in ('saturation','contrast','brightness')}
+            if any(not math.isfinite(v) or v<0 or v>2 for v in values.values()) or values['brightness']<=0:raise ValueError('Invalid imported Tritant color adjustment.')
+            clip['color']={'exposure':math.log2(values['brightness']),'contrast':values['contrast'],'saturation':values['saturation'],'model':'css'}
         if source!='current' and isinstance(clip.get('source'),dict) and clip['source'].get('ref_id'):
             clip['source']={**clip['source'],'ref_id':reference_ids.get(str(clip['source']['ref_id']),clip['source']['ref_id'])}
         if source!='current':

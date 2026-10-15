@@ -7,6 +7,8 @@ def converted_bindings(data,source):
         ext=data.get('project',data).get('extender',{});settings={**ext.get('settings',{}),**ext}
     elif source=='aimixer':settings={**data.get('global',{}),**data.get('widgets',{})}
     else:settings=data.get('settings',data.get('config',{}))
+    settings=dict(settings)
+    if 'sampler_name' in settings and 'sampler' not in settings:settings['sampler']=settings['sampler_name']
     config={}
     numeric={'width':(int,32,16384),'height':(int,32,16384),'steps':(int,1,200),'cfg':(float,0,20),'shift_video':(float,.1,100),'shift_audio':(float,.1,100)}
     for key,(cast,low,high) in numeric.items():

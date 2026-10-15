@@ -93,3 +93,32 @@ class Completion(unittest.TestCase):
     def test_refine_rejects_unknown_seed_advancement_before_loading(self):
         from nodes.node_refine import MiniMaxH3DirectorRefine
         with self.assertRaises(ValueError):MiniMaxH3DirectorRefine().build_config('refine',3,.4,64,64,False,2,seed_after_generate='wrong')
+
+    def test_tritant_clip_zero_and_color_conversion_keep_existing_owners(self):
+        state,_=convert_project({'extender':{'clips_json':{'continue_existing_video':{'filename':'video.mp4','duration':2},'clips':[{'id':'shot','duration':1,'color_adjustment':{'brightness':125,'contrast':120,'saturation':80}}]}}},'tritant')
+        self.assertTrue(state['clips'][0]['locked']);self.assertEqual(state['clips'][0]['source_end'],2)
+        from core.references import edit_images
+        pixels=torch.tensor([[[[.2,.4,.6]]]])
+        color=state['clips'][1]['color'];gray=.2*.213+.4*.715+.6*.072
+        expected=((gray+(pixels-gray)*.8-.5)*1.2+.5)*1.25
+        self.assertTrue(torch.allclose(edit_images(pixels,color),expected))
+
+    def test_remote_writer_streams_draft_and_requests_ollama_unload(self):
+        from core.forge import draft_prompts
+        row={'message':{'content':json.dumps({'shots':[{'prompt':'A red boat moves.','duration':1,'type':'T2VA'}]})}}
+        requests=[]
+        def response(request,**kwargs):
+            requests.append(json.loads(request.data));return io.BytesIO((json.dumps(row)+'\n').encode())
+        state={'clips':[{'id':'shot','type':'T2VA','duration':1,'prompt':'before'}]}
+        with patch('urllib.request.urlopen',side_effect=response):
+            result=draft_prompts(state,'write',model='fixture',job=DraftJob())
+        self.assertEqual(result['shots'][0]['prompt'],'A red boat moves.')
+        self.assertTrue(requests[0]['stream']);self.assertEqual(requests[0]['keep_alive'],0)
+
+    def test_remote_cancelled_stream_never_returns_partial_draft(self):
+        from core.forge import draft_prompts
+        job=DraftJob()
+        def response(*args,**kwargs):
+            job.cancel();return io.BytesIO(b'')
+        with patch('urllib.request.urlopen',side_effect=response):
+            with self.assertRaises(DraftCancelled):draft_prompts({'clips':[]},'write',model='fixture',job=job)
