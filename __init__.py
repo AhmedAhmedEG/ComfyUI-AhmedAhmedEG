@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -271,11 +271,72 @@ if getattr(PromptServer, "instance", None) is not None:
         finally:
             if job_id:finish_job(job_id)
 
+    @routes.post('/minimax_director/forge/vision')
+    async def forge_vision(request):
+        job_id = None
+        try:
+            running, _ = PromptServer.instance.prompt_queue.get_current_queue()
+            if running:
+                raise ValueError('Wait for the current ComfyUI generation before using the vision reader.')
+            body = await request.json()
+            from .core.forge_jobs import start_job, finish_job
+            from .core.forge import provider_text
+            from .core.cast_tools import parse_people, read_cast, image_b64
+            from .core.media_io import resolve_input_path
+            import folder_paths
+            from PIL import Image, ImageOps
+            job_id, job = start_job(body.get('job_id') or str(uuid.uuid4()))
+            def create():
+                generator = None
+                if body.get('backend') == 'local':
+                    from .core.local_llm import local_provider
+                    generator = local_provider(body.get('model', ''), body.get('local_backend', 'transformers'), True,
+                        body.get('device', 'cpu'), body.get('projection', ''), body.get('context_length', 8192), body.get('lifetime', 'unload_after_draft'))
+                def provider(system, user, images):
+                    return provider_text(system, user, body.get('backend', 'ollama'), body.get('endpoint', 'http://localhost:11434'),
+                        body.get('model', ''), body.get('api_key', ''), generator, images, 2, job, 2048)
+                def load(row):
+                    job.check()
+                    path = resolve_input_path(row.get('filename', ''), folder_paths.get_input_directory())
+                    with Image.open(path) as image:
+                        return ImageOps.exif_transpose(image).convert('RGB')
+                if body.get('operation') == 'find_people':
+                    image = load(body['reference'])
+                    text = provider('Locate every visible person. Return JSON only: {"people":[{"label":"short visible description","box":[x1,y1,x2,y2]}]}. '
+                        'Coordinates must be fractions from 0 to 1 of the entire image, top-left to bottom-right, with one full-body box per person. Return an empty people array if none are visible.',
+                        'Find the people in this image.', [image_b64(image)])
+                    return {'boxes': parse_people(text)}
+                if body.get('operation') == 'describe':
+                    return {'text': read_cast(body['timeline'], body['card_key'], load, provider, body.get('instruction', ''))}
+                raise ValueError('Unknown vision operation.')
+            return web.json_response(await asyncio.to_thread(create))
+        except asyncio.CancelledError:
+            if job_id:
+                from .core.forge_jobs import cancel_job
+                await asyncio.to_thread(cancel_job, job_id)
+            raise
+        except (ValueError, TypeError, KeyError, FileNotFoundError) as exc:
+            return web.json_response({'error': str(exc)}, status=400)
+        except Exception as exc:
+            return web.json_response({'error': str(exc)}, status=502)
+        finally:
+            if job_id:
+                finish_job(job_id)
+
     @routes.post('/minimax_director/forge/cancel')
     async def forge_cancel(request):
         from .core.forge_jobs import cancel_job
         body=await request.json()
         return web.json_response({'cancelled':await asyncio.to_thread(cancel_job,body.get('job_id',''))})
+
+    @routes.post('/minimax_director/forge/prepare_history')
+    async def forge_prepare_history(request):
+        try:
+            from .core.forge import prepare_imported_history
+            body = await request.json()
+            return web.json_response(prepare_imported_history(body['timeline'], body['index']))
+        except (ValueError, TypeError, KeyError) as exc:
+            return web.json_response({'error': str(exc)}, status=400)
 
     @routes.post("/minimax_director/forge/apply")
     async def forge_apply(request):
@@ -306,7 +367,9 @@ if getattr(PromptServer, "instance", None) is not None:
                                 dest.write(chunk)
                     elif part.name=='restore_cache':restore_cache=(await part.text())=='true'
                 if not got_file:raise ValueError('Choose an upstream project/archive.')
-                state,report=await asyncio.to_thread(read_conversion,path,folder_paths.get_input_directory(),restore_cache=restore_cache)
+                from .core.transfer import progress_callback
+                progress=progress_callback(PromptServer.instance,request.query.get('job_id'))
+                state,report=await asyncio.to_thread(read_conversion,path,folder_paths.get_input_directory(),restore_cache=restore_cache,progress=progress)
             return web.json_response({'timeline':state,'report':report})
         except (ValueError,TypeError,KeyError) as exc:
             return web.json_response({'error':str(exc)},status=400)
@@ -319,7 +382,9 @@ if getattr(PromptServer, "instance", None) is not None:
             body = await request.json()
             mgr = ProjectCacheManager(body.get("project_id", "default"))
             path = os.path.join(mgr.project_dir, "portable_" + uuid.uuid4().hex + ".mmxproj")
-            await asyncio.to_thread(write_portable, body["timeline"], folder_paths.get_input_directory(), path)
+            from .core.transfer import progress_callback
+            progress=progress_callback(PromptServer.instance,request.query.get("job_id"))
+            await asyncio.to_thread(write_portable, body["timeline"], folder_paths.get_input_directory(), path,progress)
             return web.FileResponse(path, headers={"Content-Disposition": 'attachment; filename="MiniMaxProject.mmxproj"'})
         except (ValueError, TypeError, KeyError, FileNotFoundError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -343,7 +408,9 @@ if getattr(PromptServer, "instance", None) is not None:
                     total += len(chunk)
                     if total > 8 * 1024**3: raise ValueError("Archive exceeds 8 GiB.")
                     output.write(chunk)
-            state = await asyncio.to_thread(read_portable, path, folder_paths.get_input_directory())
+            from .core.transfer import progress_callback
+            progress=progress_callback(PromptServer.instance,request.query.get("job_id"))
+            state = await asyncio.to_thread(read_portable, path, folder_paths.get_input_directory(),progress=progress)
             return web.json_response({"timeline": state})
         except (ValueError, TypeError, KeyError) as exc:
             return web.json_response({"error": str(exc)}, status=400)

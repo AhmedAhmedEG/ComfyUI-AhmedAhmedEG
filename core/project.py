@@ -120,7 +120,8 @@ def missing_assets(state, input_root):
     return sorted(set(missing))
 
 
-def write_portable(state, input_root, destination):
+def write_portable(state, input_root, destination, progress=None):
+    progress=progress or (lambda *args:None)
     state = migrate_timeline(state)
     files = {}
     for owner, key in asset_fields(state):
@@ -132,12 +133,17 @@ def write_portable(state, input_root, destination):
         owner[key] = entry
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("project.json", json.dumps({"format": "MiniMaxH3Portable", "version": 1, "timeline": state}, ensure_ascii=False))
+        from .transfer import copy_progress
+        total=sum(Path(path).stat().st_size for path in files.values());done=0
         for entry, path in files.items():
-            archive.write(path, entry)
+            with open(path,"rb") as source,archive.open(entry,"w",force_zip64=True) as target:
+                done+=copy_progress(source,target,progress,"Packing media",done,total)
+        progress("Packing media",total,total)
     return destination
 
 
-def read_portable(source, input_root, max_bytes=8 * 1024**3):
+def read_portable(source, input_root, max_bytes=8 * 1024**3, progress=None):
+    progress=progress or (lambda *args:None)
     with zipfile.ZipFile(source) as archive:
         infos = archive.infolist()
         if len(infos) > 10000 or sum(item.file_size for item in infos) > max_bytes:
@@ -167,11 +173,12 @@ def read_portable(source, input_root, max_bytes=8 * 1024**3):
             imports.append((entry, target))
             owner[key] = relative
         # Validate the entire archive before writing any assets.
-        for entry, target in dict(imports).items():
+        from .transfer import copy_progress
+        unique=dict(imports);total=sum(archive.getinfo(entry).file_size for entry in unique);done=0
+        for entry, target in unique.items():
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as stream, open(target, "wb") as output:
-                import shutil
-                shutil.copyfileobj(stream, output, length=1024 * 1024)
+                done+=copy_progress(stream,output,progress,"Extracting media",done,total)
         # Graph references with file provenance become independent uploaded
         # references on another machine; they do not require the old graph.
         references = state.setdefault("references", [])

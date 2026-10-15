@@ -22,6 +22,8 @@ w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),rem
   return {ok:true,json:async()=>result};
 }};
 w.HTMLMediaElement.prototype.pause=()=>{};w.HTMLMediaElement.prototype.load=()=>{};
+w.XMLHttpRequest=undefined;
+w.eval(fs.readFileSync('web/js/minimax_transfer.js','utf8').replace(/^import .*;\r?\n/gm,'').replaceAll('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_timeline.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_director.js','utf8').replace(/^import .*;\r?\n/gm,''));
@@ -422,7 +424,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.api.fetchApi=async(url)=>{calls.push(url);return {ok:true,json:async()=>({ok:true,project:{}}),blob:async()=>new w.Blob(['archive'])};};
   const exportProject=button('Export Project'),mediaChoice=filesPanel.querySelector('.mmx-export-media');
   await exportProject.onclick();
-  assert.equal(calls.pop(),'/minimax_director/project/portable/export');
+  assert.equal(calls.pop().split('?')[0],'/minimax_director/project/portable/export');
   mediaChoice.checked=false;await exportProject.onclick();
   assert.equal(calls.pop(),'/minimax_director/project/export');
   assert(!exportProject.disabled);w.api.fetchApi=previousFetch;

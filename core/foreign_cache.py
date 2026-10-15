@@ -22,7 +22,8 @@ def raw_tensor(path,spec):
     return torch.from_numpy(data).view(dtype).reshape(shape),data
 
 
-def import_tritant_cache(archive,state,cache_root=None,archive_digest=''):
+def import_tritant_cache(archive,state,cache_root=None,archive_digest='',progress=None):
+    progress=progress or (lambda *args:None)
     required={'cache/chain.json','cache/chain.h3cache'}
     if not required.issubset(archive.namelist()):return []
     if archive.getinfo('cache/chain.json').file_size>16*1024**2:raise ValueError('Foreign cache manifest is too large.')
@@ -61,6 +62,7 @@ def import_tritant_cache(archive,state,cache_root=None,archive_digest=''):
                 manager.store_clip_results(clip['id'],fingerprint,latent,validated=bool(segment.get('validated')))
                 manager.update_clip_metadata(clip['id'],{'trim_prefix':int(segment.get('trim_frames',0)),'previous_trim':0,'imported_from':'tritant','mode':clip['type']})
                 clip['validated']=bool(segment.get('validated'));restored.append(clip['id'])
+                progress('Restoring takes',len(restored),len(rows))
             finally:
                 latent=None
                 del video,audio

@@ -78,3 +78,7 @@ The Master schema remains unchanged. GPU/provider operation beyond controlled
 fixtures is not included in local test results.
 
 Verified locally: **204 backend regression tests**, **36 real CPU tensor/media checks**, and **five JavaScript editor/preview/documentation suites** passed. Windows sandboxing blocked a loopback HTTP test on the first attempt; the test completed successfully when run with loopback access. Those are local tests. Subsequent real-server results, including the interrupted sampling comparison and successful VAE/cache replay checks, are recorded in [server validation](parity-server-validation-2026-10-15.md).
+
+## 1.7 follow-up
+
+The people-box/cast-reading editor, transfer progress and supported workflow/history recovery described as remaining here are implemented in [1.7](parity-completion-1.7.md). This file records the 1.6 baseline and its compatibility decisions.

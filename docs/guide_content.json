@@ -1,5 +1,5 @@
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -423,7 +423,8 @@
       ],
       "notes": [
         "The pool can grow through chaining, but each shot still obeys native limits: 9 images, 3 videos, 3 audios, 12 combined.",
-        "A video input is an IMAGE frame batch. RefMods are names/paths or bundles, not newly trained models."
+        "A video input is an IMAGE frame batch. RefMods are names/paths or bundles, not newly trained models.",
+        "Prompt Cast owns normalized people boxes. Enable Edit People Boxes to draw, move, resize, renumber or remove up to 32 boxes on the original file picture. Find People uses a selected Forge vision provider and returns editable proposals; Use Detected Boxes is explicit. This changes writer metadata, not model reference selection."
       ],
       "related": [
         "MiniMaxH3MasterNode",
@@ -645,7 +646,8 @@
         "Provider requests originate from the ComfyUI server. localhost refers to that server.",
         "Graph api_key fields can be saved in workflow JSON. Stale drafts are rejected on application if the source context changed.",
         "Do not wire a Master output back into that same Master through a cyclic draft graph; use an independent snapshot or the editor draft flow.",
-        "Cancel Request signals local token stopping and closes a remote streaming connection, and rejects late results. A remote service may continue computing after disconnect. Ollama requests unload after drafting. Compiled labels are tracked by asset ID and remapped at execution if slot order changes; removing an assigned reference requires review."
+        "Cancel Request signals local token stopping and closes a remote streaming connection, and rejects late results. A remote service may continue computing after disconnect. Ollama requests unload after drafting. Compiled labels are tracked by asset ID and remapped at execution if slot order changes; removing an assigned reference requires review.",
+        "Cast Appearance Cards reads only assigned image references for a character/place/style/pose. Separated people are cropped with a small margin; overlapping people use full-frame position. Review and Use Reviewed Description saves the authoritative text into the timeline. Keyframe modes use mode-specific prose; reference modes compile subject definitions. Imported Prompt History is separate from active drafts until explicitly prepared for review."
       ],
       "related": [
         "MiniMaxH3ApplyPromptDraft",
@@ -1021,7 +1023,8 @@
       ],
       "notes": [
         "Archive paths are checked before any media extraction. Absolute paths, parent traversal and unsupported archive structure are rejected. Supported embedded media is copied into a content-namespaced directory beneath the server input folder; it is not copied into the model folders. Missing media is listed in the report. JSON conversion alone cannot transfer files from another machine. AIMixer conversion requires an explicit clip, segment or group list, and unsupported rich fields require manual review. This is a metadata migration tool, not binary compatibility with every historical project serializer. Preserve your original archive and inspect prompts, media assignments and durations before running a model.",
-        "Authoring conversion alone clears approval. Only restored compatible cached takes preserve their source approval. Unnamed graph checkpoint objects, arbitrary historical formats and foreign Forge history cannot be reconstructed."
+        "Authoring conversion alone clears approval. Only restored compatible cached takes preserve their source approval. Unnamed graph checkpoint objects, arbitrary historical formats and foreign Forge history cannot be reconstructed.",
+        "Saved foreign workflow JSON can recover one recognized Director/Extender timeline, explicit UNET loader filenames, cast/reference metadata and available DaSiWa prompt history. Ambiguous multiple timelines fail instead of choosing one. Numeric widget positions and arbitrary procedural graph patches are not guessed. Upload, server extraction/cache restoration, packing and download phases report scoped progress."
       ],
       "related": [
         "MiniMaxH3MasterNode"

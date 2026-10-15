@@ -17,7 +17,7 @@ def reference_context(timeline):
             if not isinstance(row, dict) or not row.get("id"):
                 continue
             rows[row["id"]] = {key: row.get(key) for key in
-                ("id", "type", "name", "role", "description", "filename", "subfolder", "folder_type", "characters", "position", "retention", "forge_include")}
+                ("id", "type", "name", "role", "description", "filename", "subfolder", "folder_type", "characters", "position", "retention", "forge_include", "boxes")}
     return list(rows.values())
 
 
@@ -56,45 +56,11 @@ def parse_draft(text, count):
     return shots
 
 
-def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="http://localhost:11434",
-                  model="", api_key="", generator=None, images=None, creativity=4, detail=6, shot_descriptions=None, continuation_clip_id="", job=None):
-    count = int(count)
-    if not 1 <= count <= 100: raise ValueError("Draft shot count must be between 1 and 100.")
-    creativity,detail=int(creativity),int(detail)
-    if not 1<=creativity<=10 or not 1<=detail<=10: raise ValueError("Creativity and Detail must be between 1 and 10.")
-    state = migrate_timeline(timeline)
-    from .forge_cast import clip_bindings, compile_cast_prompt
-    bindings=[clip_bindings(state,row) for row in state.get('clips',[])]
-    if continuation_clip_id:
-        start=next((i for i,row in enumerate(state['clips']) if row.get('id')==continuation_clip_id),-1)
-        if start<=0:raise ValueError('Choose a continuation clip with a predecessor.')
-        bindings=bindings[start:]
-    refs = [row for row in reference_context(state) if row.get('forge_include') is not False]
-    refs.extend({"id": f"RefMod {row.get('slot')}", "type": "refmod", "description": row.get("description", "")} for row in state.get("refmods", []) if row.get("enabled", True))
-    system = ("Draft MiniMax H3 video shots. Return only JSON: {\"shots\":[{\"prompt\":\"...\",\"duration\":5,\"type\":\"T2V\"}]}. "
-        "Preserve identities, reference descriptions, existing context and requested retention. "
-        "Use the given reference IDs; do not invent references. Describe visual action, camera, soundscape and music. "
-        f"Produce exactly {count} shots. Reference context: {json.dumps(refs, ensure_ascii=False)}")
-    system += f" Creativity={creativity}/10; detail={detail}/10. Detail adds descriptive precision, never extra shots. Keep continuous action when asked; do not invent cuts or unsolicited music. Output canvas: {state.get('resolution',{})}."
-    system += ' Clip-local native labels and cast assignments: '+json.dumps(bindings,ensure_ascii=False)+'. Use these labels exactly; do not invent or renumber subjects. Return action/camera/audio prose in prompt; subject and retention headers are compiled from the reviewed cast metadata.'
-    if shot_descriptions:
-        system += " Shot instructions: " + json.dumps(list(shot_descriptions)[:count],ensure_ascii=False)
-    user = str(instruction) + "\nShared prompt:\n" + str(state.get("shared_prompt", "")) + "\nExisting timeline:\n" + json.dumps(state.get("clips", []), ensure_ascii=False)
-    continuation_key=None
-    if continuation_clip_id:
-        from .forge_context import predecessor_context
-        frames,continuation_key=predecessor_context(state,continuation_clip_id)
-        import base64,io
-        from PIL import Image
-        tail=[]
-        for pixels in frames:
-            image=Image.fromarray((pixels.cpu().clamp(0,1).numpy()*255).round().astype('uint8'));image.thumbnail((1024,1024))
-            blob=io.BytesIO();image.save(blob,format='PNG');tail.append(base64.b64encode(blob.getvalue()).decode())
-        images=[*(images or []),*tail]
-        system+=f' The final {len(tail)} attached pictures are chronological previous-clip tail frames, not native reference slots. Continue their motion into clip {continuation_clip_id}; do not label them Picture references.'
+def provider_text(system, user, backend="ollama", endpoint="http://localhost:11434", model="", api_key="", generator=None, images=None, creativity=4, job=None, max_new_tokens=2048):
+    """Shared cancellable transport for shot writing, people detection and cast reading."""
     if backend == "local":
         if not callable(generator): raise ValueError("Local Prompt Forge requires a connected callable language-model pipeline.")
-        options = {"max_new_tokens": min(32768, max(2048, count*256)), "temperature":creativity/10}
+        options = {"max_new_tokens": max_new_tokens, "temperature":creativity/10}
         if images: options["images"] = images
         if job:
             job.check()
@@ -129,6 +95,7 @@ def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="ht
                             line=line[5:].strip()
                             if line=='[DONE]':break
                         row=json.loads(line)
+                        if row.get("error"):raise ValueError(str(row["error"]))
                         parts.append(row.get('message',{}).get('content','') if backend=='ollama' else (row.get('choices') or [{}])[0].get('delta',{}).get('content') or '')
                 except (OSError,ValueError):
                     job.check()
@@ -138,9 +105,56 @@ def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="ht
                 result=json.load(response)
                 text=result['message']['content'] if backend=='ollama' else result['choices'][0]['message']['content']
     if job:job.check()
+    return str(text)
+
+
+def draft_prompts(timeline, instruction, count=1, backend="ollama", endpoint="http://localhost:11434",
+                  model="", api_key="", generator=None, images=None, creativity=4, detail=6, shot_descriptions=None, continuation_clip_id="", job=None):
+    count = int(count)
+    if not 1 <= count <= 100: raise ValueError("Draft shot count must be between 1 and 100.")
+    creativity,detail=int(creativity),int(detail)
+    if not 1<=creativity<=10 or not 1<=detail<=10: raise ValueError("Creativity and Detail must be between 1 and 10.")
+    state = migrate_timeline(timeline)
+    from .forge_cast import clip_bindings, compile_cast_prompt
+    from .forge_modes import writing_contracts,uses_reference_headers
+    active_clips=state.get('clips',[])
+    bindings=[clip_bindings(state,row) if uses_reference_headers(row.get('type','T2VA')) else [] for row in active_clips]
+    if continuation_clip_id:
+        start=next((i for i,row in enumerate(state['clips']) if row.get('id')==continuation_clip_id),-1)
+        if start<=0:raise ValueError('Choose a continuation clip with a predecessor.')
+        bindings=bindings[start:]
+        active_clips=active_clips[start:]
+    from .cast_tools import cast_cards
+    cards=cast_cards(state.get('cast_cards'))
+    refs = [row for row in reference_context(state) if row.get('forge_include') is not False]
+    refs.extend({"id": f"RefMod {row.get('slot')}", "type": "refmod", "description": row.get("description", "")} for row in state.get("refmods", []) if row.get("enabled", True))
+    system = ("Draft MiniMax H3 video shots. Return only JSON: {\"shots\":[{\"prompt\":\"...\",\"duration\":5,\"type\":\"T2V\"}]}. "
+        "Preserve identities, reference descriptions, existing context and requested retention. "
+        "Use the given reference IDs; do not invent references. Describe visual action, camera, soundscape and music. "
+        f"Produce exactly {count} shots. Reference context: {json.dumps(refs, ensure_ascii=False)}")
+    system += f" Creativity={creativity}/10; detail={detail}/10. Detail adds descriptive precision, never extra shots. Keep continuous action when asked; do not invent cuts or unsolicited music. Output canvas: {state.get('resolution',{})}."
+    system += ' Clip-local native labels and cast assignments: '+json.dumps(bindings,ensure_ascii=False)+'. Use these labels exactly; do not invent or renumber subjects. Return action/camera/audio prose in prompt; subject and retention headers are compiled from the reviewed cast metadata.'
+    system += ' Per-clip writing contracts: '+json.dumps(writing_contracts(active_clips),ensure_ascii=False)
+    system += ' Reviewed cast appearance cards (use verbatim for subject appearance; do not overwrite): '+json.dumps(cards,ensure_ascii=False)
+    if shot_descriptions:
+        system += " Shot instructions: " + json.dumps(list(shot_descriptions)[:count],ensure_ascii=False)
+    user = str(instruction) + "\nShared prompt:\n" + str(state.get("shared_prompt", "")) + "\nExisting timeline:\n" + json.dumps(state.get("clips", []), ensure_ascii=False)
+    continuation_key=None
+    if continuation_clip_id:
+        from .forge_context import predecessor_context
+        frames,continuation_key=predecessor_context(state,continuation_clip_id)
+        import base64,io
+        from PIL import Image
+        tail=[]
+        for pixels in frames:
+            image=Image.fromarray((pixels.cpu().clamp(0,1).numpy()*255).round().astype('uint8'));image.thumbnail((1024,1024))
+            blob=io.BytesIO();image.save(blob,format='PNG');tail.append(base64.b64encode(blob.getvalue()).decode())
+        images=[*(images or []),*tail]
+        system+=f' The final {len(tail)} attached pictures are chronological previous-clip tail frames, not native reference slots. Continue their motion into clip {continuation_clip_id}; do not label them Picture references.'
+    text=provider_text(system,user,backend,endpoint,model,api_key,generator,images,creativity,job,min(32768,max(2048,count*256)))
     shots=parse_draft(text,count)
     for index,shot in enumerate(shots):
-        if index<len(bindings):shot['prompt']=compile_cast_prompt(shot['prompt'],bindings[index])
+        if index<len(bindings) and uses_reference_headers(shot['type']):shot['prompt']=compile_cast_prompt(shot['prompt'],bindings[index],state.get('cast_cards'))
     return {"context_key": context_key(timeline), "shots": shots, "count": count,
         "reference_bindings":bindings[:count],
         "continuation_clip_id":continuation_clip_id,"continuation_key":continuation_key}
@@ -181,3 +195,16 @@ def apply_draft(timeline, draft, policy="replace"):
         created.append(base)
     state["clips"] = [*old, *created] if policy == "append" else [*old[:start],*created,*old[start+len(created):]] if draft.get('continuation_clip_id') else created
     return state
+
+
+def prepare_imported_history(timeline, index):
+    """Explicit review gate for text recovered from another project's history."""
+    rows = timeline.get('imported_prompt_history', [])
+    if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(rows):
+        raise ValueError('Choose an imported history entry.')
+    row = rows[index]
+    duration = timeline.get('clips', [{}])[0].get('duration', 5) if timeline.get('clips') else 5
+    shots = parse_draft(json.dumps({'shots': [{'prompt': row['prompt'], 'type': row['type'], 'duration': duration}]}), 1)
+    return {'context_key': context_key(timeline), 'count': 1, 'shots': shots,
+        'reference_bindings': [], 'imported_history': True,
+        'warnings': ['Historical reference tags are unverified. Review every Picture/Video/Audio tag against the current clip before Apply.']}

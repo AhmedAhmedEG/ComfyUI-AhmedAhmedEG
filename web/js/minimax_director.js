@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { bindShotDrag } from "./minimax_timeline.js";
+import {transferRequest,transferLabel} from "./minimax_transfer.js";
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -3130,17 +3131,15 @@ function mountDirectorUI(node) {
     timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();
   });
   const exportPortable=async()=>{
-    const response = await api.fetchApi("/minimax_director/project/portable/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: timelineState.project_id, timeline: { ...timelineState, builder_state: builderState } }) });
-    if (!response.ok) throw new Error((await response.json()).error || "Export failed");
-    const url = URL.createObjectURL(await response.blob());
+    const blob = await transferRequest('/minimax_director/project/portable/export',{body:{project_id:timelineState.project_id,timeline:{...timelineState,builder_state:builderState}},blob:true,onProgress:e=>showProjectFeedback('busy',transferLabel(e))});
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a"); link.href = url; link.download = "MiniMaxProject.mmxproj"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const importPortable=async(file,policy)=>{
         const data = new FormData(); data.append("project", file);
-        const response = await api.fetchApi("/minimax_director/project/portable/import", { method: "POST", body: data });
-        const result = await response.json(); if (!response.ok) throw new Error(result.error || "Import failed");
-        const merged = await requestJson("/minimax_director/project/merge", { current: timelineState, incoming: result.timeline, policy });
+        const result=await transferRequest('/minimax_director/project/portable/import',{body:data,onProgress:e=>showProjectFeedback('busy',transferLabel(e))});
+          const merged = await requestJson("/minimax_director/project/merge", { current: timelineState, incoming: result.timeline, policy });
         timelineState = merged.timeline;
         if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
         builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state || builderState;activeClipId=timelineState.clips?.[0]?.id; refreshFileRefs(); syncState(); renderTimeline();

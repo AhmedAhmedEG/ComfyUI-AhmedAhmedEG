@@ -13,7 +13,9 @@ def object_value(value):
 
 def convert_project(data,source='auto'):
     if not isinstance(data,dict): raise ValueError('Project metadata must be an object.')
-    warnings=[]
+    from .foreign_review import recover_workflow,reference_metadata,reviewed_history
+    data,notices=recover_workflow(data)
+    warnings=list(notices)
     if source=='auto':
         source='dasiwa' if data.get('dasiwa_minimax_h3_reference_pack') else 'tritant' if 'extender' in data or isinstance(data.get('project'),dict) and 'extender' in data['project'] else 'aimixer' if 'global' in data or 'asset_groups' in data else 'current'
     signature=hashlib.sha256(json.dumps(data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -39,7 +41,7 @@ def convert_project(data,source='auto'):
             'start':row.get('start',row.get('trim_start',0)), 'end':row.get('end',row.get('trim_end')),
             'role':row.get('role',row.get('forge_role','subject')), 'description':row.get('description',row.get('forge_instructions','')),
             'media_mode':{'V':'video','A':'audio','VA':'both','V+A':'both'}.get(row.get('media_mode'),row.get('media_mode','video')),
-            'scaling':'Off'})
+            'scaling':'Off',**reference_metadata(row)})
         return rid
     if source=='current':
         state=copy.deepcopy(data.get('timeline',data))
@@ -48,7 +50,7 @@ def convert_project(data,source='auto'):
         ids=[rid for row in data.get('items',[]) if (rid:=reference(row))]
         prompt=data.get('prompt',{})
         state={'clips':[{'type':data.get('model_mode','REF2VA'),'prompt':prompt.get('simple_prompt','') if isinstance(prompt,dict) else str(prompt),'duration':data.get('duration',5),'ref_ids':ids}],'references':refs}
-        warnings.append('DaSiWa prompt mapping/Forge history and RefMod bundles require review in the dedicated nodes.')
+        warnings.append('DaSiWa cast/reference metadata converted. Imported prompt history is review-only until explicitly prepared and accepted in Forge.')
     elif source=='tritant':
         project=data.get('project',data);ext=project.get('extender',{})
         settings=ext.get('settings',{})
@@ -177,6 +179,10 @@ def convert_project(data,source='auto'):
         clips.append(clip)
     state.update(version=2,approval_control_version=1,project_id=state.get('project_id') if source=='current' and state.get('project_id') else 'project_'+signature[:24],clips=clips)
     state=migrate_timeline(state)
+    from .cast_tools import cast_cards
+    if source!='current':
+        state['cast_cards']=cast_cards(data.get('cast_cards'))
+        state['imported_prompt_history']=reviewed_history(data)
     from .import_bindings import converted_bindings
     bindings=converted_bindings(data,source)
     if source!='current':
@@ -194,11 +200,12 @@ def convert_project(data,source='auto'):
             if clip['id'] in state['imported_take_ids'] and meta.get('imported_from')=='tritant' and meta.get('has_latent'):
                 clip['validated']=bool(previous[clip['id']].get('validated'))
     return state,{'source':source,'clips':len(clips),'references':len(state.get('references',[])),'warnings':warnings,'cache_imported':False,
-        'bindings':bindings,
+        'bindings':bindings,'history_entries':len(state.get('imported_prompt_history',[])),'cast_cards':len(state.get('cast_cards',{})),
         'preserved_fields':['prompt','duration','seed','continuity','context_length','audio_context_length','source','audio_mode','color','LoRA names/strengths','resolved guide times'],
-        'not_imported':['unnamed runtime checkpoint objects','unrecognized foreign fields','Forge history'] if source!='current' else ['take artifacts; existing project cache is referenced by project ID']}
+        'not_imported':['unnamed runtime checkpoint objects','procedural graph patches and unavailable source artifacts'] if source!='current' else ['take artifacts; existing project cache is referenced by project ID']}
 
-def read_conversion(blob,input_root,source='auto',restore_cache=False,cache_root=None):
+def read_conversion(blob,input_root,source='auto',restore_cache=False,cache_root=None,progress=None):
+    progress=progress or (lambda *args:None)
     root=Path(input_root).resolve();files={}
     is_bytes=isinstance(blob,(bytes,bytearray))
     archive_source=io.BytesIO(blob) if is_bytes else str(blob)
@@ -206,7 +213,9 @@ def read_conversion(blob,input_root,source='auto',restore_cache=False,cache_root
         with zipfile.ZipFile(archive_source) as archive:
             entries=archive.infolist()
             if len(entries)>5000 or sum(e.file_size for e in entries)>8*1024**3: raise ValueError('Project archive is too large.')
+            if len({e.filename for e in entries})!=len(entries):raise ValueError('Duplicate archive entries are not supported.')
             for entry in entries:
+                if (entry.external_attr >> 16) & 0o170000 == 0o120000:raise ValueError('Archive links are not supported.')
                 path=PurePosixPath(entry.filename)
                 if path.is_absolute() or '..' in path.parts or ':' in entry.filename or '\\' in entry.filename: raise ValueError('Unsafe archive path.')
             name='timeline.json' if 'timeline.json' in archive.namelist() else 'project.json' if 'project.json' in archive.namelist() else 'pack.json'
@@ -225,19 +234,20 @@ def read_conversion(blob,input_root,source='auto',restore_cache=False,cache_root
             for entry in entries:
                 if (PurePosixPath(entry.filename).suffix.lower() in MEDIA or entry.filename in {r.get('filename') for r in state.get('references',[])}) and not entry.is_dir():files[entry.filename]=(str(prefix/entry.filename),entry)
             # Conversion and all path checks finish before writing any asset.
+            from .transfer import copy_progress
+            total=sum(entry.file_size for _,entry in files.values());done=0
             for original,(relative,entry) in files.items():
                 target=(root/relative).resolve()
                 if not target.is_relative_to(root):raise ValueError('Archive asset escaped input directory.')
                 target.parent.mkdir(parents=True,exist_ok=True)
                 with archive.open(entry) as src,target.open('wb') as dest:
-                    import shutil
-                    shutil.copyfileobj(src,dest,1024**2)
+                    done+=copy_progress(src,dest,progress,"Extracting media",done,total)
             for row in state.get('references',[]):
                 if row['filename'] in files:row['filename']=files[row['filename']][0]
             report['embedded_media']=len(files)
             if restore_cache and report['source']=='tritant':
                 from .foreign_cache import import_tritant_cache
-                report['restored_takes']=import_tritant_cache(archive,state,cache_root,digest)
+                report['restored_takes']=import_tritant_cache(archive,state,cache_root,digest,progress)
                 report['cache_imported']=bool(report['restored_takes'])
                 state['imported_take_ids']=report['restored_takes']
                 if report['cache_imported']:report['warnings'].append('Compatible H3 latents restored. Run Master once to decode saved takes using your connected H3 VAEs; no sampling is needed for restored approved clips.')
@@ -248,5 +258,6 @@ def read_conversion(blob,input_root,source='auto',restore_cache=False,cache_root
         if len(blob)>16*1024**2: raise ValueError('Project JSON is too large.')
         state,report=convert_project(json.loads(blob),source)
     missing=[row['filename'] for row in state.get('references',[]) if not (root/row['filename']).is_file()]
+    progress('Conversion complete',1,1)
     report['missing_files']=missing
     return state,report
