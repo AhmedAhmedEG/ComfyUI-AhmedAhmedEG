@@ -36,3 +36,5 @@ removed. Model weights remain user supplied.
 Selected Spike Guard, RTX pair interpolation and supporting frame-generation utilities additionally come from DaSiWa revision `bdb62d4c561bbed30351974844e0168ad471331a` (GPL-3.0). Native registrations are omitted. Local adapters add explicit FPS/audio duration ownership and experimental defaults.
 
 The pure tiled planner and diffusion window adapter are updated from DaSiWa revision `04ecdec250e24097ea2b3e3e339d607d14cf694b` (GPL-3.0). Local defaults retain 35% workspace headroom; Refine owns the planning toggle/reserve and Spike Guard direction. The locally adapted orchestration driver is retained.
+
+The local people-box, cast-reader and reviewed-card implementation follows the audited DaSiWa 13–14 October cast workflow concepts, with independent shared-provider integration. Its storage, review gates and UI remain owned by Reference Pack and Prompt Forge. Upstream plugin/node registrations are not loaded.

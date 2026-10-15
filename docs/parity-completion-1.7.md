@@ -26,4 +26,13 @@ Local checks cover box geometry and ordering, crop/overlap behavior, selected-im
 
 The older FEATURE_PARITY inventory now distinguishes implemented functionality from GPU certification and records the requested English-only UI as an intentional difference. Previous 1.6 server evidence and the interrupted sampling comparison remain in [server validation](parity-server-validation-2026-10-15.md); they are not retroactively presented as new 1.7 tests.
 
-Local validation: **213 backend tests**, **36 real CPU tensor/media checks**, and **six JavaScript suites** pass. No new Master controls or node registrations were introduced.
+Local validation: **214 backend tests**, **36 real CPU tensor/media checks**, and **six JavaScript suites** pass. No new Master controls or node registrations were introduced.
+
+
+## Deployed server checks
+
+The running process reported 1.7.0 and 27 public nodes. An isolated workflow fixture recovered one historical prompt, one people box, an appearance card and an explicit checkpoint alias. A real portable archive round trip preserved boxes, cards and history. The websocket delivered job-scoped Conversion complete, Packing media and Extracting media events. The vision endpoint returned an actionable HTTP 400 for an absent local model and removed the failed job.
+
+Two additional real HTTP/SSE checks passed against a deterministic local provider fixture, covering image messages, people JSON and cropped-person card reading. These are protocol checks, not evidence of vision-model accuracy. The deployed instance currently has no model in models/LLM; Find People and automatic card reading require a configured local, Ollama or compatible vision provider. Manual box/card editing works independently.
+
+Conversion additionally honors explicit AIMixer global/segment reference ownership, shared-slot overrides and disabled references. Missing source artifacts and unsupported procedural patches remain reported rather than guessed.

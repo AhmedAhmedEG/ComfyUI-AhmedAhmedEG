@@ -47,6 +47,8 @@ class RemainingParity(unittest.TestCase):
         self.assertEqual(report['bindings']['model_bindings']['workflow_model_2']['filename'],'h3.safetensors')
         draft=prepare_imported_history(state,0);self.assertTrue(draft['warnings']);self.assertFalse(state['clips'][0]['validated'])
         self.assertEqual(draft['shots'][0]['prompt'],'Archived <Picture 1>.')
+        av,_=convert_project({'dasiwa_minimax_h3_reference_pack':True,'items':[{'type':'video','value':'source.mp4','media_mode':'video_audio'}]})
+        self.assertEqual(av['references'][0]['media_mode'],'both')
         self.assertNotIn('context_key',state['imported_prompt_history'][0])
 
     def test_ambiguous_foreign_workflow_does_not_pick_a_director_silently(self):
@@ -79,3 +81,10 @@ class RemainingParity(unittest.TestCase):
         draft=draft_prompts(state,'walk',backend='local',generator=generator)
         self.assertNotIn('subject_definitions',draft['shots'][0]['prompt']);self.assertIn('Green coat.',messages[0]['content']);self.assertIn('opening frame',messages[0]['content'])
         self.assertEqual(draft['reference_bindings'],[[]])
+
+    def test_aimixer_shared_slots_override_and_disabled_assets_stay_unselected(self):
+        state,_=convert_project({'global':{'taskType':'r2v — Reference to Video','commonEnabled':True,'refs':[{'index':0,'imageFile':'old.png'},{'index':1,'imageFile':'shared.png'}]},'editMode':'segment','segments':[{'prompt':'walk','refs':[{'index':0,'imageFile':'new.png'},{'index':2,'imageFile':'disabled.png','enabled':False}]}]},'aimixer')
+        selected=state['clips'][0]['ref_ids'];names=[r['filename'] for r in state['references'] if r['id'] in selected]
+        self.assertEqual(names,['new.png','shared.png']);self.assertEqual(state['clips'][0]['type'],'REF2VA')
+        independent,_=convert_project({'global':{'taskType':'r2v','refs':[{'imageFile':'shared.png'}]},'editMode':'segment','segments':[{'refs':[{'imageFile':'local.png'}]}]},'aimixer')
+        self.assertEqual([r['filename'] for r in independent['references']],['local.png'])

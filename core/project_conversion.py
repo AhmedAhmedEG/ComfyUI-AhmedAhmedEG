@@ -1,5 +1,5 @@
 """Reviewed upstream conversion with explicit compatible cache/model restoration."""
-import copy,hashlib,io,json,math,uuid,zipfile
+import copy,hashlib,io,json,math,re,uuid,zipfile
 from pathlib import Path,PurePosixPath
 from .task_modes import normalize_mode
 from .project import migrate_timeline, seed_string
@@ -40,9 +40,9 @@ def convert_project(data,source='auto'):
         refs.append({'id':rid,'type':kind,'filename':str(path),'name':row.get('name') or path.name,
             'start':row.get('start',row.get('trim_start',0)), 'end':row.get('end',row.get('trim_end')),
             'role':row.get('role',row.get('forge_role','subject')), 'description':row.get('description',row.get('forge_instructions','')),
-            'media_mode':{'V':'video','A':'audio','VA':'both','V+A':'both'}.get(row.get('media_mode'),row.get('media_mode','video')),
+            'media_mode':{'V':'video','A':'audio','VA':'both','V+A':'both','video_audio':'both'}.get(row.get('media_mode'),row.get('media_mode','video')),
             'scaling':'Off',**reference_metadata(row)})
-        return rid
+        return rid if row.get('enabled',True) is not False else None
     if source=='current':
         state=copy.deepcopy(data.get('timeline',data))
         if not isinstance(state.get('clips'),list): raise ValueError('No supported clip list found.')
@@ -86,24 +86,41 @@ def convert_project(data,source='auto'):
         common=data.get('global',{})
         clips=next((data[key] for key in ('clips','segments','shots','asset_groups','groups','r2vGroups','fl2vGroups') if isinstance(data.get(key),list) and data[key]),[])
         if not isinstance(clips,list) or not clips: raise ValueError('AIMixer archive needs its timeline.json with an explicit clip/segment/group list.')
-        state={'clips':[], 'references':refs,'shared_prompt':common.get('prompt','')}
+        edit_mode=data.get('editMode',data.get('edit_mode'))
+        common_enabled=bool(common.get('commonEnabled',common.get('common_enabled',False)))
+        state={'clips':[], 'references':refs,'shared_prompt':common.get('prompt','') if edit_mode!='segment' or common_enabled else ''}
         for row_index,row in enumerate(clips):
             ids=[]
+            owners=(common,) if edit_mode=='global' else (common,row) if edit_mode!='segment' or common_enabled else (row,)
             for keys,kind in [(('images','refs'),'image'),(('videos','refVideos','ref_videos'),'video'),(('audios','refAudios','ref_audios'),'audio')]:
-                for ref in [r for owner in (common,row) for key in keys for r in owner.get(key,[])]:
+                merged=[]
+                for owner in owners:
+                    incoming=next((owner[key] for key in keys if owner.get(key)),[])
+                    for ref in incoming:
+                        slot=ref.get('index',ref.get('slot')) if isinstance(ref,dict) else None
+                        if slot is not None:merged=[r for r in merged if not isinstance(r,dict) or r.get('index',r.get('slot'))!=slot]
+                        merged.append(ref)
+                if merged and all(isinstance(r,dict) and r.get('index',r.get('slot')) is not None for r in merged):merged.sort(key=lambda r:int(r.get('index',r.get('slot'))))
+                for ref in merged:
                     rid=reference(ref,kind)
                     if rid: ids.append(rid)
-            for owner in (common,row):
+            for owner in owners:
                 legacy=owner.get('referenceVideo',owner.get('reference_video',{}))
                 if legacy and not owner.get('refVideos',owner.get('ref_videos')):
                     rid=reference(legacy,'video')
                     if rid:ids.append(rid)
             inherited={key:common[key] for key in ('continuity','continuity_mode','context_length','audio_context_length') if key in common}
             kind=row.get('type',row.get('taskType') or common.get('taskType','FL2V' if 'fl2vGroups' in data else 'REF2V' if 'r2vGroups' in data else 'T2V'))
-            if str(kind).lower() in ('fl2v','i2v','l2v'):
-                first=reference(row.get('startImage',row.get('genImage')),'image');last=reference(row.get('endImage'),'image')
+            if edit_mode=='global' and str(common.get('taskType','')).lower()!='mixed':kind=common.get('taskType',kind)
+            match=re.match(r'^(t2va?|i2va?|fl2va?|l2va?|ref2va?|r2v|v2v|rv2v)(?:\b|[ _—-])',str(kind),re.I)
+            if match:kind=match[1]
+            if str(kind).lower() in ('fl2v','fl2va','i2v','i2va','l2v','l2va'):
+                endpoints=common if edit_mode=='global' else row
+                first=reference(endpoints.get('startImage',endpoints.get('genImage')),'image');last=reference(endpoints.get('endImage'),'image')
                 ids=[rid for rid in (first,last) if rid];kind='FL2VA' if first and last else 'I2VA' if first else 'L2VA' if last else 'T2VA'
+            if normalize_mode(kind)=='T2VA':ids=[]
             row=copy.deepcopy(row)
+            if edit_mode=='global':row['prompt']=''
             if normalize_mode(kind) in ('V2V','RV2V'):
                 sources=data.get('videoClips',[])
                 source_video=sources[row_index] if row_index<len(sources) else data.get('video')
