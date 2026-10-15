@@ -8,6 +8,31 @@ from core.project import write_portable,read_portable
 from core.transfer import progress_callback
 
 class RemainingParity(unittest.TestCase):
+    def test_multiple_reference_roles_survive_import_compile_and_archive(self):
+        from core.forge_cast import clip_bindings,compile_cast_prompt,reference_roles
+        state,_=convert_project({'dasiwa_minimax_h3_reference_pack':True,'items':[{'type':'image','value':'photo.png','forge_kinds':'character,place,style','forge_who':'1','forge_instructions':'Blue coat in a garden.'}]})
+        ref=state['references'][0]
+        self.assertEqual(ref['roles'],['character','place','style'])
+        state['cast_cards']={'1':'Blue coat.','place':'A walled garden.','style':'Watercolour.'}
+        prompt=compile_cast_prompt('Character 1 walks.',clip_bindings(state,state['clips'][0]),state['cast_cards'])
+        for text in ['<Subject 1>','Blue coat.','place; A walled garden.','style; Watercolour.']:
+            self.assertIn(text,prompt)
+        with tempfile.TemporaryDirectory() as root:
+            Image.new('RGB',(16,16)).save(Path(root)/'photo.png')
+            archive=Path(root)/'roles.mmxproj';write_portable(state,root,archive)
+            restored=read_portable(archive,root)
+            self.assertEqual(restored['references'][0]['roles'],ref['roles'])
+        self.assertEqual(reference_roles({'role':'subject'}),['character'])
+        with self.assertRaises(ValueError):reference_roles({'roles':['unknown']})
+
+    def test_multi_role_cards_and_changes_invalidate_draft(self):
+        state={'clips':[{'id':'one','type':'REF2VA','duration':1,'ref_ids':['photo'],'prompt':'old'}],'available_refs':[{'id':'photo','type':'image','roles':['character','place','style'],'characters':[1]}]}
+        for key in ['1','place','style']:
+            self.assertEqual(read_cast(state,key,lambda row:Image.new('RGB',(16,16)),lambda *a:'Reviewed.'),'Reviewed.')
+        draft=draft_prompts(state,'walk',backend='local',generator=lambda *a,**kw:'{"shots":[{"prompt":"Character 1 walks","type":"REF2VA","duration":1}]}')
+        state['available_refs'][0]['roles']=['character']
+        with self.assertRaisesRegex(ValueError,'context changed'):apply_draft(state,draft)
+
     def test_people_validation_and_detection_order(self):
         people=parse_people('{"people":[{"bbox_2d":[600,0,1000,1000],"label":"right"},{"box":[0,0,.3,1],"label":"left"}]}'.replace(',.3',',0.3'))
         self.assertEqual([p['label'] for p in people],['left','right']);self.assertEqual([p['n'] for p in people],[1,2])

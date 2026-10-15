@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -424,6 +424,7 @@
       "notes": [
         "The pool can grow through chaining, but each shot still obeys native limits: 9 images, 3 videos, 3 audios, 12 combined.",
         "A video input is an IMAGE frame batch. RefMods are names/paths or bundles, not newly trained models.",
+        "Reference Roles accepts multiple checked roles on one image, such as Character, Place and Style. Forge preserves each role alongside assigned character definitions; these are writer instructions, while clip type and asset selection control generation inputs.",
         "Prompt Cast owns normalized people boxes. Enable Edit People Boxes to draw, move, resize, renumber or remove up to 32 boxes on the original file picture. Find People uses a selected Forge vision provider and returns editable proposals; Use Detected Boxes is explicit. This changes writer metadata, not model reference selection."
       ],
       "related": [

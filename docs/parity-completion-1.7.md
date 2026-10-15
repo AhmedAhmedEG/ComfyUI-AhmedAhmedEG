@@ -1,5 +1,11 @@
 # Parity completion — 1.7.0
 
+## 1.7.1 correction: multiple reference roles
+
+The initial 1.7 audit missed DaSiWa's combined picture kinds. Reference Pack now offers independent role checkboxes for an image, preserving character, place, style, first/last frame, keyframe, pose and custom intent. These describe writer intent; actual generation endpoints remain owned by the clip type and its existing asset selection. Existing single-role projects remain compatible. Import preserves `forge_kinds`; native projects and portable archives retain `roles`. Forge compiles each selected non-character role alongside any assigned character definitions, discovers all matching appearance cards, and rejects drafts when reference roles change. No Master controls or node types were added.
+
+Validation: 216 backend tests and the authoring DOM suite pass, including combined-role import/compilation, portable round trips, card reading, stale drafts and checkbox persistence.
+
 This follow-up implements the three remaining functional gaps recorded after 1.6. No Master widgets/sockets or node types are added; the pack still registers 27 node types.
 
 | Feature | Owner | Behavior |

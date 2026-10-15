@@ -59,6 +59,7 @@ def recover_workflow(data):
 
 def reference_metadata(row):
     from .cast_tools import boxes_of
+    from .forge_cast import reference_roles
     label = str(row.get('forge_label', ''))
     who = row.get('characters', row.get('forge_who', []))
     if isinstance(who, str):
@@ -70,7 +71,7 @@ def reference_metadata(row):
     role = row.get('role', row.get('forge_role', 'subject'))
     if label in ('place', 'style', 'pose'):
         role = label
-    return {'characters': who, 'boxes': boxes_of(row.get('boxes', row.get('people_boxes'))),
+    return {'roles': reference_roles({**row,'role':role}), 'characters': who, 'boxes': boxes_of(row.get('boxes', row.get('people_boxes'))),
             'position': row.get('position', {'y':'top-to-bottom','z':'front-to-back','none':'unspecified'}.get(row.get('forge_who_axis'),'left-to-right' if len(who)>1 else 'unspecified')),
             'retention': row.get('retention', 'fully_preserved'), 'forge_include': row.get('forge_include', row.get('enabled', True)) is not False,
             'role': role, 'description': '\n'.join(str(v) for v in [row.get('description', row.get('forge_instructions', '')),

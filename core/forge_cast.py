@@ -2,6 +2,20 @@
 import re
 
 RETENTION=('fully_preserved','partially_preserved','attribute_transfer','weak_reference')
+REFERENCE_ROLES=('character','place','style','first-frame','last-frame','keyframe','pose','custom')
+
+
+def reference_roles(settings):
+    """Normalize pack roles and imported DaSiWa kinds; retain legacy single roles."""
+    raw=settings.get('roles')
+    if raw is None:raw=settings.get('forge_kinds')
+    if raw is None or raw=='':raw=[settings.get('role') or 'subject']
+    if isinstance(raw,str):raw=[v.strip() for v in raw.split(',') if v.strip()]
+    if not isinstance(raw,(list,tuple)):raise ValueError('Reference roles must be a list.')
+    if any(not isinstance(v,str) for v in raw):raise ValueError('Reference roles must contain names.')
+    roles=list(dict.fromkeys('character' if v=='subject' else v for v in raw))
+    if not roles or any(v not in REFERENCE_ROLES for v in roles):raise ValueError('Unknown or empty reference roles.')
+    return roles
 
 
 def cast_metadata(settings):
@@ -16,7 +30,7 @@ def cast_metadata(settings):
     if position not in ('unspecified','left','centre','right','left-to-right','top-to-bottom','front-to-back'):raise ValueError('Unknown cast position.')
     retention=settings.get('retention') or 'fully_preserved'
     if retention not in RETENTION:raise ValueError('Unknown visual retention policy.')
-    return dict(boxes=boxes,characters=characters,position=position,retention=retention,forge_include=settings.get('forge_include',True) is not False)
+    return dict(roles=reference_roles(settings),boxes=boxes,characters=characters,position=position,retention=retention,forge_include=settings.get('forge_include',True) is not False)
 
 
 def clip_bindings(state, clip):
@@ -50,10 +64,10 @@ def compile_cast_prompt(prompt, bindings, cards=None):
                 position='normalized picture box '+str(box) if box else row['position']
                 definitions.append(f'<Subject {n}>: {label}; position {position}; {look}.')
             retention.append(f'{tags}: {row["retention"]}.')
-        else:
-            role=row.get('role') or 'reference'
+        for role in reference_roles(row):
+            if cast and role=='character':continue
             card=cards.get('pose:'+str(row['id'])) if role=='pose' else cards.get(role)
-            if card or row.get('description'):definitions.append(f'{label}: {role}; {card or row["description"]}.')
+            if card or row.get('description') or role!='character':definitions.append(f'{label}: {role}; {card or row.get("description") or row.get("name") or "reference"}.')
     for character in characters:
         prompt=re.sub(rf'\bCharacter\s+{character}\b',f'<Subject {character}>',prompt,flags=re.IGNORECASE)
     if not definitions:return prompt

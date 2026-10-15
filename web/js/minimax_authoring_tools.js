@@ -5,6 +5,7 @@ import {transferRequest,transferLabel} from "./minimax_transfer.js";
 
 const widget=(node,name)=>node.widgets?.find(w=>w.name===name);
 const value=(node,name,fallback="")=>widget(node,name)?.value ?? fallback;
+const referenceRoles=ref=>Array.isArray(ref.roles)?ref.roles:String(ref.forge_kinds || ref.role || 'subject').split(',').map(v=>v.trim()==='subject'?'character':v.trim()).filter(Boolean);
 const nodes=()=> (app.rootGraph || app.graph)?._nodes || [];
 const masters=()=>nodes().filter(n=>["MiniMaxH3MasterNode","MiniMaxH3MasterDirector"].includes(n.comfyClass || n.type));
 const state=node=>JSON.parse(value(node,"timeline_data","{}"));
@@ -65,7 +66,7 @@ function castPanel(node,root,getMaster,options) {
     for(const ref of [...(timeline.references || []),...(timeline.available_refs || [])])if(ids.has(ref.id) && ref.type==='image' && ref.forge_include!==false){
       const numbers=Array.isArray(ref.characters)?ref.characters:String(ref.characters || '').split(',').filter(Boolean);
       for(const n of [...numbers,...(ref.boxes || []).map(b=>b.n)])keys.set(String(n),`Character ${n}`);
-      if(['place','style'].includes(ref.role))keys.set(ref.role,ref.role==='place'?'Place':'Style');if(ref.role==='pose')keys.set('pose:'+ref.id,'Pose · '+(ref.name || ref.id));
+      for(const role of referenceRoles(ref)){if(['place','style'].includes(role))keys.set(role,role==='place'?'Place':'Style');if(role==='pose')keys.set('pose:'+ref.id,'Pose · '+(ref.name || ref.id));}
     }
     for(const key of Object.keys(timeline.cast_cards || {}))if(!keys.has(key))keys.set(key,key);
     for(const [key,label] of keys){const o=element('option',label);o.value=key;picker.append(o);}picker.value=keys.has(old)?old:picker.options[0]?.value || '';draw();};
@@ -158,7 +159,16 @@ function assets(node){
     if(!slots.some(a=>a.id===selected))selected=slots[0]?.id || '';
     picker.replaceChildren();for(const asset of slots){const o=element('option',`${asset.id} · ${asset.settings.name || value(node,asset.id+'_name','') || asset.filename || asset.type}`);o.value=asset.id;picker.append(o);}picker.value=selected;picker.disabled=!slots.length;node.properties.mmx_asset_selection=selected;
     for(const asset of slots.filter(a=>a.id===selected)){const a=asset.settings;const box=element('fieldset');box.append(element('legend',asset.id));list.append(box);
-      const change=(key,v)=>{a[key]=v;save();};input(box,'Name','text',a.name ?? value(node,asset.id+'_name',''),v=>change('name',v));choice(box,'Role',['subject','place','style','keyframe','pose','custom'],a.role || 'subject',v=>change('role',v));input(box,'Description / Instructions','text',a.description || '',v=>change('description',v));
+      const change=(key,v)=>{a[key]=v;save();};input(box,'Name','text',a.name ?? value(node,asset.id+'_name',''),v=>change('name',v));
+      if(asset.type==='image'){
+        const roles=element('div');roles.setAttribute('role','group');roles.setAttribute('aria-label','Reference Roles');roles.append(element('strong','Reference Roles'));box.append(roles);
+        const selectedRoles=new Set(referenceRoles(a));
+        for(const [key,label] of [['character','Character'],['place','Place'],['style','Style'],['first-frame','First Frame'],['last-frame','Last Frame'],['keyframe','Keyframe'],['pose','Pose'],['custom','Custom']]){
+          const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=selectedRoles.has(key);field(roles,label,toggle);
+          toggle.onchange=()=>{if(toggle.checked)selectedRoles.add(key);else selectedRoles.delete(key);if(!selectedRoles.size){selectedRoles.add(key);toggle.checked=true;return;}a.roles=[...selectedRoles];a.role=a.roles[0]==='character'?'subject':['first-frame','last-frame'].includes(a.roles[0])?'keyframe':a.roles[0];save();};
+        }
+      }else choice(box,'Role',['subject','place','style','keyframe','pose','custom'],a.role || 'subject',v=>change('role',v));
+      input(box,'Description / Instructions','text',a.description || '',v=>change('description',v));
       if(asset.type==='image'){
         const cast=element('details');cast.append(element('summary','Prompt Cast'));box.append(cast);
         const characters=input(cast,'Character Numbers','text',(a.characters || []).join?.(', ') || a.characters || '',v=>change('characters',v.split(',').map(x=>x.trim()).filter(Boolean)));characters.placeholder='1 or 1, 2, 3';

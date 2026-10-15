@@ -17,7 +17,7 @@ def reference_context(timeline):
             if not isinstance(row, dict) or not row.get("id"):
                 continue
             rows[row["id"]] = {key: row.get(key) for key in
-                ("id", "type", "name", "role", "description", "filename", "subfolder", "folder_type", "characters", "position", "retention", "forge_include", "boxes")}
+                ("id", "type", "name", "role", "roles", "description", "filename", "subfolder", "folder_type", "characters", "position", "retention", "forge_include", "boxes")}
     return list(rows.values())
 
 

@@ -106,8 +106,9 @@ def read_cast(timeline, key, load_image, provider, instruction=''):
         boxes = boxes_of(row.get('boxes'))
         characters = [int(v) for v in row.get('characters', [])] if not isinstance(row.get('characters'), str) else [int(v.strip()) for v in row['characters'].split(',') if v.strip()]
         characters = list(dict.fromkeys([*characters, *[b['n'] for b in boxes]]))
-        role = row.get('role', 'subject')
-        matches = int(key) in characters if key.isdigit() else role == key if key in ('place', 'style') else key == 'pose:'+rid
+        from .forge_cast import reference_roles
+        roles = reference_roles(row)
+        matches = int(key) in characters if key.isdigit() else key in roles if key in ('place', 'style') else 'pose' in roles and key == 'pose:'+rid
         if not matches:
             continue
         image = load_image(row)
