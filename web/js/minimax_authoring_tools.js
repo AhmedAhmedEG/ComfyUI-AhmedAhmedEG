@@ -25,11 +25,13 @@ function syncOutputLabels(node){
 }
 function viewURL(filename){const parts=filename.replaceAll('\\','/').split('/');return api.apiURL('/view?'+new URLSearchParams({filename:parts.pop(),subfolder:parts.join('/'),type:'input'}));}
 function conditionalWidgets(node){
+  let visibilityChanged=false;
   const saved=new Map();for(const w of node.widgets || [])saved.set(w,{type:w.type,computeSize:w.computeSize});
-  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;if(visible){w.type=old.type;Object.assign(w.options ||= {},{hidden:false});w.hidden=false;w.computeSize=old.computeSize;
+  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;visibilityChanged ||= (w.options?.hidden ?? false)!==!visible;if(visible){w.type=old.type;Object.assign(w.options ||= {},{hidden:false});w.hidden=false;w.computeSize=old.computeSize;
     const el=w.element || w.inputEl,dom=w.__mmxDOMVisibility;if(el && dom){el.hidden=dom.hidden;if(dom.display)el.style.setProperty('display',dom.display,dom.priority);else el.style.removeProperty('display');}
   }else hide(node,name);};
   const update=()=>{const type=node.comfyClass || node.type;
+    visibilityChanged=false;
     if(type==='MiniMaxH3DirectorRefine'){
       const upscale=value(node,'mode')!=='refine',latent=value(node,'upscale_method','latent')==='latent',sampling=value(node,'mode')!=='latent_upscale',global=value(node,'backend','global')==='global';
       for(const name of ['target_width','target_height','upscale_method'])show(name,upscale);
@@ -52,6 +54,10 @@ function conditionalWidgets(node){
       for(const name of ['timeline','shot_descriptions','continuation_clip_id','api_key'])hide(node,name);
     }
     if(type==='MiniMaxH3ProjectVideo'){show('clip_ids',value(node,'selection','all')==='clip_ids');show('refine_pass',value(node,'stream','final')==='refine_pass');}
+    // Nodes 2.0 snapshots display metadata from its shallow-reactive widget
+    // array. Invalidate that snapshot only on a visibility transition, keeping
+    // the same widget objects and their final serialized order.
+    if(visibilityChanged && node.widgets?.length){const first=node.widgets.shift();node.widgets.unshift(first);}
     node.setDirtyCanvas?.(true,true);
   };
   const controls=new Set(['mode','upscale_method','canvas_policy','seed_policy','latent_upscale_model','spike_guard','enable_tiling','memory_planning','provider','selection','stream','backend','shot_count']);
