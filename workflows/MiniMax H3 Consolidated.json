@@ -371,7 +371,7 @@
           ]
         },
         {
-          "name": "video",
+          "name": "video_info",
           "type": "VHS_VIDEOINFO",
           "links": []
         },

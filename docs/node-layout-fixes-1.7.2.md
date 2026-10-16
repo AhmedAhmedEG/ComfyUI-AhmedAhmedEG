@@ -24,3 +24,17 @@
 On the deployed 1.7.2 process, an isolated Project Import → Master graph started from an empty local timeline and two restored synthetic native AV takes. Cards, historical prompt and shared selection reached the Master's `project_state`, project identity was preserved, both takes remained approved, ten frames were returned and generated=0. This job used real H3 VAEs and no diffusion model. Job: `e2a6dc3a-f8c8-4999-ba9b-dc9bc024ead3`; local evidence `.validation/typed-import172-history.json`. This does not constitute new diffusion quality/performance validation.
 
 The running schema confirms 27 distinct node types, the appended typed Review / Apply output, `video_info`, and the new categories. Server updates and restarts were performed only after checking that no user jobs were running or pending.
+
+## Final live presentation checks
+
+The production extension was checked on a fresh ComfyUI page after discarding only the disposable audit workflow; an unsaved test graph had prevented earlier reload attempts from replacing the active module. No diagnostic overlay was active in the final check.
+
+- Bicubic → RTX VSR showed quality/denoise/deblur; switching back to Bicubic removed them.
+- Local → Compatible showed the endpoint and one transient Session API Key; switching back to Local removed both. Native key, raw timeline and raw shot-description controls were absent.
+- Refine → Latent Upscale removed sampling controls and exposed sizing. Follow replaced manual width/height with megapixels. At unchanged zoom, the fresh Refine node shrank from about 432 to 374 screen pixels when sampling fields were hidden, rather than retaining its old empty height.
+- The live Reference Pack role group contained eight checkboxes in three equal columns and the writing-versus-model-input explanation.
+- Widget visibility accounts for the installed frontend's reactive metadata snapshot through a guarded legacy adapter; it does not import private store modules. Widget objects, serialized order and existing output indices remain stable. Saved hidden flags and callback-only updates have regression coverage.
+
+![Final live Forge and Refine layout](audit-images/node-layout-1.7.2.jpg)
+
+This verifies the affected live layouts and mode transitions, not a blanket visual certificate for all 27 nodes. Existing unverified GPU diffusion-quality/performance comparisons remain outside this UI/integration change. Test-only graphs/tabs were closed and the authenticated local Node proxy was stopped after inspection.
