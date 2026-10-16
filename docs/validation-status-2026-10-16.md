@@ -76,6 +76,17 @@ These remain open, not passed by inference. Missing model/SDK dependencies and t
 - Cache/model override job `b88a942f-7a72-4272-a66f-bd6a70f74833` completed baseline → cached override → baseline. Actual cache log reported 4/6 skipped block-stack evaluations. At deliberately aggressive threshold 1.0, cache changed video/audio (maximum differences 1.6346171 / 0.8547031); the two unpatched baseline clips remained exactly equal for both streams. All tensors finite. The theoretical skip ratio is not an end-to-end speed benchmark.
 - Tail From Latent incorrectly reported five frames as 0.2083 seconds while returning only 0.2 seconds of native decoded audio; short decoded videos could also report more frames than present. A failing real-tensor regression reproduced both cases. The fix fits audio to actual decoded video before slicing and caps the aligned count to available frames.
 - Corrected stale manual descriptions of blue/purple overlays to the actual background-free chain icon and its seconds tooltip. Documented the one-frame Tail Handoff assembly reduction.
-- Full local rerun after these fixes: 223 backend tests and 40 real CPU tensor/media/provider checks passed. Six JavaScript suites are rerun for final release.
+- Full local rerun after these fixes: 223 backend tests and 40 real CPU tensor/media/provider checks passed. All six JavaScript suites passed for the final release.
 
-Release 1.7.4 deployment verification: pending. No current job was interrupted and no allocator/attention launch flags were changed.
+Release 1.7.4 code commit `c90534403f7bb410419362b693de25fc0478ed7c` pushed and deployed. The runtime status endpoint confirmed loaded_version 1.7.4 and 27 nodes after the idle-queue restart. No current job was interrupted and no allocator/attention launch flags were changed.
+
+Deployed follow-up checks:
+
+- Tail VAE job `27554f81-a942-46c8-bfc9-8041a2ca85ca` returned five frames and 0.20833333333333334 seconds. Actual saved FLAC decoded as 6,667 samples at 32 kHz, exactly round(5/24 × 32000).
+- All-approved replay `e9a76e4b-a0ed-4851-8e1c-710b631e27f1` after restart: generated zero, restored three cached clips, output 15 frames, no diffusion model connected.
+- Native VIDEO integration `37e0db1e-fce6-403d-9852-2b3a4acbefbe`: stock CreateVideo → Reference Pack VIDEO input → Master existing-video clip completed; five source frames, zero generated. The fixture initially omitted the required CLIP input; that test graph was corrected, without changing the product schema.
+- Learned pixel upscale ran as the valid output branch of `7aba1a08-b8c9-4967-a304-73ac26f745be`, using installed RealESRGAN_x4plus. Saved PNG verified 256×256 from a 128×128 fixture. The subsequent native-video job reused that output cache.
+- Fresh live browser: empty Reference Pack compact layout inspected at readable 86% zoom; export picker appeared for clip_ids and disappeared again for all. Screenshot: [Reference Pack](audit-images/reference-pack-empty-1.7.4.jpg). All 27 node default layouts had already been inspected in the earlier pass; this pass rechecked changed panels.
+- Task-owned audit workflow tabs were closed without saving layout changes. User workflow tabs preserved. Temporary Node browser proxy stopped and absence confirmed. One-shot API helpers exited.
+
+Remaining items above are explicitly unverified or dependency-blocked. This release does not certify production-size performance, perceptual quality, every parameter combination, or the missing model/SDK paths.
