@@ -55,6 +55,13 @@ class MiniMaxH3TailFromLatent:
         audio = decode_audio_latent(audio_vae, audio_latent) if audio_vae else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
 
         total_frames = int(frames.shape[0])
+        if total_frames < 1:
+            raise ValueError("Tail extraction requires at least one decoded video frame.")
+        try:
+            from ..core.audio_post import fit_audio_duration
+        except ImportError:
+            from core.audio_post import fit_audio_duration
+        audio = fit_audio_duration(audio, total_frames, FPS)
         wanted = max(1, min(total_frames, int(round(tail_seconds * FPS))))
 
         if align_to_h3_grid:
@@ -63,6 +70,7 @@ class MiniMaxH3TailFromLatent:
                 count = align_frame_count(total_frames, mode="down")
         else:
             count = wanted
+        count = min(count, total_frames)
 
         duration = count / FPS
 

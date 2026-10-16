@@ -71,12 +71,12 @@ function conditionalWidgets(node){
       if(node.__mmxSessionKey)node.__mmxSessionKey.closest('label').hidden=backend==='local';
       for(const name of ['timeline','shot_descriptions','continuation_clip_id','api_key'])hide(node,name);
     }
-    if(type==='MiniMaxH3ProjectVideo'){show('clip_ids',value(node,'selection','all')==='clip_ids');show('refine_pass',value(node,'stream','final')==='refine_pass');}
+    if(type==='MiniMaxH3ProjectVideo'){const picking=value(node,'selection','all')==='clip_ids';show('clip_ids',picking);show('authoring_tools',picking);show('refine_pass',value(node,'stream','final')==='refine_pass');}
     // Nodes 2.0 snapshots display metadata from its shallow-reactive widget
     // array. Invalidate that snapshot only on a visibility transition, keeping
     // the same widget objects and their final serialized order.
     if(visibilityChanged && node.widgets?.length){const first=node.widgets.shift();node.widgets.unshift(first);}
-    if(visibilityChanged && !node.__mmxTools)queueMicrotask(()=>{const minimum=node.computeSize?.();if(minimum)node.setSize?.([node.size?.[0] || minimum[0],minimum[1]]);});
+    if(visibilityChanged && (!node.__mmxTools || type==='MiniMaxH3ProjectVideo'))queueMicrotask(()=>{const minimum=node.computeSize?.();if(minimum)node.setSize?.([node.size?.[0] || minimum[0],minimum[1]]);});
     node.setDirtyCanvas?.(true,true);
   };
   const controls=new Set(['mode','upscale_method','canvas_policy','seed_policy','latent_upscale_model','spike_guard','enable_tiling','memory_planning','provider','selection','stream','backend','shot_count','split_mode','vision']);
@@ -90,6 +90,7 @@ function choice(root,label,options,current,change){const e=document.createElemen
 function button(root,label,action){const b=element("button",label);b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){const status=root.__status || root.closest('.mmx-authoring-tool')?.__status;if(status){status.textContent=e.message;status.dataset.error="true";}}finally{b.disabled=false;}};root.append(b);return b;}
 async function request(path,body,signal){const r=await api.fetchApi(path,{method:body===undefined?"GET":"POST",headers:body===undefined?{}:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),signal});const data=await r.json();if(!r.ok)throw Error(data.error || `HTTP ${r.status}`);return data;}
 function mount(node,title){if(node.__mmxTools)return node.__mmxTools;const root=element("div",null,"mmx-authoring-tool");root.append(element("h3",title));root.__status=element("p","Ready","mmx-tool-status");root.append(root.__status);for(const event of ["pointerdown","mousedown","wheel"])root.addEventListener(event,e=>e.stopPropagation());node.addDOMWidget("authoring_tools","MMX_TOOLS",root,{serialize:false}).computeSize=()=>[580,500];node.size=[Math.max(600,node.size?.[0]||0),Math.max(650,node.size?.[1]||0)];node.__mmxTools=root;return root;}
+function panelHeight(node,height){const w=widget(node,'authoring_tools');if(!w || w.__mmxHeight===height)return;w.__mmxHeight=height;w.computeSize=()=>[580,height];queueMicrotask(()=>{const minimum=node.computeSize?.();if(minimum)node.setSize?.([Math.max(600,node.size?.[0] || 0),minimum[1]]);});}
 function masterPicker(root,node){const picker=field(root,"Master",document.createElement("select"));const refresh=()=>{picker.replaceChildren();for(const n of masters()){const o=element("option",`${n.title || "Master"} · ${n.id}`);o.value=n.id;picker.append(o);}picker.value=node.properties.mmx_target || picker.options[0]?.value;};refresh();picker.onchange=()=>{node.properties.mmx_target=picker.value;root.__mmxMasterChanged?.();};button(root,"Refresh Masters",()=>{refresh();root.__mmxMasterChanged?.();});return ()=>{const master=masters().find(n=>String(n.id)===picker.value);if(!master)throw Error("Choose a Master in this workflow.");return master;};}
 
 function providerOptions(node,key='') {
@@ -175,7 +176,7 @@ function refmods(node){hide(node,'library_data');const root=mount(node,"RefMod L
   const draw=async()=>{const entries=await request('/minimax_director/refmods');list.replaceChildren();for(const entry of entries){const box=element("fieldset");box.append(element("legend",entry.name));const enabled=document.createElement('input');enabled.type='checkbox';let row=rows.find(r=>r.name===entry.name);enabled.checked=!!row;field(box,'Use RefMod',enabled);enabled.onchange=()=>{if(enabled.checked){row={id:'library_'+crypto.randomUUID(),name:entry.name,description:entry.description || '',strength:1};rows.push(row);}else{rows=rows.filter(r=>r.name!==entry.name);row=null;}save();};
       input(box,'Description','text',row?.description ?? entry.description,v=>{if(!row){enabled.checked=true;row={id:'library_'+crypto.randomUUID(),name:entry.name,strength:1};rows.push(row);}row.description=v;save();});
       const strength=input(box,'Strength','number',row?.strength ?? 1,v=>{if(!row){enabled.checked=true;row={id:'library_'+crypto.randomUUID(),name:entry.name,description:entry.description || ''};rows.push(row);}row.strength=Number(v);save();});strength.min=0;strength.max=4;strength.step=.05;list.append(box);}
-    root.__status.textContent=`${entries.length} Installed RefMods`;
+    root.__status.textContent=`${entries.length} Installed RefMods`;panelHeight(node,entries.length?500:150);
   };node.__mmxReload=()=>{rows=JSON.parse(value(node,'library_data','[]'));return draw();};button(root,'Refresh Library',draw);void draw().catch(e=>root.__status.textContent=e.message);
 }
 
@@ -208,6 +209,7 @@ function assets(node){
     return filename || '';
   }
   const draw=()=>{list.replaceChildren();const slots=(node.inputs || []).filter(i=>/^(image|video|audio)_\d+$/.test(i.name) && i.link!=null).map(i=>({id:i.name,type:i.name.split('_')[0],filename:sourceFilename(i.name),settings:data.assets[i.name] ||= {}}));for(const f of data.files)slots.push({id:f.id,type:f.type,filename:f.filename,settings:f,file:true});
+    panelHeight(node,slots.length?620:220);
     if(!slots.some(a=>a.id===selected))selected=slots[0]?.id || '';
     picker.replaceChildren();for(const asset of slots){const o=element('option',`${asset.id} · ${asset.settings.name || value(node,asset.id+'_name','') || asset.filename || asset.type}`);o.value=asset.id;picker.append(o);}picker.value=selected;picker.disabled=!slots.length;node.properties.mmx_asset_selection=selected;
     for(const asset of slots.filter(a=>a.id===selected)){const a=asset.settings;const box=element('fieldset');box.append(element('legend',asset.id));list.append(box);

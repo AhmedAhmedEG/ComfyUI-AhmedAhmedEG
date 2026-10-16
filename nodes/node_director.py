@@ -192,9 +192,6 @@ class MiniMaxH3MasterDirector:
             from ..core.provenance import record_graph_provenance
         except ImportError:
             from core.provenance import record_graph_provenance
-        record_graph_provenance(kwargs.get("prompt"), unique_id,
-            model=model, fl2va_model=fl2va_model, ref2va_model=ref2va_model,
-            clip=clip, video_vae=video_vae, audio_vae=audio_vae)
         # Validate model availability per generated clip after reading the
         # timeline's Generation mode. Source passthrough needs no diffusion model.
         # Extract settings from config with sensible defaults or legacy kwargs
@@ -496,6 +493,13 @@ class MiniMaxH3MasterDirector:
 
             if not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
                 shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1, total=len(clips))
+            # Content hashing can read tens of gigabytes on the first run.
+            # Announce the active clip first, and never hash loader weights just
+            # to replay an approved take or pass through source footage.
+            if not clip_item.get("locked"):
+                record_graph_provenance(kwargs.get("prompt"), unique_id,
+                    model=model, fl2va_model=fl2va_model, ref2va_model=ref2va_model,
+                    clip=clip, video_vae=video_vae, audio_vae=audio_vae)
             clip_dur = float(clip_item.get("duration", duration))
             if not math.isfinite(clip_dur) or clip_dur <= 0:
                 raise ValueError(f"Shot {clip_idx + 1} duration must be positive and finite.")
@@ -1249,7 +1253,7 @@ class MiniMaxH3MasterDirector:
             save_autosave(cache_mgr, timeline)
             run_report.append({"clip_id": clip_id, "action": "generated", "seed": str(clip_seed),
                 "frames": int(decoded_frames.shape[0]), "trim_prefix": int(is_chained_from_previous),
-                "refine": sampled_latent.get("_mmx_refine_report", "off"), "cache_error": cache_error})
+                "refine": sampled_latent.get("_mmx_refine_report", "applied" if refine_enabled else "off"), "cache_error": cache_error})
             run_report[-1]['refined']=bool(refine_enabled)
             try:
                 from ..core.memory_lifecycle import between_clips

@@ -190,6 +190,20 @@ class RuntimeContracts(unittest.TestCase):
         shifts.assert_called_once_with(self.model,8.5,2.25)
         self.assertIs(self.sampling_calls[0]['sigmas'],sigmas)
 
+    def test_approved_replay_does_not_read_model_weight_files(self):
+        manager=ProjectCacheManager('regression',self.temp.name)
+        manager.store_clip_results('one','saved',None,{'waveform':torch.ones((1,2,10000)),'sample_rate':48000},torch.ones((5,32,64,3)))
+        with patch('core.provenance.record_graph_provenance',side_effect=AssertionError('Approved replay must not hash model weights')):
+            result=self.execute([{'id':'one','type':'T2V','duration':1,'validated':True}],model=None)
+        self.assertEqual(result[0].shape,(5,32,64,3))
+
+    def test_clip_is_announced_before_weight_provenance_io(self):
+        order=[]
+        with patch('core.progress.shot_event',side_effect=lambda *a,**kw:order.append(a[3])), \
+             patch('core.provenance.record_graph_provenance',side_effect=lambda *a,**kw:order.append('weight_hash')):
+            self.execute()
+        self.assertLess(order.index('preparing'),order.index('weight_hash'))
+
     def test_optional_passes_receive_current_controls(self):
         lift={'enabled':True,'test_setting':123}
         refinement={'enabled':True,'steps':4,'cfg':1.75,'denoise':.3,'target_width':64,'target_height':32,
@@ -202,7 +216,8 @@ class RuntimeContracts(unittest.TestCase):
              patch('nodes.node_director.sample_selflift',side_effect=lambda **kw:(kw['latent'],None)) as selflift, \
              patch('nodes.node_director.apply_refine_pass',side_effect=lambda **kw:kw['latent_dict']) as refine, \
              patch('core.tracked_face.refine_tracked_faces',side_effect=lambda frames,*a,**kw:(frames,{})) as faces:
-            self.execute(selflift=lift,refine=refinement,face_refine=face,semantic_bridge=bridge)
+            result=self.execute(selflift=lift,refine=refinement,face_refine=face,semantic_bridge=bridge)
+        self.assertEqual(json.loads(result[8])['shots'][0]['refine'],'applied')
         self.assertIs(selflift.call_args.kwargs['settings'],lift)
         self.assertIsNone(selflift.call_args.kwargs['carry'])
         for key in ('steps','cfg','denoise','target_width','target_height','enable_tiling','tile_count','tile_overlap','passes'):

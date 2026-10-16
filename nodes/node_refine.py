@@ -31,7 +31,7 @@ class MiniMaxH3DirectorRefine:
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
                 "latent_upscale_model": (["interpolate", "Auto Download H3 Upscaler", *list_h3_latent_upscale_models()],),
                 "enable_latent_chunking": ("BOOLEAN", {"default": False}),
-                "backend": (["global", "sampler"], {"default": "global"}),
+                "backend": (["global", "sampler"], {"default": "global", "tooltip": "Global refines video while retaining first-pass audio. Sampler refines the joint audiovisual latent, so its audio can change too."}),
                 "memory_budget_mb": ("INT", {"default": 0, "min": 0, "max": 131072}),
                 "upscale_precision": (["auto", "bf16", "fp16", "fp32"],),
                 "confirm_first_pass": ("BOOLEAN", {"default":False, "tooltip":"Pause after the initial pass; approve it on its timeline card, then run refinement without repeating initial sampling."}),

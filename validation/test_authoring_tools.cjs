@@ -19,7 +19,7 @@ w.api={apiURL:x=>x,fetchApi:async(url,opts={})=>{
  return {ok:true,json:async()=>result};
 }};
 w.eval(fs.readFileSync('web/js/minimax_authoring_tools.js','utf8').replace(/^import .*;\r?\n/gm,''));extension.setup();
-function node(type,values,inputs=[]){const n={type,properties:{},inputs,size:[600,650],widgets:Object.entries(values).map(([name,value])=>({name,value,type:'combo'})),setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.append(element);return {computeSize(){}};}};extension.nodeCreated(n);return n;}
+function node(type,values,inputs=[]){const n={type,properties:{},inputs,size:[600,650],widgets:Object.entries(values).map(([name,value])=>({name,value,type:'combo'})),setDirtyCanvas(){},addDOMWidget(name,type,element){w.document.body.append(element);const widget={name,type,element,computeSize(){}};this.widgets.push(widget);return widget;}};extension.nodeCreated(n);return n;}
 const field=(n,label)=>[...n.__mmxTools.querySelectorAll('label')].find(e=>e.firstChild.textContent===label)?.querySelector('input,select,textarea');
 const button=(n,text)=>[...n.__mmxTools.querySelectorAll('button')].find(e=>e.textContent===text);
 async function click(n,text){assert(button(n,text),text);await button(n,text).onclick();}
@@ -39,7 +39,7 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  widget(pack,'asset_edits').value=JSON.stringify({assets:{video_1:{name:'Restored'}},files:[]});pack.onConfigure();assert.equal(field(pack,'Name').value,'Restored');
  const loaders=[{id:31,widgets:[{name:'image',value:'first.png'}]},{id:32,widgets:[{name:'image',value:'second.png'}]},{id:33,type:'Reroute',inputs:[{link:33}]}];
  const graph={links:{31:{origin_id:31},32:[32,33,0,0,0,'IMAGE'],33:{origin_id:32}},getNodeById:id=>loaders.find(n=>n.id===id)};
- const images=node('MiniMaxH3RefPack',{asset_edits:'{}'},[]);images.graph=graph;images.inputs=[{name:'image_1',link:31},{name:'image_2',link:32}];images.onConnectionsChange();
+ const images=node('MiniMaxH3RefPack',{asset_edits:'{}'},[]);assert.equal(widget(images,'authoring_tools').computeSize()[1],220,'Empty pools do not reserve the full asset editor');images.graph=graph;images.inputs=[{name:'image_1',link:31},{name:'image_2',link:32}];images.onConnectionsChange();assert.equal(widget(images,'authoring_tools').computeSize()[1],620,'Selecting real assets restores room for the editor');
  assert.equal(images.__mmxTools.querySelectorAll('fieldset').length,1,'Only the selected asset is edited');
  assert(images.__mmxTools.querySelector('img').src.includes('first.png'));
  const picker=field(images,'Edit Reference');assert.equal(picker.options.length,2);picker.value='image_2';picker.onchange();
@@ -73,6 +73,7 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  const library=node('MiniMaxH3RefModLibrary',{library_data:'[]'});await new Promise(r=>setTimeout(r,0));
  field(library,'Use RefMod').checked=true;field(library,'Use RefMod').onchange();field(library,'Strength').value='.45';field(library,'Strength').onchange();
  assert.equal(JSON.parse(widget(library,'library_data').value)[0].strength,.45);
+ const originalFetch=w.api.fetchApi;w.api.fetchApi=async(url,opts)=>url.endsWith('/refmods')?{ok:true,json:async()=>[]}:originalFetch(url,opts);await click(library,'Refresh Library');assert.equal(widget(library,'authoring_tools').computeSize()[1],150,'Empty libraries stay compact');w.api.fetchApi=originalFetch;await click(library,'Refresh Library');assert.equal(widget(library,'authoring_tools').computeSize()[1],500);assert.equal(field(library,'Strength').value,'0.45');
  const forge=node('MiniMaxH3PromptForge',{instruction:'walk',shot_count:1,backend:'ollama',endpoint:'http://localhost',creativity:4,detail:6,shot_descriptions:'[]'});
  forge.id=44;w.app.graph._nodes.push(forge);
  master.widgets[0].value=JSON.stringify({project_id:'fixture',clips:[{id:'one',name:'One',type:'T2VA',duration:2,prompt:'before',ref_ids:['hero']}],available_refs:[{id:'hero',filename:'hero.png',type:'image',characters:[1],roles:['character','place','style']}]});
@@ -89,6 +90,7 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  await click(forge,'Apply Reviewed Draft');assert.equal(submitted.draft.shots[0].prompt,'human review');
  master.inputs=[{name:'timeline',link:9}];await click(forge,'Apply Reviewed Draft');assert.equal(applyCount,1,'Builder ownership must reject competing apply');master.inputs=[];
  const exporter=node('MiniMaxH3ProjectVideo',{clip_ids:'',selection:'clip_ids',stream:'final',refine_pass:1});
+ assert.equal(widget(exporter,'authoring_tools').options.hidden,false);widget(exporter,'selection').callback('all');assert.equal(widget(exporter,'authoring_tools').options.hidden,true);assert.equal(exporter.__mmxTools.hidden,true);widget(exporter,'selection').callback('clip_ids');assert.equal(exporter.__mmxTools.hidden,false);
  master.widgets[0].value=JSON.stringify({clips:[{id:'one',name:'One'},{id:'two',name:'Two'}]});await click(exporter,'Refresh Clips');field(exporter,'Two').checked=true;field(exporter,'Two').onchange();assert.equal(widget(exporter,'clip_ids').value,'two');assert.equal(widget(exporter,'refine_pass').type,'hidden');
  const interpolation=node('MiniMaxH3FrameInterpolation',{provider:'Linear',quality:'HIGH'});assert.equal(widget(interpolation,'quality').type,'hidden');widget(interpolation,'provider').value='RTX';widget(interpolation,'provider').callback();assert.equal(widget(interpolation,'quality').type,'combo');
  assert.equal(widget(interpolation,'quality').options.hidden,false,'DOM renderer visibility restored');

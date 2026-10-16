@@ -24,6 +24,19 @@ from core.references import waveform
 
 
 class Numerical(unittest.TestCase):
+    def test_tail_audio_matches_its_actual_visible_video_duration(self):
+        from nodes.node_tail_extract import MiniMaxH3TailFromLatent
+        samples={'samples':(torch.zeros((1,24,2,2,2)),torch.zeros((1,32,2,8)))}
+        for count, audio_samples in [(5,6400),(3,100)]:
+            with self.subTest(decoded_frames=count):
+                video_vae=SimpleNamespace(decode=lambda _:torch.ones((count,32,32,3)))
+                audio_vae=SimpleNamespace(decode=lambda _:torch.ones((1,2,audio_samples)),audio_sample_rate=32000)
+                frames,audio,last,n,duration=MiniMaxH3TailFromLatent().extract(samples,video_vae,audio_vae,tail_seconds=.5)
+                self.assertEqual(n,count)
+                self.assertEqual(frames.shape[0],n)
+                self.assertEqual(duration,n/24)
+                self.assertEqual(audio['waveform'].shape[-1],round(duration*32000))
+
     def test_tracked_face_follows_boxes_and_keeps_crop_inside_source(self):
         from unittest.mock import patch
         from core.vendor.aimixer.director.face_refine.track import track_and_crop
