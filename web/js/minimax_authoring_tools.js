@@ -65,6 +65,7 @@ function conditionalWidgets(node){
     // array. Invalidate that snapshot only on a visibility transition, keeping
     // the same widget objects and their final serialized order.
     if(visibilityChanged && node.widgets?.length){const first=node.widgets.shift();node.widgets.unshift(first);}
+    if(visibilityChanged && !node.__mmxTools)queueMicrotask(()=>{const minimum=node.computeSize?.();if(minimum)node.setSize?.([node.size?.[0] || minimum[0],minimum[1]]);});
     node.setDirtyCanvas?.(true,true);
   };
   const controls=new Set(['mode','upscale_method','canvas_policy','seed_policy','latent_upscale_model','spike_guard','enable_tiling','memory_planning','provider','selection','stream','backend','shot_count']);
