@@ -10,7 +10,14 @@ const nodes=()=> (app.rootGraph || app.graph)?._nodes || [];
 const masters=()=>nodes().filter(n=>["MiniMaxH3MasterNode","MiniMaxH3MasterDirector"].includes(n.comfyClass || n.type));
 const state=node=>JSON.parse(value(node,"timeline_data","{}"));
 function persist(node,name,data){const w=widget(node,name);if(!w)throw Error(`Missing ${name}`);w.value=JSON.stringify(data);w.callback?.(w.value);app.graph?.setDirtyCanvas(true,true);}
-function hide(node,name){const w=widget(node,name);if(w){Object.assign(w.options ||= {},{hidden:true});w.hidden=true;w.type="hidden";w.computeSize=()=>[0,-4];
+function widgetVisibility(w,hidden){
+  Object.assign(w.options ||= {},{hidden});w.hidden=hidden;
+  // Frontend 1.51's BaseWidget keeps a separate reactive options snapshot.
+  // Newer frontends synchronize it through the public facade; this guarded
+  // legacy fallback updates the snapshot without importing internal stores.
+  const legacy=w._state;if(legacy && legacy.options && 'type' in legacy && 'value' in legacy)legacy.options={...legacy.options,hidden};
+}
+function hide(node,name){const w=widget(node,name);if(w){widgetVisibility(w,true);w.type="hidden";w.computeSize=()=>[0,-4];
   const el=w.element || w.inputEl;if(el){w.__mmxDOMVisibility ||= {hidden:el.hidden,display:el.style.getPropertyValue('display'),priority:el.style.getPropertyPriority('display')};el.hidden=true;el.style.setProperty('display','none','important');}
 }}
 function syncOutputLabels(node){
@@ -27,7 +34,7 @@ function viewURL(filename){const parts=filename.replaceAll('\\','/').split('/');
 function conditionalWidgets(node){
   let visibilityChanged=false;
   const saved=new Map();for(const w of node.widgets || [])saved.set(w,{type:w.type,computeSize:w.computeSize});
-  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;visibilityChanged ||= (w.options?.hidden ?? false)!==!visible;if(visible){w.type=old.type;Object.assign(w.options ||= {},{hidden:false});w.hidden=false;w.computeSize=old.computeSize;
+  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;visibilityChanged ||= (w.options?.hidden ?? false)!==!visible;if(visible){w.type=old.type;widgetVisibility(w,false);w.computeSize=old.computeSize;
     const el=w.element || w.inputEl,dom=w.__mmxDOMVisibility;if(el && dom){el.hidden=dom.hidden;if(dom.display)el.style.setProperty('display',dom.display,dom.priority);else el.style.removeProperty('display');}
   }else hide(node,name);};
   const update=()=>{const type=node.comfyClass || node.type;
