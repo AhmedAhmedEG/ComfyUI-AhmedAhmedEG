@@ -25,8 +25,8 @@ function syncOutputLabels(node){
 }
 function viewURL(filename){const parts=filename.replaceAll('\\','/').split('/');return api.apiURL('/view?'+new URLSearchParams({filename:parts.pop(),subfolder:parts.join('/'),type:'input'}));}
 function conditionalWidgets(node){
-  const saved=new Map();for(const w of node.widgets || [])saved.set(w,{type:w.type,computeSize:w.computeSize,hidden:w.options?.hidden ?? false});
-  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;if(visible){w.type=old.type;w.options={...(w.options || {}),hidden:old.hidden};w.hidden=old.hidden;w.computeSize=old.computeSize;
+  const saved=new Map();for(const w of node.widgets || [])saved.set(w,{type:w.type,computeSize:w.computeSize});
+  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;if(visible){w.type=old.type;w.options={...(w.options || {}),hidden:false};w.hidden=false;w.computeSize=old.computeSize;
     const el=w.element || w.inputEl,dom=w.__mmxDOMVisibility;if(el && dom){el.hidden=dom.hidden;if(dom.display)el.style.setProperty('display',dom.display,dom.priority);else el.style.removeProperty('display');}
   }else hide(node,name);};
   const update=()=>{const type=node.comfyClass || node.type;

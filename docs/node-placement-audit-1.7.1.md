@@ -1,5 +1,7 @@
 # Node placement, presentation and integration audit
 
+Follow-up: the confirmed issues are addressed in [1.7.2 integration/layout fixes](node-layout-fixes-1.7.2.md). The findings below describe the audited 1.7.1 baseline.
+
 Date: 16 October 2026 (Africa/Cairo). Deployed implementation: 1.7.1, revision `0c59a4d`. This audit found problems; it is not a UI or integration pass certificate.
 
 ## Evidence and scope
