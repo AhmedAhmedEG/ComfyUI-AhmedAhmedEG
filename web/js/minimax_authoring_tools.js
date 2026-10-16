@@ -10,7 +10,9 @@ const nodes=()=> (app.rootGraph || app.graph)?._nodes || [];
 const masters=()=>nodes().filter(n=>["MiniMaxH3MasterNode","MiniMaxH3MasterDirector"].includes(n.comfyClass || n.type));
 const state=node=>JSON.parse(value(node,"timeline_data","{}"));
 function persist(node,name,data){const w=widget(node,name);if(!w)throw Error(`Missing ${name}`);w.value=JSON.stringify(data);w.callback?.(w.value);app.graph?.setDirtyCanvas(true,true);}
-function hide(node,name){const w=widget(node,name);if(w){w.options={...(w.options || {}),hidden:true};w.hidden=true;w.type="hidden";w.computeSize=()=>[0,-4];}}
+function hide(node,name){const w=widget(node,name);if(w){w.options={...(w.options || {}),hidden:true};w.hidden=true;w.type="hidden";w.computeSize=()=>[0,-4];
+  const el=w.element || w.inputEl;if(el){w.__mmxDOMVisibility ||= {hidden:el.hidden,display:el.style.getPropertyValue('display'),priority:el.style.getPropertyPriority('display')};el.hidden=true;el.style.setProperty('display','none','important');}
+}}
 function syncOutputLabels(node){
   const type=node.comfyClass || node.type;
   if(type==='MiniMaxH3MasterNode' && node.outputs?.[2]?.type==='VHS_VIDEOINFO'){
@@ -24,7 +26,9 @@ function syncOutputLabels(node){
 function viewURL(filename){const parts=filename.replaceAll('\\','/').split('/');return api.apiURL('/view?'+new URLSearchParams({filename:parts.pop(),subfolder:parts.join('/'),type:'input'}));}
 function conditionalWidgets(node){
   const saved=new Map();for(const w of node.widgets || [])saved.set(w,{type:w.type,computeSize:w.computeSize,hidden:w.options?.hidden ?? false});
-  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;if(visible){w.type=old.type;w.options={...(w.options || {}),hidden:old.hidden};w.hidden=old.hidden;w.computeSize=old.computeSize;}else hide(node,name);};
+  const show=(name,visible)=>{const w=widget(node,name),old=saved.get(w);if(!w || !old)return;if(visible){w.type=old.type;w.options={...(w.options || {}),hidden:old.hidden};w.hidden=old.hidden;w.computeSize=old.computeSize;
+    const el=w.element || w.inputEl,dom=w.__mmxDOMVisibility;if(el && dom){el.hidden=dom.hidden;if(dom.display)el.style.setProperty('display',dom.display,dom.priority);else el.style.removeProperty('display');}
+  }else hide(node,name);};
   const update=()=>{const type=node.comfyClass || node.type;
     if(type==='MiniMaxH3DirectorRefine'){
       const upscale=value(node,'mode')!=='refine',latent=value(node,'upscale_method','latent')==='latent',sampling=value(node,'mode')!=='latent_upscale',global=value(node,'backend','global')==='global';

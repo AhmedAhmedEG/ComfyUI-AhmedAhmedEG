@@ -28,6 +28,8 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  const legacyMaster={type:'MiniMaxH3MasterNode',outputs:[{},{},{name:'video',label:'video',type:'VHS_VIDEOINFO'}]};extension.nodeCreated(legacyMaster);assert.equal(legacyMaster.outputs[2].name,'video_info');
  legacyMaster.outputs[2].name='video';legacyMaster.onConfigure();assert.equal(legacyMaster.outputs[2].name,'video_info');
  const legacyApply={type:'MiniMaxH3ApplyPromptDraft',outputs:[{name:'STRING',type:'STRING'}],addOutput(name,type){this.outputs.push({name,type});}};extension.nodeCreated(legacyApply);assert.deepEqual(legacyApply.outputs.map(o=>o.type),['STRING','MMX_TIMELINE']);legacyApply.onConfigure();assert.equal(legacyApply.outputs.length,2,'Typed output migration must be idempotent');
+ const textElement=w.document.createElement('textarea');w.document.body.append(textElement);
+ const domForge={type:'MiniMaxH3PromptForge',properties:{},widgets:[{name:'timeline',value:'{"clips":[]}',element:textElement}],size:[600,650],addDOMWidget(name,type,el){w.document.body.append(el);return {};}};extension.nodeCreated(domForge);assert.equal(textElement.hidden,true);assert.equal(textElement.style.getPropertyPriority('display'),'important','Legacy DOM textareas must hide as well as Vue widgets');
  const pack=node('MiniMaxH3RefPack',{asset_edits:'{}',video_1_name:'Old Name'},[{name:'video_1',link:4}]);
  assert.equal(field(pack,'Name').value,'Old Name');assert.equal(widget(pack,'video_1_name').type,'hidden');
  assert(pack.__mmxTools.querySelector('video').src.includes('filename=source.mp4&subfolder=media'));

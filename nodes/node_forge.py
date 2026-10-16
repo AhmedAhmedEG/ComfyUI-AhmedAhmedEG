@@ -9,7 +9,7 @@ except ImportError:
 class MiniMaxH3PromptForge:
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"timeline": ("STRING", {"default": '{"clips":[]}', "multiline": True}),
+        return {"required": {"timeline": ("STRING", {"default": '{"clips":[]}', "multiline": True, "hidden":True}),
             "instruction": ("STRING", {"multiline": True}), "shot_count": ("INT", {"default": 1, "min": 1, "max": 100}),
             "backend": (["local", "ollama", "compatible"],), "endpoint": ("STRING", {"default": "http://localhost:11434"}),
             "model_name": ("STRING", {"default": ""})},
