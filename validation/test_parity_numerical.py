@@ -10,6 +10,18 @@ from core.preview import create_preview_plan,encode_preview
 from nodes.node_frame_interpolation import MiniMaxH3FrameInterpolation
 
 class ParityNumerical(unittest.TestCase):
+    def test_rtx_effect_helpers_import_and_letterbox_without_sdk(self):
+        from core.vendor.dasiwa.rtx_effects import _fit_frame_to_target_aspect, _aspect_ratio_parts
+        self.assertEqual(_aspect_ratio_parts(1280, 736), (40, 23))
+        source = torch.ones((3, 32, 64))
+        fit = _fit_frame_to_target_aspect(source, 64, 64, 'Letterbox (Fit)')
+        self.assertEqual(tuple(fit.shape), (3, 64, 64))
+        self.assertEqual(float(fit[:, :16].sum()), 0)
+        self.assertTrue(torch.equal(fit[:, 16:48], source))
+        fill = _fit_frame_to_target_aspect(source, 64, 64, 'Center Crop (Fill)')
+        self.assertEqual(tuple(fill.shape), (3, 32, 32))
+        self.assertTrue(torch.equal(source, torch.ones_like(source)))
+
     def test_shared_pixel_fit_fill_and_lanczos_preserve_aspect(self):
         from core.pixel_resize import resize_pixels
         images=torch.ones((2,32,64,3))

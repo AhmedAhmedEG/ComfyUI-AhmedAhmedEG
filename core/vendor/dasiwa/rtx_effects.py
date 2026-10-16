@@ -3,6 +3,8 @@ import torch
 import contextlib
 import math
 import logging
+from typing import Tuple
+import torch.nn.functional as F
 def log_dasiwa(component, message):
     logging.getLogger("MiniMaxH3.RTX").info("%s: %s",component,message)
 
