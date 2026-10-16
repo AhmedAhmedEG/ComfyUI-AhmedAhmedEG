@@ -96,6 +96,8 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  for(const key of ['quality','denoise','deblur'])assert.equal(widget(pixel,key).options.hidden,true,'Irrelevant pixel controls hidden in DOM renderer');
  widget(pixel,'provider').value='RTX VSR';widget(pixel,'provider').callback();
  for(const key of ['quality','denoise','deblur'])assert.equal(widget(pixel,key).options.hidden,false);
+ widget(pixel,'provider').callback('bicubic');assert.equal(widget(pixel,'quality').options.hidden,true);
+ widget(pixel,'provider').callback('RTX VSR');assert.equal(widget(pixel,'provider').value,'RTX VSR');assert.equal(widget(pixel,'quality').options.hidden,false,'Vue callback value must update the legacy widget before visibility is computed');
  const reloaded={type:'MiniMaxH3PixelUpscale',properties:{},widgets:[{name:'provider',value:'RTX VSR',type:'combo'},{name:'quality',value:'High',type:'combo',options:{hidden:true}}]};extension.nodeCreated(reloaded);assert.equal(widget(reloaded,'quality').options.hidden,false,'A stale saved hidden flag must not suppress a newly applicable control');
  widget(forge,'backend').value='local';widget(forge,'backend').callback();assert.equal(widget(forge,'endpoint').options.hidden,true);assert.equal(field(forge,'Session API Key').closest('label').hidden,true);
  widget(forge,'backend').value='compatible';widget(forge,'backend').callback();assert.equal(widget(forge,'endpoint').options.hidden,false);assert.equal(field(forge,'Session API Key').closest('label').hidden,false);

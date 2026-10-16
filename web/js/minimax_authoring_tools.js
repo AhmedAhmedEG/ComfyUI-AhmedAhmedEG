@@ -54,7 +54,8 @@ function conditionalWidgets(node){
     if(type==='MiniMaxH3ProjectVideo'){show('clip_ids',value(node,'selection','all')==='clip_ids');show('refine_pass',value(node,'stream','final')==='refine_pass');}
     node.setDirtyCanvas?.(true,true);
   };
-  for(const w of node.widgets || []){const old=w.callback;w.callback=function(...args){const result=old?.apply(this,args);update();return result;};}
+  const controls=new Set(['mode','upscale_method','canvas_policy','seed_policy','latent_upscale_model','spike_guard','enable_tiling','memory_planning','provider','selection','stream','backend','shot_count']);
+  for(const w of node.widgets || []){const old=w.callback;w.callback=function(...args){if(controls.has(w.name) && args[0]!==undefined)w.value=args[0];const result=old?.apply(this,args);update();return result;};}
   node.__mmxUpdateVisibility=update;update();
 }
 function element(tag,text,className){const e=document.createElement(tag);if(text)e.textContent=text;if(className)e.className=className;return e;}
