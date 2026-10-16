@@ -99,11 +99,11 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3Checkpoint": "MiniMax H3 Load Take Checkpoint",
     "MiniMaxH3AdvanceCheckpoint": "MiniMax H3 Advance Staged Take",
     "MiniMaxH3PromptForge": "MiniMax H3 Prompt Forge Draft",
-    "MiniMaxH3ApplyPromptDraft": "MiniMax H3 Review / Apply Prompt Draft",
+    "MiniMaxH3ApplyPromptDraft": "MiniMax H3 Review / Apply Prompt Draft (Graph)",
     "MiniMaxH3LocalPromptModel": "MiniMax H3 Local Prompt / Vision Model",
-    "MiniMaxH3ProjectVideo": "MiniMax H3 Project / Shot Video Export",
+    "MiniMaxH3ProjectVideo": "MiniMax H3 Export Cached Project / Shots",
     "MiniMaxH3OutputProcessing": "MiniMax H3 Playback / Watermark / Loop",
-    "MiniMaxH3PixelUpscale": "MiniMax H3 Pixel / RTX Upscale and Refine",
+    "MiniMaxH3PixelUpscale": "MiniMax H3 Pixel / RTX Upscale",
 }
 
 # Keep everyday controls together; manual graph plumbing is explicitly advanced.
@@ -117,21 +117,20 @@ _MENU_GROUPS = {
         "MiniMaxH3DirectorRefine",
         "MiniMaxH3DirectorFaceRefine",
         "MiniMaxH3DirectorSemanticBridge",
-        "MiniMaxH3Cache",
-        "MiniMaxH3PixelUpscale"
+        "MiniMaxH3Cache"
     ],
     "Output": [
         "MiniMaxH3SmartPreview",
         "MiniMaxH3FrameInterpolation",
         "MiniMaxH3VideoCombine",
         "MiniMaxH3ProjectVideo",
-        "MiniMaxH3OutputProcessing"
+        "MiniMaxH3OutputProcessing",
+        "MiniMaxH3PixelUpscale"
     ],
     "References and prompts": [
         "MiniMaxH3RefPack",
         "MiniMaxH3RefModLibrary",
         "MiniMaxH3PromptForge",
-        "MiniMaxH3ApplyPromptDraft",
         "MiniMaxH3LocalPromptModel"
     ],
     "Checkpoints": [
@@ -147,7 +146,8 @@ _MENU_GROUPS = {
     ],
     "Advanced graph tools": [
         "MiniMaxH3TailFromLatent",
-        "MiniMaxH3ModelOverridePack"
+        "MiniMaxH3ModelOverridePack",
+        "MiniMaxH3ApplyPromptDraft"
     ]
 }
 for _group, _names in _MENU_GROUPS.items():

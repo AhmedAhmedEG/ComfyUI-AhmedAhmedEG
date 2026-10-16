@@ -99,7 +99,7 @@ class MiniMaxH3MasterDirector:
         }
 
     RETURN_TYPES = ("IMAGE", "AUDIO", "VHS_VIDEOINFO", "CONDITIONING", "LATENT", "STRING", "FLOAT", "INT", "STRING", "STRING")
-    RETURN_NAMES = ("images", "audio", "video", "positive", "latent", "resolved_prompt", "fps", "frame_count", "status", "project_state")
+    RETURN_NAMES = ("images", "audio", "video_info", "positive", "latent", "resolved_prompt", "fps", "frame_count", "status", "project_state")
     FUNCTION = "execute"
     OUTPUT_NODE = False
     CATEGORY = CATEGORY

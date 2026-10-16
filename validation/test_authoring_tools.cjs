@@ -25,6 +25,9 @@ const button=(n,text)=>[...n.__mmxTools.querySelectorAll('button')].find(e=>e.te
 async function click(n,text){assert(button(n,text),text);await button(n,text).onclick();}
 const widget=(n,name)=>n.widgets.find(w=>w.name===name);
 (async()=>{
+ const legacyMaster={type:'MiniMaxH3MasterNode',outputs:[{},{},{name:'video',label:'video',type:'VHS_VIDEOINFO'}]};extension.nodeCreated(legacyMaster);assert.equal(legacyMaster.outputs[2].name,'video_info');
+ legacyMaster.outputs[2].name='video';legacyMaster.onConfigure();assert.equal(legacyMaster.outputs[2].name,'video_info');
+ const legacyApply={type:'MiniMaxH3ApplyPromptDraft',outputs:[{name:'STRING',type:'STRING'}],addOutput(name,type){this.outputs.push({name,type});}};extension.nodeCreated(legacyApply);assert.deepEqual(legacyApply.outputs.map(o=>o.type),['STRING','MMX_TIMELINE']);legacyApply.onConfigure();assert.equal(legacyApply.outputs.length,2,'Typed output migration must be idempotent');
  const pack=node('MiniMaxH3RefPack',{asset_edits:'{}',video_1_name:'Old Name'},[{name:'video_1',link:4}]);
  assert.equal(field(pack,'Name').value,'Old Name');assert.equal(widget(pack,'video_1_name').type,'hidden');
  assert(pack.__mmxTools.querySelector('video').src.includes('filename=source.mp4&subfolder=media'));
@@ -86,6 +89,14 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  const exporter=node('MiniMaxH3ProjectVideo',{clip_ids:'',selection:'clip_ids',stream:'final',refine_pass:1});
  master.widgets[0].value=JSON.stringify({clips:[{id:'one',name:'One'},{id:'two',name:'Two'}]});await click(exporter,'Refresh Clips');field(exporter,'Two').checked=true;field(exporter,'Two').onchange();assert.equal(widget(exporter,'clip_ids').value,'two');assert.equal(widget(exporter,'refine_pass').type,'hidden');
  const interpolation=node('MiniMaxH3FrameInterpolation',{provider:'Linear',quality:'HIGH'});assert.equal(widget(interpolation,'quality').type,'hidden');widget(interpolation,'provider').value='RTX';widget(interpolation,'provider').callback();assert.equal(widget(interpolation,'quality').type,'combo');
+ assert.equal(widget(interpolation,'quality').options.hidden,false,'DOM renderer visibility restored');
+ const pixel=node('MiniMaxH3PixelUpscale',{provider:'bicubic',quality:'High',denoise:false,deblur:false});
+ for(const key of ['quality','denoise','deblur'])assert.equal(widget(pixel,key).options.hidden,true,'Irrelevant pixel controls hidden in DOM renderer');
+ widget(pixel,'provider').value='RTX VSR';widget(pixel,'provider').callback();
+ for(const key of ['quality','denoise','deblur'])assert.equal(widget(pixel,key).options.hidden,false);
+ widget(forge,'backend').value='local';widget(forge,'backend').callback();assert.equal(widget(forge,'endpoint').options.hidden,true);assert.equal(field(forge,'Session API Key').closest('label').hidden,true);
+ widget(forge,'backend').value='compatible';widget(forge,'backend').callback();assert.equal(widget(forge,'endpoint').options.hidden,false);assert.equal(field(forge,'Session API Key').closest('label').hidden,false);
+ assert.equal(widget(forge,'shot_descriptions').options.hidden,true);assert.equal(field(forge,'Session API Key').type,'password');
  const refine=node('MiniMaxH3DirectorRefine',{mode:'upscale',upscale_method:'bicubic',canvas_policy:'follow',target_width:1792,target_height:1024,megapixels:1.8,seed_policy:'inherit',refine_seed:'99',resize_method:'Letterbox (Fit)'});
  assert.equal(widget(refine,'target_width').type,'hidden');assert.notEqual(widget(refine,'megapixels').type,'hidden');assert.equal(widget(refine,'refine_seed').type,'hidden');
  widget(refine,'seed_policy').value='independent';widget(refine,'seed_policy').callback();assert.notEqual(widget(refine,'refine_seed').type,'hidden');

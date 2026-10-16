@@ -1,5 +1,5 @@
 {
-  "version": "1.7.1",
+  "version": "1.7.2",
   "title": "ComfyUI-AhmedAhmedEG Documentation",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -26,7 +26,7 @@
       ],
       "notes": [
         "Generation is fixed at 24 fps. Canvas dimensions must be multiples of 32. Generated durations round to the 5 + 17k frame grid.",
-        "video is VHS_VIDEOINFO metadata, not a native VIDEO object. Use Create Video to package images and audio.",
+        "video_info is VHS_VIDEOINFO metadata, not a native VIDEO object. Use Create Video to package images and audio.",
         "prompt_text accepts one prompt per nonblank line. The typed Timeline Builder input replaces local authoring; prompt_text overrides existing clip prompts in line order; clips beyond the supplied lines keep their prompts. With no clips, lines construct new clips.",
         "timeline_data and builder_state are editor-managed JSON. Normal users edit the visible UI rather than those values.",
         "Latest preview fits within 960 × 540; final exports use the configured generated frames. A cache contains completed takes, not an unfinished sampler step.",
@@ -648,7 +648,8 @@
         "Graph api_key fields can be saved in workflow JSON. Stale drafts are rejected on application if the source context changed.",
         "Do not wire a Master output back into that same Master through a cyclic draft graph; use an independent snapshot or the editor draft flow.",
         "Cancel Request signals local token stopping and closes a remote streaming connection, and rejects late results. A remote service may continue computing after disconnect. Ollama requests unload after drafting. Compiled labels are tracked by asset ID and remapped at execution if slot order changes; removing an assigned reference requires review.",
-        "Cast Appearance Cards reads only assigned image references for a character/place/style/pose. Separated people are cropped with a small margin; overlapping people use full-frame position. Review and Use Reviewed Description saves the authoritative text into the timeline. Keyframe modes use mode-specific prose; reference modes compile subject definitions. Imported Prompt History is separate from active drafts until explicitly prepared for review."
+        "Cast Appearance Cards reads only assigned image references for a character/place/style/pose. Separated people are cropped with a small margin; overlapping people use full-frame position. Review and Use Reviewed Description saves the authoritative text into the timeline. Keyframe modes use mode-specific prose; reference modes compile subject definitions. Imported Prompt History is separate from active drafts until explicitly prepared for review.",
+        "Session API Key is the single visible authentication field and stays transient. Remote endpoint controls hide in local mode. Advanced Graph Input contains the separate graph timeline; interactive review uses the selected Master."
       ],
       "related": [
         "MiniMaxH3ApplyPromptDraft",
@@ -678,20 +679,20 @@
       "when": "Use it after reviewing a Prompt Forge result.",
       "behavior": [
         "apply false returns the original timeline string unchanged.",
-        "apply true verifies the draft’s source context and applies replace or append, returning updated timeline JSON."
+        "apply true verifies the source context and returns both updated JSON and the canonical typed timeline."
       ],
       "steps": [
         "Supply the same timeline snapshot used for drafting and connect the draft.",
         "Review the draft and choose replace or append.",
-        "Set apply true, then use the returned STRING as the Master timeline_data input."
+        "Set apply true, then connect the typed timeline output to a downstream Master timeline input."
       ],
       "wiring": [
         "Prompt Forge draft → draft; matching timeline JSON → timeline",
-        "STRING → Master timeline_data"
+        "typed timeline → Master timeline; timeline_json remains output 0 for existing workflows"
       ],
       "notes": [
         "Replacing changes the authored shot list; appending adds draft shots. This does not render them.",
-        "A returned timeline JSON is not a line-per-shot prompt_text string. Use the timeline_data input."
+        "Avoid feeding the same Master output back into its input: graph drafting needs an independent source timeline and a downstream Master. The integrated Forge review panel updates its selected editable Master directly."
       ],
       "related": [
         "MiniMaxH3PromptForge",
@@ -702,11 +703,12 @@
         "timeline": "Typed external authoring input on Master; JSON project-state input on the exporter."
       },
       "output_descriptions": [
-        "Original or updated timeline JSON."
+        "Original or updated JSON string; existing output index unchanged.",
+        "Canonical typed timeline for the Master timeline input."
       ],
       "beginner": {
         "meaning": "This turns an accepted prompt draft into timeline data that the Master can use. Applying a draft changes shot instructions, not already generated video frames.",
-        "first_use": "Connect the original timeline and reviewed draft. Enable acceptance when you are ready, then send the timeline JSON output to the Master’s timeline_data input. Do not connect it to prompt_text: that input expects plain prompt lines, not a timeline document."
+        "first_use": "Supply a source timeline and reviewed draft, enable apply, then connect the typed timeline output to a downstream Master. For ordinary interactive drafting use Forge’s selected Master and reviewed Apply button."
       }
     },
     "MiniMaxH3LocalPromptModel": {

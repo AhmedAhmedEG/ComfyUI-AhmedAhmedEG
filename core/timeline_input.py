@@ -9,6 +9,8 @@ def merge_authored_timeline(local, authored):
     state = migrate_timeline(local)
     previous = {row['id']: row for row in state['clips'] if row.get('id')}
     incoming = migrate_timeline(authored)
+    if incoming.get('project_id') and incoming['project_id'] != state.get('project_id'):
+        previous = {}  # Never transplant approvals between different projects.
     ids = [row.get('id') for row in incoming['clips']]
     if not ids or any(not value for value in ids) or len(set(ids)) != len(ids):
         raise ValueError('External clips need stable unique IDs.')
@@ -18,8 +20,13 @@ def merge_authored_timeline(local, authored):
             if key not in ('id','name','type','duration','prompt','ref_ids','group','authoring_owner'):
                 row[key]=value
         row['authoring_owner'] = 'Timeline Builder'
-    if 'references' in incoming: state['references']=incoming['references']
-    if 'shared_prompt' in incoming: state['shared_prompt']=incoming['shared_prompt']
+    # External authors own reference/prompt metadata, while the Master retains
+    # execution state and approvals for existing stable clip identities.
+    for key in ('project_id','project_name','references','available_refs','refmods',
+                'shared_prompt','shared_prompt_policy','cast_cards','imported_prompt_history',
+                'shared_ref_ids','import_bindings','source_clip_ids','imported_take_ids',
+                'audio_fade_ms','audio_gain_match'):
+        if key in authored:state[key]=copy.deepcopy(incoming[key])
     state['clips'] = incoming['clips']
     state['timeline_owner'] = 'Timeline Builder'
     return state

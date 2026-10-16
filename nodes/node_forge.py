@@ -13,9 +13,9 @@ class MiniMaxH3PromptForge:
             "instruction": ("STRING", {"multiline": True}), "shot_count": ("INT", {"default": 1, "min": 1, "max": 100}),
             "backend": (["local", "ollama", "compatible"],), "endpoint": ("STRING", {"default": "http://localhost:11434"}),
             "model_name": ("STRING", {"default": ""})},
-            "optional": {"generator": ("MMX_LLM_PIPELINE",), "api_key": ("STRING", {"default": ""}), "images": ("IMAGE",), "creativity": ("INT", {"default":4,"min":1,"max":10}), "detail": ("INT", {"default":6,"min":1,"max":10}),
-                "shot_descriptions": ("STRING", {"default":"[]","multiline":True}),
-                "continuation_clip_id": ("STRING", {"default":"","tooltip":"Draft for this clip using chronological frames from its previous saved timeline clip."})}}
+            "optional": {"generator": ("MMX_LLM_PIPELINE",), "api_key": ("STRING", {"default": "", "hidden":True}), "images": ("IMAGE",), "creativity": ("INT", {"default":4,"min":1,"max":10}), "detail": ("INT", {"default":6,"min":1,"max":10}),
+                "shot_descriptions": ("STRING", {"default":"[]","multiline":True,"hidden":True}),
+                "continuation_clip_id": ("STRING", {"default":"","hidden":True,"tooltip":"Draft for this clip using chronological frames from its previous saved timeline clip."})}}
     RETURN_TYPES = ("MMX_PROMPT_DRAFT", "STRING")
     RETURN_NAMES = ("draft", "review_json")
     FUNCTION = "draft"
@@ -38,12 +38,15 @@ class MiniMaxH3ApplyPromptDraft:
     def INPUT_TYPES(cls):
         return {"required": {"timeline": ("STRING", {"multiline": True}), "draft": ("MMX_PROMPT_DRAFT",),
             "apply": ("BOOLEAN", {"default": False}), "policy": (["replace", "append"],)}}
-    RETURN_TYPES = ("STRING",)
+    RETURN_TYPES = ("STRING", "MMX_TIMELINE")
+    RETURN_NAMES = ("timeline_json", "timeline")
     FUNCTION = "apply"
     CATEGORY = "ComfyUI-AhmedAhmedEG"
 
     def apply(self, timeline, draft, apply=False, policy="replace"):
-        return (json.dumps(apply_draft(json.loads(timeline), draft, policy), ensure_ascii=False) if apply else timeline,)
+        state = json.loads(timeline)
+        if apply:state = apply_draft(state, draft, policy)
+        return (json.dumps(state, ensure_ascii=False) if apply else timeline, state)
 
 
 class MiniMaxH3LocalPromptModel:
