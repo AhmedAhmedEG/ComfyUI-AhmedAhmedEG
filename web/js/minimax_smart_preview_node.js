@@ -23,7 +23,7 @@ function mount(node) {
   const player = installSmartPreview({root, toolbar, timelinePanel: document.createElement("div"),
     inspector: document.createElement("div"), node, api, getTimeline, standalone: true,
     getOptions: () => node.properties.mmx_preview || {scope: "latest", autoplay: true},
-    saveOptions: options => {node.properties.mmx_preview = options;}});
+    saveOptions: options => {node.properties.mmx_preview = options;node.setDirtyCanvas?.(true,true);}});
   node.__mmxPlayer = player;
   const widget = node.addDOMWidget("smart_preview", "MMX_SMART_PREVIEW", root, {serialize: false});
   widget.computeSize = () => [640, 400];

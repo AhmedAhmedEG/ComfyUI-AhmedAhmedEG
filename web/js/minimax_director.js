@@ -2308,10 +2308,12 @@ const embeddedCSS = `
 .mmx-director-root .mmx-shot-block.active,.mmx-director-root .mmx-shot-block.validated.active {outline:3px solid #f3cf78;outline-offset:-3px;box-shadow:inset 0 0 0 5px #15191ecc!important;}
 .mmx-director-root .mmx-shot-block.generating {border-color:#65cfff!important;box-shadow:inset 0 0 0 2px #65cfff!important;}
 .mmx-generating-badge {display:inline-flex;align-items:center;gap:5px;padding:2px 6px;background:#144a63;color:#cff2ff;border-radius:3px;font-size:10px;}
+.mmx-saved-badge {flex:0 0 auto;color:#9cdee8;font-size:9px;font-weight:600;white-space:nowrap;}
 .mmx-generating-badge::before {content:'';width:7px;height:7px;border-radius:50%;background:#7ee1ff;animation:mmx-generation-pulse 1s ease-in-out infinite alternate;}
 .mmx-shot-block > .mmx-generating-badge {position:absolute;left:8px;bottom:6px;max-width:calc(100% - 44px);white-space:nowrap;overflow:hidden;pointer-events:none;}
 @keyframes mmx-generation-pulse {to {opacity:.25;}}
-@media (prefers-reduced-motion:reduce) {.mmx-generating-badge::before {animation:none;}}
+@media (prefers-reduced-motion:reduce) {.mmx-saved-badge {flex:0 0 auto;color:#9cdee8;font-size:9px;font-weight:600;white-space:nowrap;}
+.mmx-generating-badge::before {animation:none;}}
 .mmx-director-root .validated .mmx-clip-selection {background:#173c2a;border-color:#72c896;}
 .mmx-director-root .mmx-clip-selection:has(input:disabled) {opacity:.4;cursor:not-allowed;background:#26313a;}
 .mmx-director-root .mmx-clip-selection input:disabled {cursor:not-allowed;}
@@ -3830,6 +3832,15 @@ function mountDirectorUI(node) {
       shotTopBar.appendChild(modeBadge);
       shotTopBar.appendChild(title);
       shotTopBar.appendChild(durTag);
+      const savedResult=cachedClipResults[clip.id];
+      if(savedResult?.has_latent){
+        const saved=document.createElement('span');saved.className='mmx-saved-badge';
+        const previous=clip.id===generatingClipId || Boolean(clip.invalidated_generation && clip.invalidated_generation===savedResult.generation);
+        saved.textContent=previous?'◆ Previous':'◆ Saved';
+        saved.title=previous?'Previous saved latent; generate a replacement for the current clip settings.':'Generated latent saved on the server. Review this take and approve it to reuse it.';
+        saved.setAttribute('aria-label',previous?'Previous saved latent available':'Saved generated latent available');
+        shotTopBar.append(saved);
+      }
       if(clip.refine_pending) {const review=document.createElement('span');review.textContent=clip.refine_approved?'Ready To Refine':'Review First Pass';review.className='mmx-generating-badge';shotTopBar.append(review);}
       if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent=({preparing:'Preparing',sampling:'Generating',refining:'Refining',decoding:'Decoding',face_refining:'Refining Faces'})[generatingPhase] || 'Generating';running.setAttribute('role','status');running.setAttribute('aria-label',`${clip.name || 'Clip '+(idx+1)}: ${running.textContent}`);shotBlock.append(running);}
 

@@ -351,6 +351,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const selectBox=editorRoot.querySelector('.mmx-shot-block .mmx-clip-selection input');
   assert(selectBox && !selectBox.checked,'Selection defaults to unchecked on legacy clips without a flag');
   assert(!selectBox.disabled,'A server-confirmed generated result can be approved');
+  assert(editorRoot.querySelector('.mmx-shot-block .mmx-saved-badge')?.textContent.includes('Saved'),'Server-confirmed latents have a separate persistent indicator');
   assert(!editorRoot.querySelector('.mmx-inspector-header input[type="checkbox"]'),'Selection belongs to the timeline clip');
   selectBox.dispatchEvent(new w.MouseEvent('pointerdown',{button:0,bubbles:true}));
   assert.equal(editorRoot.querySelectorAll('.mmx-dragging').length,0,'Checkbox interaction does not reorder the clip');
@@ -361,6 +362,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(editorRoot.querySelector('.mmx-clip-type-label').textContent.includes('T2V'),true,'Checking another clip does not switch the inspected clip');
   timeline.value=timeline.value;node.__mmxDirectorRefresh();
   assert(editorRoot.querySelector('.mmx-clip-selection input').checked,'Explicit selections survive refresh');
+  assert(editorRoot.querySelector('.mmx-shot-block .mmx-saved-badge')?.textContent.includes('Saved'),'Saved latent indicator survives editor reload independently of approval');
   editorRoot.querySelector('.mmx-clip-selection input').click();
   assert(!editorRoot.querySelector('.mmx-shot-block').classList.contains('validated'),'Unchecking restores its normal color');
   const approvalBackup=timeline.value;

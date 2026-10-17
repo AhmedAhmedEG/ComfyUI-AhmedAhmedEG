@@ -41,6 +41,19 @@ async function evictPreview(url) {
 }
 
 export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions, standalone = false}) {
+  const nodeOptions=getOptions, writeNodeOptions=saveOptions;
+  const storageKey=kind=>getTimeline().project_id ? `minimax-preview-${kind}-v1:${getTimeline().project_id}:${node.id ?? 'player'}` : null;
+  const readStored=kind=>{try{const value=JSON.parse(globalThis.localStorage?.getItem(storageKey(kind)) || '{}');return value && typeof value==='object' && !Array.isArray(value)?value:{};}catch{return {};}};
+  getOptions=()=>{
+    const nodeValue=nodeOptions() || {}, stored=readStored('options');
+    return Number(stored.updated_at || 0)>Number(nodeValue.updated_at || 0)?{...nodeValue,...stored}:nodeValue;
+  };
+  saveOptions=value=>{
+    const stored=readStored('options');
+    const options={...value,updated_at:Math.max(Date.now(),Number(nodeOptions()?.updated_at || 0)+1,Number(stored.updated_at || 0)+1)};
+    try{const key=storageKey('options');if(key)globalThis.localStorage?.setItem(key,JSON.stringify(options));}catch{}
+    writeNodeOptions(options);
+  };
   const tabs = document.createElement("div");
   tabs.className = "mmx-pill-group";
   const edit = document.createElement("button"), preview = document.createElement("button");
@@ -84,7 +97,28 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let blobUrl='', warmRevision='';
   let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value,take_id:takeChoice.value, autoplay: autoplay.checked, open: !panel.hidden});
+  let positionWritten=0,mediaReady=false;
+  const savePosition = (force=false) => {
+    if(!mediaReady || !source || !Number.isFinite(video.currentTime) || !force && Date.now()-positionWritten<2000)return;
+    positionWritten=Date.now();
+    try{
+      const positions=readStored('positions');delete positions[source];positions[source]=video.currentTime;
+      const entries=Object.entries(positions).slice(-8),key=storageKey('positions');
+      if(key)globalThis.localStorage?.setItem(key,JSON.stringify(Object.fromEntries(entries)));
+    }catch{}
+  };
+  const restoreOptions = () => {
+    const options=getOptions();
+    scope.value=['full','take'].includes(options.scope)?options.scope:'latest';
+    quality.value=options.quality || 'original';if(!quality.value)quality.value='original';
+    stream.value=options.stream || 'final';if(!stream.value)stream.value='final';
+    autoplay.checked=!!options.autoplay;
+    takeChoice.replaceChildren();
+    if(options.take_id){const option=document.createElement('option');option.value=options.take_id;option.textContent='Loading saved take…';takeChoice.append(option);takeChoice.value=options.take_id;}
+    return options;
+  };
   const stop = () => {
+    savePosition(true);mediaReady=false;
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
     if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl='';}
     video.hidden = true; empty.hidden = false;
@@ -95,6 +129,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     await eviction;
     if (disposed || panel.hidden) return;
     if (!getTimeline().project_id) {stop();label.textContent = "Connect the Master's project_state output.";return;}
+    if(project!==getTimeline().project_id){stop();project=getTimeline().project_id;restoreOptions();}
     const token = ++request; controller?.abort(); controller = new AbortController();
     checking = true;
     if (!source) label.textContent = "Checking completed clips…";
@@ -173,7 +208,13 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     if (autoplay.checked && !panel.hidden) video.play().catch(() => {});
   };
   video.onerror = () => retryMedia(source, "Preview could not load.");
-  video.onloadedmetadata = () => {label.textContent=`${statusText} · ${video.videoWidth}×${video.videoHeight}`;node.setDirtyCanvas?.(true, true);};
+  video.ontimeupdate=()=>savePosition();
+  video.onpause=()=>savePosition(true);
+  video.onloadedmetadata = () => {
+    mediaReady=true;
+    const position=Number(readStored('positions')[source]);
+    if(position>0 && Number.isFinite(video.duration))video.currentTime=Math.min(position,Math.max(0,video.duration-.05));
+    label.textContent=`${statusText} · ${video.videoWidth}×${video.videoHeight}`;node.setDirtyCanvas?.(true, true);};
   const show = async open => {
     panel.hidden = !open; timelinePanel.hidden = open; inspector.hidden = open;
     edit.classList.toggle("active", !open); preview.classList.toggle("active", open);
@@ -191,30 +232,24 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   // Completion websocket messages can be missed. The server owns run-aware
   // eligibility, and stable revision URLs avoid rebuffering unchanged results.
   const poll = setInterval(() => {if(scope.value!=='take' || recovering)void refreshPreview(true);}, 2000);
-  const resume=()=>{if(!document.hidden && !disposed && !panel.hidden){void refreshPreview(true);}};
+  const resume=()=>{if(document.hidden)savePosition(true);else if(!disposed && !panel.hidden)void refreshPreview(true);};
+  const leaving=()=>savePosition(true);
   document.addEventListener('visibilitychange',resume);
   globalThis.addEventListener?.('online',resume);
+  globalThis.addEventListener?.('pagehide',leaving);
   if (standalone || getOptions().open) show(true);
   return {
     restore() {
-      const options = getOptions();
-      scope.value = ['full','take'].includes(options.scope) ? options.scope : "latest";
-      quality.value=options.quality || 'original';
-      if (!quality.value) quality.value='original';
-      stream.value=options.stream || 'final';
-      if (!stream.value) stream.value='final';
-      takeChoice.replaceChildren();
-      if(options.take_id){const option=document.createElement('option');option.value=options.take_id;option.textContent='Loading saved take…';takeChoice.append(option);takeChoice.value=options.take_id;}
-      autoplay.checked = !!options.autoplay;
+      const options = restoreOptions();
       show(standalone || !!options.open);
     },
     completed() { preview.textContent = panel.hidden ? "Preview • New clip" : "Preview"; refreshPreview(); },
     refresh: () => refreshPreview(),
     contextChanged() {
       if (project !== getTimeline().project_id) {
-        project = getTimeline().project_id; ++request; controller?.abort(); stop(); refreshPreview();
+        stop(); project = getTimeline().project_id; ++request; controller?.abort(); restoreOptions(); refreshPreview();
       }
     },
-    dispose() { disposed = true; clearInterval(poll);document.removeEventListener('visibilitychange',resume);globalThis.removeEventListener?.('online',resume); ++request; controller?.abort(); stop(); }
+    dispose() { disposed = true; clearInterval(poll);document.removeEventListener('visibilitychange',resume);globalThis.removeEventListener?.('online',resume);globalThis.removeEventListener?.('pagehide',leaving); ++request; controller?.abort(); stop(); }
   };
 }
