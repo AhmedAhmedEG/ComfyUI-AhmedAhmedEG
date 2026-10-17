@@ -423,7 +423,8 @@
       ],
       "notes": [
         "The pool can grow through chaining, but each shot still obeys native limits: 9 images, 3 videos, 3 audios, 12 combined.",
-        "A video input is an IMAGE frame batch. RefMods are names/paths or bundles, not newly trained models.",
+        "Video inputs accept native VIDEO or IMAGE frame batches. RefMods are names/paths or bundles, not newly trained models.",
+        "Reference Pack owns input sizing: select an asset, expand Resize and choose Megapixels. Videos default to 0.5 MP; smaller sources are not enlarged and dimensions align to 32 pixels. Master uses these prepared frames without a second per-clip resize. Output canvas size remains in Director Settings.",
         "Reference Roles accepts multiple checked roles on one image, such as Character, Place and Style. Forge preserves each role alongside assigned character definitions; these are writer instructions, while clip type and asset selection control generation inputs.",
         "Prompt Cast owns normalized people boxes. Enable Edit People Boxes to draw, move, resize, renumber or remove up to 32 boxes on the original file picture. Find People uses a selected Forge vision provider and returns editable proposals; Use Detected Boxes is explicit. This changes writer metadata, not model reference selection."
       ],

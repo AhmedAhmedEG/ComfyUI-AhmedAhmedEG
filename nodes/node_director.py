@@ -1090,6 +1090,7 @@ class MiniMaxH3MasterDirector:
                     )
 
             if confirm_first and not clip_item.get('refine_approved',False):
+                shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
                 v_first,a_first=extract_streams_from_av_latent(sampled_latent)
                 first_frames=decode_video_latent(video_vae,v_first)
                 if source is not None: first_frames=first_frames[:source["frames"].shape[0]]
@@ -1110,6 +1111,7 @@ class MiniMaxH3MasterDirector:
             # Optional second-pass Refine
             pre_refine_latent = sampled_latent
             if refine_enabled:
+                shot_event(unique_id, project_id, clip_id, 'refining', index=clip_idx+1, total=len(clips))
                 try:
                     from ..core.memory_lifecycle import before_refine
                 except ImportError:
@@ -1152,6 +1154,7 @@ class MiniMaxH3MasterDirector:
             previous_av = sampled_latent
             last_latent = sampled_latent
             v_stream, a_stream = extract_streams_from_av_latent(sampled_latent)
+            shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
             decoded_frames = decode_video_latent(video_vae, v_stream)
             if source is not None:
                 decoded_frames = decoded_frames[:source["frames"].shape[0]]
@@ -1182,6 +1185,7 @@ class MiniMaxH3MasterDirector:
 
             # Optional FaceRefine
             if face_refine is not None and face_refine.get("enabled", False):
+                shot_event(unique_id, project_id, clip_id, 'face_refining', index=clip_idx+1, total=len(clips))
                 try:
                     from ..core.tracked_face import refine_tracked_faces
                 except ImportError:

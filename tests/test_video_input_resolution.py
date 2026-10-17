@@ -32,7 +32,7 @@ class VideoInputResolution(unittest.TestCase):
              patch('core.source_media.load_audio',return_value=audio):
             resized=source_range(shot,{},512,288)
             original=source_range(shot,{},512,288,preserve_canvas=True)
-        self.assertEqual(resized['model_frames'].shape[1:3],(64,128))
+        self.assertEqual(resized['model_frames'].shape[1:3],(128,256),'Legacy clip budget must not resize pool-owned inputs')
         self.assertEqual(resized['frames'].shape[1:3],(288,512))
         self.assertEqual(original['frames'].shape,frames.shape)
         self.assertEqual(frames.shape,(5,128,256,3))

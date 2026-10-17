@@ -240,8 +240,16 @@ class RuntimeContracts(unittest.TestCase):
         with patch('core.progress.shot_event') as events:
             self.execute(clips,generation_mode='Next clip',unique_id='42')
         stages=[call.args[2:4] for call in events.call_args_list]
-        self.assertEqual(stages,[('two','preparing'),('two','sampling'),('two','completed')])
+        self.assertEqual(stages,[('two','preparing'),('two','sampling'),('two','decoding'),('two','completed')])
         self.assertTrue(all(call.args[:2]==('42','regression') for call in events.call_args_list))
+
+    def test_all_clips_progress_advances_through_each_clip(self):
+        clips=[{'id':'first','type':'T2VA','duration':1},{'id':'second','type':'T2VA','duration':1}]
+        with patch('core.progress.shot_event') as events:
+            self.execute(clips,generation_mode='All clips',unique_id='42')
+        self.assertEqual([call.args[2:4] for call in events.call_args_list],
+                         [(clip,phase) for clip in ('first','second')
+                          for phase in ('preparing','sampling','decoding','completed')])
 
     def test_first_pass_review_reuses_initial_sampling(self):
         refinement={'enabled':True,'mode':'refine','confirm_first_pass':True,'skip_fl2v':False}
@@ -743,6 +751,7 @@ class RuntimeContracts(unittest.TestCase):
             result = self.execute([{ "id": "edit", "type": "RV2V", "duration": 1,
                 "audio_mode": "source"}])
         self.assertIs(self.native_calls[0][1]["ref_videos"]["ref_video_1"], source["frames"])
+
         self.assertEqual(result[7], 17)
         self.assertEqual(result[1]["waveform"].shape[-1], 34000)
         manager=ProjectCacheManager('regression',self.temp.name)
@@ -753,6 +762,19 @@ class RuntimeContracts(unittest.TestCase):
             self.execute([{'id':'edit','type':'RV2V','duration':1,'audio_mode':'source','validated':True}])
         self.assertEqual(self.sampling_calls,[])
         self.assertEqual(ProjectCacheManager('regression',self.temp.name)._manifest['clips']['edit']['generation'],generation)
+
+    def test_pool_megapixels_are_used_by_reference_and_edit_conditioning(self):
+        frames=torch.ones((5,256,512,3))
+        pack,=MiniMaxH3RefPack().pack(video_1=frames,asset_edits=json.dumps({'assets':{'video_1':{'scaling':'Megapixels','megapixels':.01}}}))
+        prepared=pack['refs'][0]
+        for mode in ('REF2VA','RV2V'):
+            clip={'id':mode,'type':mode,'duration':1,'ref_ids':[prepared['id']],
+                  'video_input_resolution':{'mode':'megapixels','megapixels':.001024}}
+            self.execute([clip],ref_pack=pack)
+            native=next(kw for name,kw in reversed(self.native_calls) if name=='MiniMaxH3ReferenceToVideo')
+            pixels=native['ref_videos']['ref_video_1']
+            self.assertEqual(pixels.shape,prepared['data'].shape)
+            self.assertLessEqual(pixels.shape[1]*pixels.shape[2],10000)
 
     def test_unselected_source_shot_passes_through_without_sampling(self):
         source = {"frames": torch.ones((17, 32, 32, 3)),

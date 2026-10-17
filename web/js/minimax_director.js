@@ -2309,6 +2309,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-shot-block.generating {border-color:#65cfff!important;box-shadow:inset 0 0 0 2px #65cfff!important;}
 .mmx-generating-badge {display:inline-flex;align-items:center;gap:5px;padding:2px 6px;background:#144a63;color:#cff2ff;border-radius:3px;font-size:10px;}
 .mmx-generating-badge::before {content:'';width:7px;height:7px;border-radius:50%;background:#7ee1ff;animation:mmx-generation-pulse 1s ease-in-out infinite alternate;}
+.mmx-shot-block > .mmx-generating-badge {position:absolute;left:8px;bottom:6px;max-width:calc(100% - 44px);white-space:nowrap;overflow:hidden;pointer-events:none;}
 @keyframes mmx-generation-pulse {to {opacity:.25;}}
 @media (prefers-reduced-motion:reduce) {.mmx-generating-badge::before {animation:none;}}
 .mmx-director-root .validated .mmx-clip-selection {background:#173c2a;border-color:#72c896;}
@@ -2370,7 +2371,7 @@ function migrateContinuitySources(state) {
     if(source && source.filename && Number.isFinite(Number(source.end)) && Number(source.end)>0) {
       let id=`context_${clip.id || clips.length}`;while(used.has(id))id+='_source';used.add(id);
       const end=Number(source.end),start=Math.max(0,end-56/24);
-      clips.push({id,name:'Imported Context Video',type:'V2V',source:{filename:source.filename},source_start:start,source_end:end,duration:end-start,locked:true,audio_mode:'source',selected:false,continuity:false,prompt:'',ref_ids:[],video_input_resolution:{mode:'megapixels',megapixels:.5}});
+      clips.push({id,name:'Imported Context Video',type:'V2V',source:{filename:source.filename},source_start:start,source_end:end,duration:end-start,locked:true,audio_mode:'source',selected:false,continuity:false,prompt:'',ref_ids:[]});
       delete clip.continuation_source;
     }
     clips.push(clip);
@@ -2493,7 +2494,7 @@ function mountDirectorUI(node) {
     refmods: [],
     available_refs: [],
   };
-  let generatingClipId=null;
+  let generatingClipId=null,generatingPhase='sampling';
   let progressSequence=0,progressTimer=null,progressWatching=false,progressRequest=false;
   let cachedClipResults={},cacheStatusProject=null,cacheStatusRequest=0;
   let serverStatus=null, savedProjectSignature=null;
@@ -3561,7 +3562,6 @@ function mountDirectorUI(node) {
           name: `Clip ${newIndex}`,
           type: type === "VIDEO" ? "V2V" : type,
           locked: type === "VIDEO", audio_mode: type === "VIDEO" ? "source" : "generate",
-          video_input_resolution: {mode:"megapixels",megapixels:.5},
           duration: 5.0,
           tail_seconds: 0.5,
           seed: Math.floor(Math.random() * 10000000000),
@@ -3802,7 +3802,7 @@ function mountDirectorUI(node) {
       shotTopBar.appendChild(title);
       shotTopBar.appendChild(durTag);
       if(clip.refine_pending) {const review=document.createElement('span');review.textContent=clip.refine_approved?'Ready To Refine':'Review First Pass';review.className='mmx-generating-badge';shotTopBar.append(review);}
-      if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent='Generating';shotTopBar.append(running);}
+      if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent=({preparing:'Preparing',sampling:'Generating',refining:'Refining',decoding:'Decoding',face_refining:'Refining Faces'})[generatingPhase] || 'Generating';running.setAttribute('role','status');running.setAttribute('aria-label',`${clip.name || 'Clip '+(idx+1)}: ${running.textContent}`);shotBlock.append(running);}
 
 
 
@@ -4277,15 +4277,6 @@ function mountDirectorUI(node) {
     finishSection(shotExtras,"Optional changes for this clip: a model override, interior reference anchors, and grading after decode.");
 
     if (["V2V", "RV2V"].includes(activeClip.type)) {
-      const resolutionPanel=document.createElement('fieldset');resolutionPanel.className='mmx-video-input-resolution';
-      const resolutionLegend=document.createElement('legend');resolutionLegend.textContent='Video Input Resolution';resolutionPanel.append(resolutionLegend);
-      const previousResolution=activeClip.video_input_resolution;
-      const inputResolution=activeClip.video_input_resolution={mode:'megapixels',megapixels:previousResolution?.mode==='megapixels'?(previousResolution.megapixels ?? .5):.5};
-      const budget=document.createElement('input');budget.type='number';budget.min='0.001024';budget.max='1.032192';budget.step='0.01';budget.value=inputResolution.megapixels;
-      budget.setAttribute('aria-label','Video Input Megapixels');
-      budget.onchange=()=>{const value=Number(budget.value);if(!Number.isFinite(value)||value<Number(budget.min)||value>Number(budget.max)){budget.setCustomValidity('Enter a value within the displayed range.');budget.reportValidity();return;}budget.setCustomValidity('');inputResolution.megapixels=value;activeClip.validated=false;invalidateFrom(timelineState.clips.indexOf(activeClip));syncState();renderTimeline();};
-      resolutionPanel.append(field('Input Size (MP)',budget,'Default: 0.5 MP. Preserves source aspect ratio with 32-pixel alignment; smaller sources are not enlarged. 1 MP = 1,000,000 pixels.'));
-      const resolutionNote=document.createElement('p');resolutionNote.textContent='Controls model-input frames, not the original file or the output canvas. Motion guides and latent carry must still match the generated canvas when encoded.';resolutionPanel.append(resolutionNote);inspector.append(resolutionPanel);
       const sourcePanel = document.createElement("fieldset");
       const legend = document.createElement("legend"); legend.textContent = "Source video range";
       sourcePanel.appendChild(legend); inspector.appendChild(sourcePanel);
@@ -5124,9 +5115,13 @@ function mountDirectorUI(node) {
     if(!progressWatching || progressRequest || node.__mmxDisposed)return;
     progressRequest=true;
     try {
-      const response=await api.fetchApi('/minimax_director/progress?'+new URLSearchParams({node:String(node.id),project_id:timelineState.project_id}));
+      const response=await api.fetchApi('/minimax_director/progress?'+new URLSearchParams({node:String(node.id),project_id:timelineState.project_id}),{cache:'no-store'});
       const result=await response.json();
-      if(response.ok && progressWatching && !node.__mmxDisposed && result.state && Number(result.state.sequence)>progressSequence)node.__mmxShotHandler?.({detail:result.state});
+      if(response.ok && progressWatching && !node.__mmxDisposed){
+        if(result.active===false){if(generatingClipId!==null){generatingClipId=null;progressLabel.textContent='Idle';renderTimeline();}return;}
+        const needsRestore=result.state && generatingClipId!==result.state.clip_id && ['preparing','sampling','refining','decoding','face_refining'].includes(result.state.phase);
+        if(result.state && (Number(result.state.sequence)>progressSequence || needsRestore))node.__mmxShotHandler?.({detail:result.state,snapshot:true});
+      }
     } catch {} finally {progressRequest=false;}
   };
   const watchClipProgress=()=>{progressWatching=true;if(progressTimer===null)progressTimer=setInterval(pollClipProgress,2000);};
@@ -5136,15 +5131,16 @@ function mountDirectorUI(node) {
   // do not advance unrelated clip seeds.
   node.__mmxShotHandler = event => {
     const detail = event.detail;
-    if (!detail || String(detail.node) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
-    if(detail.sequence){if(Number(detail.sequence)<=progressSequence)return;progressSequence=Number(detail.sequence);}
-    if(['preparing','sampling'].includes(detail.phase))watchClipProgress();
+    if (!detail || String(detail.node).split(':').at(-1) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
+    if(detail.sequence){if(Number(detail.sequence)<progressSequence || (Number(detail.sequence)===progressSequence && !event.snapshot))return;progressSequence=Number(detail.sequence);}
+    const runningPhase=['preparing','sampling','refining','decoding','face_refining'].includes(detail.phase);
+    if(runningPhase)watchClipProgress();
     if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState();void refreshClipResults();renderTimeline();renderInspector();return;}
     if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState();renderTimeline();renderInspector();return; }
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
-    const phaseLabel=({preparing:'Preparing',sampling:'Generating',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
+    const phaseLabel=({preparing:'Preparing',sampling:'Generating',refining:'Refining',decoding:'Decoding',face_refining:'Refining Faces',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
     progressLabel.textContent = `${phaseLabel}: ${eventClip?.name || 'Clip '+(timelineState.clips.indexOf(eventClip)+1)}${detail.index ? ` (${detail.index}/${detail.total || timelineState.clips.length})` : ''}`;
-    if(['preparing','sampling'].includes(detail.phase)) {generatingClipId=detail.clip_id;renderTimeline();}
+    if(runningPhase) {generatingClipId=detail.clip_id;generatingPhase=detail.phase;renderTimeline();}
     if(detail.phase==='completed' && generatingClipId===detail.clip_id){generatingClipId=null;renderTimeline();}
     if(detail.phase==='source_ready') {
       const clip=timelineState.clips.find(value=>value.id===detail.clip_id);
@@ -5174,7 +5170,7 @@ function mountDirectorUI(node) {
       // Only the terminal null event should clear the clip indicator.
       if(event?.type==='executing' && (typeof event.detail==='object' ? event.detail?.node : event.detail)!=null)return;
       if(event?.type==='execution_error' && event.detail?.node_id && String(event.detail.node_id)!==String(node.id))return;
-      stopClipProgress();generatingClipId=null;renderTimeline();
+      generatingClipId=null;renderTimeline();
     };
     for(const name of ['execution_error','execution_interrupted','executing'])api.addEventListener(name,clearGenerating);
     const removed = node.onRemoved;
@@ -5191,6 +5187,8 @@ function mountDirectorUI(node) {
       return removed?.apply(this, args);
     };
   }
+  // Mounting/reconnecting mid-run must not depend on receiving the start event.
+  watchClipProgress();void pollClipProgress();
 
 }
 

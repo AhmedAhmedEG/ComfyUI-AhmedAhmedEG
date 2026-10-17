@@ -55,8 +55,14 @@ def source_range(shot, timeline, width, height, preserve_canvas=False, ref_pool=
             raise ValueError("The selected source video is not in the connected Reference Pack.")
         data = entry.get("data")
         if data is None and entry.get("file_reference") and entry.get("filename"):
-            return source_range({**shot, "source": {"filename": entry["filename"]}}, timeline,
-                                width, height, preserve_canvas=preserve_canvas)
+            from .references import load_reference
+            import folder_paths
+            loaded = load_reference(entry, folder_paths.get_input_directory())
+            visual = next(item for item in loaded if item['type'] == 'video')
+            paired = next((item['data'] for item in loaded if item.get('paired_video_id')), None)
+            prepared = {**visual, 'file_reference': False, 'audio': paired}
+            return source_range(shot, timeline, width, height, preserve_canvas=preserve_canvas,
+                                ref_pool={**(ref_pool or {}), source['ref_id']: prepared})
         frames = data.get("frames") if isinstance(data, dict) else data
         fps = float(data.get("fps", FPS)) if isinstance(data, dict) else FPS
         if frames is None or frames.ndim != 4 or frames.shape[0] == 0 or not math.isfinite(fps) or fps <= 0:
@@ -90,9 +96,8 @@ def source_range(shot, timeline, width, height, preserve_canvas=False, ref_pool=
                 raise
     original_frames = frames
     model_frames = frames
-    if not preserve_canvas:
-        input_width, input_height = video_input_dimensions(frames.shape[2], frames.shape[1], shot.get("video_input_resolution"))
-        model_frames = scale_tensor_image(frames, "Target", input_width, input_height)
+    # Reference Pack owns input sizing. Legacy per-clip budgets must not silently
+    # shrink its already prepared pixels a second time.
     if not preserve_canvas:
         frames = scale_tensor_image(frames, "Fit and pad", width, height)
     has_audio = audio is not None

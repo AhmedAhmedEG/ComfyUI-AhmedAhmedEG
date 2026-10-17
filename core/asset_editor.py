@@ -1,11 +1,11 @@
 """Non-destructive pack-owned media preparation with stable reference IDs."""
 import json, math
-from .references import edit_images, load_reference, ROLES
-from .media_io import scale_tensor_image
+from .references import edit_images, load_reference, resize_reference, ROLES
 
 
 def prepare_asset(row, settings):
-    if not settings: return row
+    if not settings and row['type'] != 'video': return row
+    settings = settings or {}
     row={**row}
     role=settings.get('role','subject')
     if role not in ROLES: raise ValueError('Unknown reference role.')
@@ -25,8 +25,9 @@ def prepare_asset(row, settings):
         lo=round(start*rate);hi=min(count,round(end*rate)) if end is not None else count
         if lo>=hi: raise ValueError('Reference trim is outside the available media.')
         if kind=='video':
-            data=data[lo:hi]
-            if row.get('audio'):
+            if lo != 0 or hi != count:
+                data=data[lo:hi]
+            if row.get('audio') and (lo != 0 or hi != count):
                 audio=row['audio'];ar=int(audio['sample_rate'])
                 row['audio']={**audio,'waveform':audio['waveform'][...,round(lo/24*ar):round(hi/24*ar)]}
         else: data={**data,'waveform':data['waveform'][...,lo:hi]}
@@ -45,8 +46,7 @@ def prepare_asset(row, settings):
             data=data[index:index+1];row['type']='image';row.pop('audio',None)
     if row['type'] in ('image','video'):
         data=edit_images(data,settings.get('edits'),settings.get('crop'))
-        scaling=settings.get('scaling','Off')
-        data=scale_tensor_image(data,scaling,int(settings.get('width',1344)),int(settings.get('height',768)))
+        data=resize_reference(data,settings,kind)
     row['data']=data
     return row
 
@@ -59,7 +59,7 @@ def prepare_pack(refs, asset_edits, input_root=None):
     prepared=[prepare_asset(row,assets.get(row.get('slot_id',row['id']),{})) for row in refs]
     for row in settings.get('files',[]):
         if not input_root: raise ValueError('File assets require the ComfyUI input directory.')
-        row={**row,'scaling':row.get('scaling','Off')}
+        row={**row,'scaling':row.get('scaling','Megapixels' if row.get('type')=='video' else 'Off')}
         frame_pick=row.get('type')=='video' and row.get('media_mode')=='frame'
         loaded=load_reference({**row,'media_mode':'both'} if frame_pick else row,input_root,int(row.get('width',1344)),int(row.get('height',768)))
         # Video+audio is one paired reference, not two ambiguous selections.

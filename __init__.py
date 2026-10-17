@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.4"
+__version__ = "1.7.5"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -41,9 +41,10 @@ if getattr(PromptServer, "instance", None) is not None:
 
     @routes.get("/minimax_director/progress")
     async def clip_progress(request):
-        from .core.progress import current_clip_progress
-        return web.json_response({"state": current_clip_progress(
-            request.query.get("node", ""), request.query.get("project_id", ""))})
+        from .core.progress import progress_snapshot
+        return web.json_response(progress_snapshot(
+            request.query.get("node", ""), request.query.get("project_id", ""),
+            PromptServer.instance.prompt_queue), headers={'Cache-Control': 'no-store'})
 
     @routes.post("/minimax_director/media/upload")
     async def upload_media(request):

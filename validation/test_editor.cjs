@@ -12,7 +12,7 @@ const listeners = new Map();
 let submittedDraft,progressSnapshot=null;
 w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name)=>listeners.delete(name),fetchApi:async (url,options={}) => {
   let result = [];
-  if(url.includes("/minimax_director/progress"))result={state:progressSnapshot};
+  if(url.includes("/minimax_director/progress"))result={state:progressSnapshot,active:progressSnapshot?.active};
   if (url.includes('waveform')) result={duration:5,peaks:[0,.5,1,.5]};
   if (url.includes('media/upload')) result={name:'tail.mp4',subfolder:'minimax_assets',media_type:'video'};
   if (url.includes('source/info')) result={duration:60,width:960,height:544};
@@ -93,7 +93,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   exporter.widgets.reverse();exporter.onConfigure(serialized);
   assert.strictEqual(exporter.widgets.find(widget=>widget.name==='quality').value,21);
   assert.strictEqual(exporter.widgets.find(widget=>widget.name==='bit_depth').value,'10-bit');
+  progressSnapshot={node:String(node.id),project_id:'editor',clip_id:'clip_1',phase:'sampling',sequence:1,active:true};
   w.extension.nodeCreated(node);
+  await new Promise(resolve=>setTimeout(resolve,40));
+  assert(w.document.querySelector('[data-clip-id="clip_1"].generating'),'Mounting during a run recovers progress without an executing event');
+  progressSnapshot=null;
+  listeners.get('executing')({type:'executing',detail:null});
   await new Promise(resolve=>setTimeout(resolve,40));
   assert(w.document.querySelector('.mmx-director-root'),'Editor mounts');
   const writingPanel=w.document.querySelector('.mmx-edit-main');
@@ -366,6 +371,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'sampling',index:2,total:2}});
   assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`));
   assert(editorRoot.querySelector('.mmx-generating-badge').textContent==='Generating');
+  node.__mmxShotHandler({detail:{node:`outer:${node.id}`,project_id:executionState.project_id,clip_id:executionClip.id,phase:'decoding'}});
+  assert.equal(editorRoot.querySelector('.mmx-generating-badge').textContent,'Decoding');
   assert(editorRoot.querySelector('.mmx-shot-block.active').getAttribute('aria-current')==='true');
   await new Promise(resolve=>setTimeout(resolve,0));
   const previousExecutionClip=executionState.clips[0];
@@ -375,6 +382,10 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`),'Read-only snapshot recovers a missed clip transition');
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:previousExecutionClip.id,phase:'completed',sequence:101}});
   assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`),'An older event cannot overwrite the current clip');
+  progressSnapshot={...progressSnapshot,active:false};
+  listeners.get('executing')({type:'executing',detail:String(node.id)});await new Promise(resolve=>setTimeout(resolve,0));
+  assert(!editorRoot.querySelector('.mmx-shot-block.generating'),'An idle snapshot clears a missed completion event');
+  node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'sampling',sequence:103}});
   progressSnapshot=null;
   listeners.get('executing')({type:'executing',detail:null});
   assert(!editorRoot.querySelector('.mmx-generating-badge'),'Execution completion clears the running indicator');
@@ -590,11 +601,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(lockedRange,'Locked source inspector renders without referencing a removed upload control');
   assert([...lockedRange.querySelectorAll('input')].every(el=>!el.disabled),'Existing footage can be trimmed without changing its type');
   assert.equal(w.document.querySelector('.mmx-video-input-resolution select'),null,'Input sizing is always megapixels');
-  let budget=w.document.querySelector('input[aria-label="Video Input Megapixels"]');assert(budget && !budget.disabled);
-  assert.equal(Number(budget.value),.5);budget.onchange();
-  assert.equal(JSON.parse(sourceTimeline.value).clips[0].video_input_resolution.megapixels,.5,'Displayed default is the submitted budget');
-  budget=w.document.querySelector('input[aria-label="Video Input Megapixels"]');budget.value='.258';budget.onchange();
-  assert.equal(JSON.parse(sourceTimeline.value).clips[0].video_input_resolution.megapixels,.258);
+  assert(!w.document.querySelector('input[aria-label="Video Input Megapixels"]'),'Reference sizing has one owner: the pool');
   assert(!w.document.querySelector('input[aria-label="Video Input Short Edge"]'));
   const migratedLegacy={clips:[{id:'next',continuation_source:{filename:'tail.mp4',end:60}}]};
   w.migrateContinuitySources(migratedLegacy);w.migrateContinuitySources(migratedLegacy);

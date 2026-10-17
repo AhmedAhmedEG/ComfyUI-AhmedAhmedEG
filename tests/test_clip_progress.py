@@ -7,6 +7,20 @@ from core import progress
 
 
 class ClipProgress(unittest.TestCase):
+    def test_reconnect_snapshot_is_scoped_to_live_prompt_and_subgraph(self):
+        queue=Mock()
+        queue.get_current_queue.return_value=([(1,'run-a',{}, {})],[])
+        server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
+        with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):
+            progress.shot_event('outer:7','reconnect','second','sampling')
+        state=progress.progress_snapshot('7','reconnect',queue)
+        self.assertTrue(state['active'])
+        self.assertEqual(state['state']['clip_id'],'second')
+        queue.get_current_queue.return_value=([(2,'different-run',{}, {})],[])
+        self.assertFalse(progress.progress_snapshot('7','reconnect',queue)['active'])
+        queue.get_current_queue.return_value=([],[])
+        self.assertFalse(progress.progress_snapshot('7','reconnect',queue)['active'])
+
     def test_two_clip_transition_snapshot_and_order(self):
         sender=Mock()
         with patch.dict(sys.modules,{"server":SimpleNamespace(PromptServer=SimpleNamespace(instance=SimpleNamespace(send_sync=sender)))}):

@@ -9,18 +9,47 @@ from core.preview import create_preview_plan, encode_preview
 
 
 class PackSourceNumerical(unittest.TestCase):
+    def test_pool_megapixels_reach_model_frames_for_graph_and_files(self):
+        from core.asset_editor import prepare_pack
+        from unittest.mock import patch
+        frames=torch.linspace(0,1,3*384*640).reshape(3,384,640,1).expand(-1,-1,-1,3)
+        rows=[{'id':'v','slot_id':'video_1','type':'video','data':frames}]
+        for mp in (.05,.1):
+            settings={'scaling':'Megapixels','megapixels':mp}
+            graph=prepare_pack(rows,{'assets':{'video_1':settings}})[0]
+            with patch('core.references.load_video',return_value=frames):
+                file=prepare_pack([],{'files':[{'id':'file','type':'video','filename':'test.mp4',**settings}]},'input')[0]
+            self.assertTrue(torch.equal(graph['data'],file['data']))
+            h,w=graph['data'].shape[1:3]
+            self.assertEqual(h%32,0);self.assertEqual(w%32,0)
+            self.assertLessEqual(h*w,mp*1_000_000)
+            source=source_range({'source':{'ref_id':'v'},'video_input_resolution':{'mode':'megapixels','megapixels':.001024}}, {},640,384,ref_pool={'v':graph})
+            self.assertTrue(torch.equal(source['model_frames'],graph['data']),'Master must consume the pool result unchanged')
+            self.assertEqual(tuple(source['frames'].shape[1:3]),(384,640),'Output canvas remains independent')
+        self.assertEqual(tuple(frames.shape),(3,384,640,3))
+
+    def test_pool_explicit_off_preserves_pixels_and_default_limits_video(self):
+        from core.asset_editor import prepare_asset
+        frames=torch.zeros((1,768,1344,3))
+        row={'id':'video','type':'video','data':frames}
+        default=prepare_asset(row,{})
+        self.assertLessEqual(default['data'].shape[1]*default['data'].shape[2],500000)
+        self.assertIs(prepare_asset(row,{'scaling':'Off'})['data'],frames)
+        for mp in (float('nan'),0,2):
+            with self.assertRaises(ValueError):prepare_asset(row,{'scaling':'Megapixels','megapixels':mp})
+
     def setUp(self):
         torch.set_num_threads(2)
         self.frames=torch.arange(48.).reshape(48,1,1,1).expand(48,64,128,3)/48
         self.audio={'waveform':torch.arange(96000.).reshape(1,1,96000),'sample_rate':48000}
         self.pool={'video':{'type':'video','data':{'frames':self.frames,'fps':24,'audio':self.audio}}}
 
-    def test_trim_uses_pack_pixels_audio_and_separate_input_budget(self):
+    def test_trim_uses_pack_pixels_audio_without_second_clip_resize(self):
         result=source_range({'source':{'ref_id':'video'},'source_start':.5,'source_end':1.5,
                              'video_input_resolution':{'mode':'short_edge','short_edge':32}}, {},256,128,ref_pool=self.pool)
         self.assertTrue(torch.equal(result['original_frames'],self.frames[12:36]))
         self.assertEqual(tuple(result['frames'].shape),(24,128,256,3))
-        self.assertEqual(tuple(result['model_frames'].shape),(24,32,64,3))
+        self.assertEqual(tuple(result['model_frames'].shape),(24,64,128,3))
         self.assertTrue(torch.equal(result['audio']['waveform'],self.audio['waveform'][...,24000:72000]))
         self.assertEqual(result['end'],1.5)
 

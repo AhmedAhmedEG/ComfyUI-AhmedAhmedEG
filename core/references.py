@@ -6,6 +6,24 @@ from .media_io import load_image, load_video, load_audio, scale_tensor_image
 ROLES = ("subject", "place", "style", "keyframe", "pose", "custom")
 
 
+def resize_reference(images, settings, kind):
+    """One pool-owned resize path for graph-connected and file-backed assets."""
+    scaling = settings.get('scaling', 'Megapixels' if kind == 'video' else 'Off')
+    if scaling == 'Megapixels':
+        mp = float(settings.get('megapixels', .5))
+        h, w = images.shape[1:3]
+        if kind == 'video':
+            from .source_media import video_input_dimensions
+            width, height = video_input_dimensions(w, h, {'mode': 'megapixels', 'megapixels': mp})
+        else:
+            if not math.isfinite(mp) or not .001024 <= mp <= 16:
+                raise ValueError('Reference image budget must be between 0.001024 and 16 megapixels.')
+            scale = min(1., math.sqrt(mp * 1_000_000 / (w * h)))
+            width, height = max(32, math.floor(w * scale / 32) * 32), max(32, math.floor(h * scale / 32) * 32)
+        return scale_tensor_image(images, 'Target', width, height)
+    return scale_tensor_image(images, scaling, int(settings.get('width', 1344)), int(settings.get('height', 768)))
+
+
 def edit_images(images, edits=None, crop=None):
     if not edits and not crop:
         return images
@@ -45,11 +63,11 @@ def load_reference(row, root, width=1344, height=768):
     end = float(end) if end is not None else None
     if not math.isfinite(start) or end is not None and not math.isfinite(end):
         raise ValueError("Reference trim times must be finite.")
-    scaling = row.get("scaling", "Auto")
+    resize_settings = {'width': width, 'height': height, **row}
     rows = []
     if kind == "image":
         pixels = load_image(path, root, scaling_mode="Off")
-        data = scale_tensor_image(edit_images(pixels, row.get("edits"), row.get("crop")), scaling, width, height)
+        data = resize_reference(edit_images(pixels, row.get("edits"), row.get("crop")), resize_settings, 'image')
         rows.append({**row, "data": data})
     elif kind == "video":
         mode = row.get("media_mode", "video")
@@ -61,7 +79,7 @@ def load_reference(row, root, width=1344, height=768):
                 time=float(row.get("frame_time",0));index=round(time*24)
                 if not math.isfinite(time) or index<0 or index>=pixels.shape[0]:raise ValueError("Frame pick is outside trimmed video.")
                 pixels=pixels[index:index+1]
-            rows.append({**row, "type":"image" if mode=="frame" else "video", "data": scale_tensor_image(edit_images(pixels, row.get("edits"), row.get("crop")), scaling, width, height)})
+            rows.append({**row, "type":"image" if mode=="frame" else "video", "data": resize_reference(edit_images(pixels, row.get("edits"), row.get("crop")), resize_settings, 'video')})
         if mode in ("audio", "both"):
             rows.append({**row, "id": row["id"] + "_audio" if mode=="both" else row["id"], "type": "audio", "data": load_audio(path, root, trim_start=start, trim_end=end), **({"paired_video_id": row["id"]} if mode == "both" else {})})
     elif kind == "audio":
