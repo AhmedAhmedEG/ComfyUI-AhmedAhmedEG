@@ -2049,12 +2049,16 @@ const embeddedCSS = `
 .mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block, .mmx-director-root .mmx-aud-block { height: 34px; }
 
 .mmx-director-root .mmx-shot-block { cursor: grab; touch-action: none; padding-right: 14px; }
-.mmx-director-root .mmx-shot-top-bar { width: 100%; gap: 5px; min-width: 0; }
+.mmx-director-root .mmx-shot-top-bar { width: 100%; gap: 5px; min-width: 0; padding-right: 22px; box-sizing: border-box; min-height: 22px; }
 .mmx-director-root .mmx-clip-title { display: block; min-width: 0; }
 .mmx-director-root .mmx-clip-duration { white-space: nowrap; }
 .mmx-director-root .mmx-clip-dup-btn { display: none; }
-.mmx-director-root .mmx-clip-del-btn { flex: 0 0 22px; height: 22px; padding: 0; margin-left: auto; font: 18px/1 system-ui; }
-.mmx-director-root .mmx-clip-handle-right { width: 10px; border-left: 1px solid #ffffff18; background: #ffffff08; }
+.mmx-director-root .mmx-clip-del-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; min-height: 0; padding: 0; margin: 0; display: flex; align-items: center; justify-content: center; z-index: 3; }
+.mmx-director-root .mmx-clip-del-btn:hover { transform: none; }
+.mmx-director-root .mmx-clip-del-btn svg { width: 12px; height: 12px; display: block; pointer-events: none; }
+/* The boundary is the resize target; no separate grip covers the clip. */
+.mmx-director-root .mmx-clip-handle-right { width: 6px; border: 0; border-radius: 0; background: transparent; z-index: 2; }
+.mmx-director-root .mmx-clip-handle-right:hover { background: transparent; box-shadow: inset -2px 0 #a6d7ee; }
 .mmx-director-root .mmx-dragging { cursor: grabbing; opacity: .75; z-index: 4; box-shadow: 0 4px 14px #0006; }
 .mmx-director-root .mmx-drop-before { border-left: 3px solid #b4a5ff; }
 .mmx-director-root .mmx-drop-after { border-right: 3px solid #b4a5ff; }
@@ -2152,8 +2156,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-shot-block.active { background:#2c3b48!important;border-color:#86b8d8!important;box-shadow:inset 3px 0 #86b8d8; }
 .mmx-director-root .mmx-shot-block.generation-selected { background:#25473a!important;border-color:#63b98a!important; }
 .mmx-director-root .mmx-shot-block.generation-selected.active { box-shadow:inset 3px 0 #9ce0b5; }
-.mmx-director-root .mmx-clip-selection { position:absolute;bottom:4px;right:12px;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;background:#18242b;border:1px solid #536877;cursor:pointer;z-index:3; }
-.mmx-director-root .generation-selected .mmx-clip-selection { background:#173c2a;border-color:#72c896; }
+.mmx-director-root .mmx-clip-selection { position:absolute;bottom:4px;right:4px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:0;background:transparent;border:0;cursor:pointer;z-index:3; }
 .mmx-director-root .mmx-clip-selection input { margin:0;width:16px;height:16px;accent-color:#68ce91;cursor:pointer; }
 .mmx-director-root .mmx-shot-prompt-preview { padding-right:32px; }
 .mmx-director-root .mmx-clip-title { font-size:14px; }
@@ -2314,8 +2317,7 @@ const embeddedCSS = `
 @keyframes mmx-generation-pulse {to {opacity:.25;}}
 @media (prefers-reduced-motion:reduce) {.mmx-saved-badge {flex:0 0 auto;color:#9cdee8;font-size:9px;font-weight:600;white-space:nowrap;}
 .mmx-generating-badge::before {animation:none;}}
-.mmx-director-root .validated .mmx-clip-selection {background:#173c2a;border-color:#72c896;}
-.mmx-director-root .mmx-clip-selection:has(input:disabled) {opacity:.4;cursor:not-allowed;background:#26313a;}
+.mmx-director-root .mmx-clip-selection:has(input:disabled) {opacity:.4;cursor:not-allowed;}
 .mmx-director-root .mmx-clip-selection input:disabled {cursor:not-allowed;}
 .mmx-director-root .mmx-shot-prompt-preview {flex:1;display:-webkit-box;-webkit-line-clamp:5;line-height:1.5;padding:6px 0 26px;white-space:normal;text-align:left;align-self:stretch;color:#c5d0db!important;}
 .mmx-director-root .mmx-timeline-audio {padding:4px 0;border:0;border-radius:0;background:transparent;display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:0;}
@@ -3849,11 +3851,11 @@ function mountDirectorUI(node) {
 
       const delBtn = document.createElement("button");
       delBtn.className = "mmx-clip-del-btn";
-      delBtn.textContent = "×";
+      delBtn.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
       delBtn.title = `Delete ${clip.name || 'Clip '+(idx+1)}`;
       delBtn.setAttribute("aria-label", delBtn.title);
       delBtn.onclick = e => { e.stopPropagation(); deleteClip(clip); };
-      shotTopBar.appendChild(delBtn);
+      shotBlock.appendChild(delBtn);
 
       shotBlock.appendChild(shotTopBar);
 
