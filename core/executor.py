@@ -215,7 +215,11 @@ class MasterDirectorExecutor:
             audio_vae=audio_vae,
             ref_images=ref_images or {},
             ref_videos=ref_videos or {},
-            ref_video_audios=ref_video_audios or {},
+            ref_video_audios={
+                ("ref_video_audio_" + key[len("ref_video_"):] if key.startswith("ref_video_")
+                 and not key.startswith("ref_video_audio_") else key): value
+                for key, value in (ref_video_audios or {}).items()
+            },
             ref_audios=ref_audios or {},
         ))
 

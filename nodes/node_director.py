@@ -377,7 +377,8 @@ class MiniMaxH3MasterDirector:
             raise ValueError("Every timeline shot must have a unique clip ID.")
 
         cache_mgr = executor.cache_mgr
-        cache_mgr.begin_preview_run()
+        if execution_mode != "Conditioning Guide Output":
+            cache_mgr.begin_preview_run()
         preview_mode = str(
             kwargs.get("preview_mode")
             or timeline.get("preview_mode")
@@ -438,12 +439,18 @@ class MiniMaxH3MasterDirector:
             if approved_take and cached_latent is not None and (cached_frames is None or cached_audio is None):
                 v_saved, a_saved = extract_streams_from_av_latent(cached_latent)
                 if cached_frames is None:
+                    meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
+                    recovery = meta.get("media_recovery")
+                    if recovery is not None and recovery.get("requires_final_media"):
+                        raise ValueError("The approved take's final frames are missing. Restore its saved frames or unapprove it; latent decoding cannot reproduce its seam grading or face refinement.")
+                    if recovery is None and meta.get("imported_from") != "tritant":
+                        raise ValueError("The approved take's final frames are missing and this older take has no recovery provenance. Restore its saved frames or unapprove it to generate again.")
                     cached_frames = decode_video_latent(video_vae, v_saved)
                     cached_frames = cached_frames[:int(cached_latent.get("_mmx_visible_end", cached_frames.shape[0]))]
                     if canon_mode == MODE_INPAINT:
                         cached_frames = cached_frames[-1:]
-                    if cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("imported_from")=="tritant":
-                        cached_frames=edit_images(cached_frames,clip_item.get("color"))
+                    saved_color = recovery.get("color") if recovery is not None else clip_item.get("color")
+                    cached_frames = edit_images(cached_frames, saved_color)
                 # Latent-only approved imports need the same bounded RGB
                 # lifetime as newly generated clips when repairing media.
                 cached_frames = spill_frames(cached_frames, cache_mgr.project_dir)
@@ -532,7 +539,7 @@ class MiniMaxH3MasterDirector:
             clip_continuity_mode = continuity["mode"]
             clip_context_length = continuity["video_frames"]
             clip_audio_context = continuity["audio_frames"]
-            clip_continuity = clip_idx > 0 and clip_continuity_mode != "Independent (No Continuity)"
+            clip_continuity = (clip_idx > 0 or continuation is not None) and clip_continuity_mode != "Independent (No Continuity)"
             clip_ref_ids = clip_item.get("ref_ids", [])
             clip_ref_ids = list(dict.fromkeys([*timeline.get("shared_ref_ids", []), *clip_ref_ids]))
             if "tail_seconds" in clip_item:
@@ -947,7 +954,7 @@ class MiniMaxH3MasterDirector:
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
                     pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
                     seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
-                if clip_item.get("continuation_source"):
+                if clip_idx == 0 or clip_item.get("continuation_source"):
                     # The context came from an external file, not the preceding
                     # timeline output. Never trim unrelated delivered footage.
                     previous_trim = 0
@@ -1043,6 +1050,7 @@ class MiniMaxH3MasterDirector:
             clip_active_model = apply_loras(clip_active_model, clip_lora_files, lora_state_cache)
 
             if staged is not None:
+                cache_mgr.admit_first_pass(clip_id, staged['generation'])
                 sampled_latent=staged['latent']
                 shot_event(unique_id,project_id,clip_id,'sampling',index=clip_idx+1,total=len(clips))
                 try:
@@ -1255,7 +1263,12 @@ class MiniMaxH3MasterDirector:
                 )
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
-                    "refine_passes":refine_pass_rows,"refinement_pending":False, "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
+                    "refine_passes":refine_pass_rows,"refinement_pending":False,
+                    "first_pass": {k:v for k,v in staged.items() if k != 'latent'} if staged is not None else None,
+                    "media_recovery": {"color": clip_item.get("color"), "requires_final_media": bool(
+                        clip_idx > 0 and clip_continuity and previous_tail is not None or
+                        face_refine is not None and face_refine.get("enabled", False))},
+                    "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
             except Exception as c_err:
                 cache_error = str(c_err)
                 if decoded_output=='latest':raise RuntimeError('Latest output requires durable clip caching; could not save the take.') from c_err

@@ -13,7 +13,7 @@ class NodePlacement(unittest.TestCase):
             'import_bindings':{'config':{'steps':3}},'audio_fade_ms':12}
         result=merge_authored_timeline(local,authored)
         for key in authored.keys()-{'clips'}:self.assertEqual(result[key],authored[key])
-        self.assertTrue(result['clips'][0]['validated'])
+        self.assertFalse(result['clips'][0]['validated'])
         self.assertEqual(result['clips'][0]['seed'],'99')
         self.assertEqual(result['clips'][0]['prompt'],'new')
         result['cast_cards']['1']='Changed'

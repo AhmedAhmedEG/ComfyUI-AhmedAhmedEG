@@ -36,7 +36,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         meta = take if scope == "take" else manager._manifest.get("clips", {}).get(cid, {})
         frames_kind="frames";audio_kind="audio";direct_frames=direct_audio=None
         if stream=="first_pass":
-            meta=manager._manifest.get("first_pass",{}).get(cid,{})
+            meta=(take.get('first_pass') or {}) if scope == 'take' else manager._manifest.get("first_pass",{}).get(cid,{})
             frames_kind,audio_kind="draft_frames","draft_audio"
         elif stream=="pre_refine":
             if not meta.get("has_pre_refine"): continue

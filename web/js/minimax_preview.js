@@ -2,6 +2,7 @@
 // storage is best effort; the bounded session cache also works in private tabs.
 const previewMedia = new Map();
 const pendingMedia = new Map();
+const reloadMedia = new Set();
 const MEDIA_LIMIT = 256 * 1024 * 1024;
 async function bufferedPreview(api, path) {
   const url = api.apiURL(path);
@@ -9,9 +10,10 @@ async function bufferedPreview(api, path) {
   if (pendingMedia.has(url)) return pendingMedia.get(url);
   const task=(async()=>{
     let cache, response;
-    try {cache=await globalThis.caches?.open('minimax-preview-v1');response=await cache?.match(url);} catch {}
+    try {cache=await globalThis.caches?.open('minimax-preview-v1');response=reloadMedia.has(url)?null:await cache?.match(url);} catch {}
     if (!response) {
-      response=await api.fetchApi(path);
+      response=await api.fetchApi(path,reloadMedia.has(url)?{cache:'reload'}:undefined);
+      reloadMedia.delete(url);
       if (!response.ok) throw new Error('Could not buffer preview. Retry when the connection is available.');
       if(Number(response.headers?.get?.('Content-Length'))>MEDIA_LIMIT){
         await response.body?.cancel?.();
@@ -29,6 +31,13 @@ async function bufferedPreview(api, path) {
   })();
   pendingMedia.set(url,task);
   try{return await task;}finally{pendingMedia.delete(url);}
+}
+
+async function evictPreview(url) {
+  previewMedia.delete(url);
+  reloadMedia.add(url);
+  if(reloadMedia.size>32)reloadMedia.delete(reloadMedia.values().next().value);
+  try {const cache=await globalThis.caches?.open('minimax-preview-v1');await cache?.delete(url);} catch {}
 }
 
 export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions, standalone = false}) {
@@ -73,6 +82,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let project = getTimeline().project_id;
   let statusText='';
   let blobUrl='', warmRevision='';
+  let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value,take_id:takeChoice.value, autoplay: autoplay.checked, open: !panel.hidden});
   const stop = () => {
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
@@ -81,7 +91,9 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   };
   const refreshPreview = async (background = false) => {
     if (disposed || panel.hidden) return;
-    if (background && checking) return;
+    if (background && (checking || recovering && (retryCount > 3 || Date.now() < retryAt))) return;
+    await eviction;
+    if (disposed || panel.hidden) return;
     if (!getTimeline().project_id) {stop();label.textContent = "Connect the Master's project_state output.";return;}
     const token = ++request; controller?.abort(); controller = new AbortController();
     checking = true;
@@ -119,14 +131,16 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       label.textContent=statusText+(video.hidden && source===url?' · Buffering…':'');
       save.href = `${url}&download=1`; save.hidden = false;
       if (url !== source) {
-        stop(); source = url;label.textContent=statusText+' · Buffering…';
+        stop();
+        if (failedRevision !== url) {failedRevision=url;retryCount=0;}
+        recovering=false; source = url;label.textContent=statusText+' · Buffering…';
         void bufferedPreview(api,path).then(blob=>{
           if(disposed || panel.hidden || source!==url)return;
           blobUrl=URL.createObjectURL(blob);video.src=blobUrl;video.load();save.hidden=false;
           video.hidden=false;empty.hidden=true;label.textContent=statusText;
         }).catch(error=>{if(!disposed && source===url){
           if(error.stream){video.src=url;video.load();video.hidden=false;empty.hidden=true;label.textContent=statusText;save.hidden=false;}
-          else {source='';label.textContent=error.message;}
+          else {retryMedia(url, error.message);}
         }});
       }
       // Once generation is idle, prepare the full movie without playing it.
@@ -146,10 +160,19 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       if (token === request) checking = false;
     }
   };
+  const retryMedia = (url, message) => {
+    if (!url || disposed) return;
+    if (failedRevision !== url) {failedRevision=url;retryCount=0;}
+    retryCount++; recovering=true; retryAt=Date.now()+2000*Math.pow(2,retryCount-1);
+    eviction=evictPreview(url);
+    stop();
+    label.textContent=retryCount<=3 ? message+' Retrying…' : message+' Use Refresh to try again.';
+  };
   video.onloadeddata = () => {
+    retryCount=0;recovering=false;
     if (autoplay.checked && !panel.hidden) video.play().catch(() => {});
   };
-  video.onerror = () => { source='';label.textContent = "Preview could not load. Retrying…"; };
+  video.onerror = () => retryMedia(source, "Preview could not load.");
   video.onloadedmetadata = () => {label.textContent=`${statusText} · ${video.videoWidth}×${video.videoHeight}`;node.setDirtyCanvas?.(true, true);};
   const show = async open => {
     panel.hidden = !open; timelinePanel.hidden = open; inspector.hidden = open;
@@ -160,15 +183,15 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   };
   edit.onclick = () => show(false); preview.onclick = () => show(true);
   scope.onchange = () => { stop(); persist(); refreshPreview(); };
-  stream.onchange=()=>{persist();refreshPreview();};
+  stream.onchange=()=>{stop();persist();refreshPreview();};
   quality.onchange=()=>{stop();persist();refreshPreview();};
   takeChoice.onchange=()=>{stop();persist();refreshPreview();};
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };
-  refresh.onclick = () => refreshPreview();
+  refresh.onclick = () => {retryCount=0;retryAt=0;refreshPreview();};
   // Completion websocket messages can be missed. The server owns run-aware
   // eligibility, and stable revision URLs avoid rebuffering unchanged results.
-  const poll = setInterval(() => {if(scope.value!=='take')void refreshPreview(true);}, 2000);
-  const resume=()=>{if(!document.hidden && !disposed && !panel.hidden){if(video.error)source='';void refreshPreview(true);}};
+  const poll = setInterval(() => {if(scope.value!=='take' || recovering)void refreshPreview(true);}, 2000);
+  const resume=()=>{if(!document.hidden && !disposed && !panel.hidden){void refreshPreview(true);}};
   document.addEventListener('visibilitychange',resume);
   globalThis.addEventListener?.('online',resume);
   if (standalone || getOptions().open) show(true);
@@ -177,6 +200,11 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       const options = getOptions();
       scope.value = ['full','take'].includes(options.scope) ? options.scope : "latest";
       quality.value=options.quality || 'original';
+      if (!quality.value) quality.value='original';
+      stream.value=options.stream || 'final';
+      if (!stream.value) stream.value='final';
+      takeChoice.replaceChildren();
+      if(options.take_id){const option=document.createElement('option');option.value=options.take_id;option.textContent='Loading saved take…';takeChoice.append(option);takeChoice.value=options.take_id;}
       autoplay.checked = !!options.autoplay;
       show(standalone || !!options.open);
     },

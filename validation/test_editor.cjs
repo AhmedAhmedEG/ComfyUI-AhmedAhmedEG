@@ -654,6 +654,20 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
     assert(contractRoot.querySelector('.mmx-clip-type-label').className.includes('mmx-badge-'),'Header uses colored code');
     assert(!contractRoot.querySelector('input[type="file"]'));
   }
+  // Generation edits reject accepted dependent takes, while runtime seed advancement does not.
+  const approved={version:2,approval_control_version:1,project_id:'contract_ui',clips:[
+    {id:'first',name:'First',type:'T2V',duration:5,prompt:'old',prompt_mode:'raw',seed:'1',validated:true,continuity_mode:'Independent (No Continuity)'},
+    {id:'second',name:'Second',type:'T2V',duration:5,seed:'2',validated:true,continuity_mode:'Motion Context (Chained)'},
+    {id:'third',name:'Third',type:'T2V',duration:5,seed:'3',validated:true,continuity_mode:'Independent (No Continuity)'}]};
+  for(const kind of ['prompt','seed']) {
+    contractTimeline.value=JSON.stringify(approved);contractNode.__mmxDirectorRefresh();
+    const input=kind==='prompt'?contractRoot.querySelector('textarea[placeholder^="Describe the action"]'):contractRoot.querySelector('[aria-label="Clip Seed"]');
+    assert(input,kind+' input exists');input.value=kind==='prompt'?'new prompt':'99';input[kind==='prompt'?'oninput':'onchange']();
+    assert.deepEqual(JSON.parse(contractTimeline.value).clips.map(c=>c.validated),[false,false,true],kind+' invalidates only the continuity chain');
+  }
+  contractTimeline.value=JSON.stringify(approved);contractNode.__mmxDirectorRefresh();
+  contractNode.__mmxShotHandler({detail:{node:99,project_id:'contract_ui',clip_id:'first',phase:'completed',seed:'1',authored_seed:'1',next_seed:'2'}});
+  assert.deepEqual(JSON.parse(contractTimeline.value).clips.map(c=>c.validated),[true,true,true],'Runtime advancement preserves accepted takes');
   contractNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, editable timecode, persistent zoom, file continuation, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

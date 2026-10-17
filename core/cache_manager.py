@@ -497,6 +497,16 @@ class ProjectCacheManager:
         self.save_manifest()
         return row
 
+    @_locked
+    def admit_first_pass(self, clip_id, generation):
+        """Make an explicitly reused draft reviewable in this run, without copying tensors."""
+        self._manifest = self._load_manifest()
+        row = self._manifest.get('first_pass', {}).get(safe_component(clip_id))
+        if row is None or row.get('generation') != generation:
+            raise ValueError('The staged first pass changed; review the current draft again.')
+        row['preview_run_id'] = self._preview_run_id
+        self.save_manifest()
+
     def load_first_pass(self, clip_id, fingerprint=None):
         self._manifest=self._load_manifest()
         row=self._manifest.get('first_pass',{}).get(safe_component(clip_id))

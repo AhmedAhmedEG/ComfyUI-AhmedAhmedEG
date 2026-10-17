@@ -45,7 +45,7 @@ class ParityExtensions(unittest.TestCase):
         old={'clips':[{'id':'group_7','prompt':'old','validated':True,'seed':'999','continuity_mode':'Latent Carry (Pinned)'}]}
         merged=merge_authored_timeline(old,external)
         self.assertEqual(merged['clips'][0]['prompt'],'builder text')
-        self.assertTrue(merged['clips'][0]['validated']);self.assertEqual(merged['clips'][0]['seed'],'999')
+        self.assertFalse(merged['clips'][0]['validated']);self.assertEqual(merged['clips'][0]['seed'],'999')
         with self.assertRaises(ValueError):merge_authored_timeline(old,{'clips':[{'id':'a'},{'id':'a'}]})
 
     def test_frame_interpolation_preserves_duration_audio_and_endpoints(self):

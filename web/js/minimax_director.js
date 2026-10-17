@@ -2753,7 +2753,9 @@ function mountDirectorUI(node) {
 
   };
 
+  let generationBaseline = null;
   const loadState = () => {
+    generationBaseline = null;
     resolveAvailableRefsFromGraph();
     try {
       if (timelineWidget && timelineWidget.value) {
@@ -2821,7 +2823,7 @@ function mountDirectorUI(node) {
 
   loadState();
 
-  const syncState = () => {
+  const syncState = (acceptRuntime = false) => {
     timelineState.generation_mode ||= "Next shot";
     for (const clip of timelineState.clips || []) {
       clip.continuity_mode ||= "Independent (No Continuity)";
@@ -2831,9 +2833,26 @@ function mountDirectorUI(node) {
     }
     migrateContinuitySources(timelineState);migrateClipApproval(timelineState);
     timelineState.project_id ||= `project_${crypto.randomUUID()}`;
+    // All generation edits pass through this boundary. Runtime notifications
+    // explicitly accept their own seed/source updates without rejecting takes.
+    const keys = ['type','duration','prompt','prompt_mode','structured_prompt','ref_ids',
+      'continuity','continuity_mode','context_length','audio_context_length','continuity_redraw',
+      'tail_seconds','tail_frames','seed','seed_mode','audio_mode','model_override','guides',
+      'loras','color','source','source_start','source_end','group'];
+    const shared = JSON.stringify([timelineState.shared_prompt || '', timelineState.shared_prompt_policy || 'prepend', timelineState.shared_ref_ids || [], builderState]);
+    const current = {project:timelineState.project_id, shared, clips:new Map(timelineState.clips.map(c=>[c.id,JSON.stringify(keys.map(k=>c[k]))]))};
+    let approvalsChanged=false;
+    if (!acceptRuntime && generationBaseline?.project === current.project) {
+      const allChanged = generationBaseline.shared !== shared;
+      for (const clip of timelineState.clips) {
+        if (allChanged || generationBaseline.clips.has(clip.id) && generationBaseline.clips.get(clip.id) !== current.clips.get(clip.id)) {unapproveChain(clip);approvalsChanged=true;}
+      }
+    }
+    generationBaseline = current;
     if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
     if (builderWidget) builderWidget.value = JSON.stringify(builderState);
     updateServerStatus();
+    if (approvalsChanged) renderTimeline();
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
     if (app.graph && app.graph.setDirtyCanvas) app.graph.setDirtyCanvas(true, true);
   };
@@ -5108,7 +5127,7 @@ function mountDirectorUI(node) {
         if(generationWidget) { node.widgets.splice(node.widgets.indexOf(generationWidget),1);node.widgets.unshift(generationWidget); }
       }
     }
-    loadState();
+    loadState(); syncState(true);
     const savedZoom = Number(node.properties?.mmx_timeline_zoom);
     if(Number.isFinite(savedZoom) && savedZoom >= 0.5 && savedZoom <= 3) { zoomLevel=savedZoom; zoomSlider.value=String(savedZoom); }
     renderTimeline();
@@ -5140,8 +5159,8 @@ function mountDirectorUI(node) {
     if(detail.sequence){if(Number(detail.sequence)<progressSequence || (Number(detail.sequence)===progressSequence && !event.snapshot))return;progressSequence=Number(detail.sequence);}
     const runningPhase=['preparing','sampling','refining','decoding','face_refining'].includes(detail.phase);
     if(runningPhase)watchClipProgress();
-    if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState();void refreshClipResults();renderTimeline();renderInspector();return;}
-    if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState();renderTimeline();renderInspector();return; }
+    if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState(true);void refreshClipResults();renderTimeline();renderInspector();return;}
+    if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState(true);renderTimeline();renderInspector();return; }
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
     const phaseLabel=({preparing:'Preparing',sampling:'Generating',refining:'Refining',decoding:'Decoding',face_refining:'Refining Faces',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
     progressLabel.textContent = `${phaseLabel}: ${eventClip?.name || 'Clip '+(timelineState.clips.indexOf(eventClip)+1)}${detail.index ? ` (${detail.index}/${detail.total || timelineState.clips.length})` : ''}`;
@@ -5150,7 +5169,7 @@ function mountDirectorUI(node) {
     if(detail.phase==='source_ready') {
       const clip=timelineState.clips.find(value=>value.id===detail.clip_id);
       if(clip?.source?.ref_id===detail.ref_id && Number(clip.source_start || 0)===Number(detail.requested_start || 0) && (clip.source_end ?? null)===(detail.requested_end ?? null)) {
-        clip.source_end=detail.end;clip.duration=detail.duration;syncState();renderTimeline();
+        clip.source_end=detail.end;clip.duration=detail.duration;syncState(true);renderTimeline();
       }
     }
     if (detail.phase === "completed") {
@@ -5161,7 +5180,7 @@ function mountDirectorUI(node) {
         clip.refine_pending=false;clip.refine_approved=false;
         clip.last_seed = detail.seed;
         if (String(clip.seed ?? detail.authored_seed) === detail.authored_seed) clip.seed = detail.next_seed;
-        syncState(); renderInspector();
+        syncState(true); renderInspector();
       }
     }
   };
