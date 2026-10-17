@@ -2113,12 +2113,12 @@ const embeddedCSS = `
 .mmx-director-root .mmx-toolbar { gap:5px; }
 .mmx-director-root .mmx-action-btn { padding:4px 7px; border-radius:3px; }
 .mmx-director-root .mmx-track-header-cell { width:112px; min-width:112px; font-size:10px; }
-.mmx-director-root .mmx-shot-block { height:112px; padding:7px 8px; background:#20262e; }
+.mmx-director-root .mmx-shot-block { height:152px; padding:7px 8px; background:#20262e; }
 .mmx-director-root .mmx-shot-block.active { background:#263341!important; border-color:#92adc3!important; box-shadow:none; }
 .mmx-director-root .mmx-shot-prompt-preview { white-space:normal; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45; font-size:12px; }
 .mmx-director-root .mmx-shot-cover { width:100%; height:54px; object-fit:contain; background:#15191e; flex-shrink:0; }
 .mmx-director-root .mmx-shot-block:has(.mmx-shot-cover) .mmx-shot-prompt-preview { -webkit-line-clamp:2; }
-.mmx-director-root .mmx-add-clip-card { height:112px; border-radius:2px; }
+.mmx-director-root .mmx-add-clip-card { height:152px; border-radius:2px; }
 .mmx-director-root .mmx-inspector { flex:0 0 auto; gap:7px; }
 .mmx-director-root .mmx-prompt-inspector { flex:0 0 auto; min-height:0; }
 .mmx-director-root .mmx-prompt-inspector > .mmx-textarea { flex:none!important; height:136px!important; min-height:100px!important; max-height:300px; resize:vertical; border-radius:3px; padding:9px; font:12px/1.55 ui-monospace,Consolas,monospace; }
@@ -2335,7 +2335,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-inspector-header .mmx-audio-control {display:flex;align-items:center;gap:10px;white-space:nowrap;}
 @container (max-width:680px) {.mmx-director-root .mmx-inspector-header {grid-template-columns:1fr;}.mmx-director-root .mmx-clip-header-actions {grid-template-columns:repeat(3,1fr);}.mmx-director-root .mmx-clip-header-actions > button:first-child {grid-column:auto;}}
 
-.mmx-director-root .mmx-continuity-link {position:absolute;top:45px;width:28px;height:24px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;z-index:6;color:#9fc4d9;background:transparent;border:0;pointer-events:auto;}
+.mmx-director-root .mmx-continuity-link {position:absolute;top:64px;width:28px;height:24px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;z-index:6;color:#9fc4d9;background:transparent;border:0;pointer-events:auto;}
 .lg-node-widgets:has(.mmx-director-root:not(.mmx-preview-node)) > .lg-node-widget:not(:has(.mmx-director-root,input,textarea,select,button,[role="combobox"])) {display:none!important;}
 .mmx-director-root:not(.mmx-preview-node) > .mmx-inspector {flex:1 0 auto;min-height:480px;display:flex;flex-direction:column;}
 .mmx-director-root .mmx-edit-workspace {flex:1;min-height:360px;align-items:stretch;}
