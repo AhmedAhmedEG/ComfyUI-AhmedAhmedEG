@@ -435,7 +435,7 @@
       "extra": "",
       "control_descriptions": {
         "refmod_library": "Selected RefMod descriptors supplied by the dedicated RefMod Library.",
-        "asset_edits": "Editor-managed slot adjustments and uploaded pack assets: crop, grading, trim, frame selection and scaling."
+        "asset_edits": "Editor-managed adjustments for connected reference slots: crop, grading, trim, frame selection and scaling. Add assets through input nodes; Reset Settings resets the selected reference."
       },
       "output_descriptions": [
         "Reference pool with asset identifiers and pack count."

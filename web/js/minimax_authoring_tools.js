@@ -202,10 +202,10 @@ function assets(node){
     }
     if(!origin)return '';
     if(!watched.has(origin)){watched.add(origin);for(const w of origin.widgets || []){
-      if(!['image','video','audio','filename'].includes(w.name))continue;
+      if(!['image','video','audio','filename','file'].includes(w.name))continue;
       const callback=w.callback;w.callback=function(...args){const result=callback?.apply(this,args);draw();return result;};
     }}
-    const filename=origin.widgets?.find(w=>['image','video','audio','filename'].includes(w.name) && typeof w.value==='string')?.value;
+    const filename=origin.widgets?.find(w=>['image','video','audio','filename','file'].includes(w.name) && typeof w.value==='string')?.value;
     return filename || '';
   }
   const draw=()=>{list.replaceChildren();const slots=(node.inputs || []).filter(i=>/^(image|video|audio)_\d+$/.test(i.name) && i.link!=null).map(i=>({id:i.name,type:i.name.split('_')[0],filename:sourceFilename(i.name),settings:data.assets[i.name] ||= {}}));for(const f of data.files)slots.push({id:f.id,type:f.type,filename:f.filename,settings:f,file:true});
@@ -249,7 +249,6 @@ function assets(node){
       if(asset.type==='video'){
         choice(box,'Use Video As',[['both','Video + Audio'],['video','Video Only'],['audio','Audio Only'],['frame','Single Frame']],a.media_mode || 'both',v=>{change('media_mode',v);draw();});
         if(a.media_mode==='frame')input(box,'Picked Frame (Seconds After Trim)','number',a.frame_time || 0,v=>change('frame_time',Number(v)));
-        if(asset.file && media)button(box,'Add Current Frame As Image',async()=>{const result=await request('/minimax_director/media/frame',{filename:asset.filename,time:media.currentTime});data.files.push({id:'asset_'+crypto.randomUUID(),name:'Picked Frame',type:'image',filename:result.filename,scaling:'Off'});save();draw();});
       }
       if(asset.type!=='audio'){
         const adjustments=element('details');adjustments.className='mmx-asset-adjustments';adjustments.append(element('summary','Color Adjustments'));box.append(adjustments);
@@ -267,13 +266,10 @@ function assets(node){
         const crop=a.crop || {x:0,y:0,width:1,height:1};for(const key of ['x','y','width','height']){const e=input(cropping,key[0].toUpperCase()+key.slice(1),'number',crop[key],v=>{a.crop={...crop,[key]:Number(v)};Object.assign(crop,a.crop);save();});e.min=0;e.max=1;e.step=.01;}
         if(media && !peopleMode){const preview=element('div');preview.style.cssText='position:relative;width:fit-content;max-width:100%;margin:0 auto';media.replaceWith(preview);preview.append(media);const overlay=element('div');overlay.style.cssText=`position:absolute;pointer-events:none;border:2px solid #67c7ff;background:#67c7ff18;box-sizing:border-box;left:${crop.x*100}%;top:${crop.y*100}%;width:${crop.width*100}%;height:${crop.height*100}%`;overlay.hidden=!a.crop;preview.append(overlay);let origin=null;media.style.cursor='crosshair';media.onpointerdown=e=>{const r=media.getBoundingClientRect();origin=[Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];media.setPointerCapture(e.pointerId);e.preventDefault();};media.onpointerup=e=>{if(!origin)return;const r=media.getBoundingClientRect();const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));a.crop={x:Math.min(x,origin[0]),y:Math.min(y,origin[1]),width:Math.abs(x-origin[0]),height:Math.abs(y-origin[1])};origin=null;if(a.crop.width>.005 && a.crop.height>.005){save();draw();}else delete a.crop;};}
       }
-      button(box,'Reset Asset Adjustments',()=>{if(asset.file){const identity={id:a.id,type:a.type,filename:a.filename,name:a.name};Object.keys(a).forEach(k=>delete a[k]);Object.assign(a,identity);}else data.assets[asset.id]={};save();draw();});
       if(asset.file)button(box,'Remove Asset',()=>{data.files=data.files.filter(f=>f.id!==asset.id);save();draw();});
-    }root.__status.textContent=`${slots.length} References`;};
-  async function upload(file){const form=new FormData();form.append('file',file,file.name);const r=await api.fetchApi('/minimax_director/media/upload',{method:'POST',body:form});const result=await r.json();if(!r.ok)throw Error(result.error || 'Upload failed');selected='asset_'+crypto.randomUUID();const type=result.media_type || (/\.(mp4|mov|webm|mkv)$/i.test(file.name)?'video':/\.(wav|mp3|flac|ogg)$/i.test(file.name)?'audio':'image');data.files.push({id:selected,type,name:file.name,filename:[result.subfolder,result.name].filter(Boolean).join('/'),scaling:type==='video'?'Megapixels':'Off',megapixels:.5,media_mode:'both'});save();draw();}
-  const files=document.createElement('input');files.type='file';files.multiple=true;files.accept='image/*,video/*,audio/*';files.onchange=async()=>{try{for(const file of files.files)await upload(file);}catch(e){root.__status.textContent=e.message;}};field(root,'Add Pack Files',files);
-  root.ondragover=e=>e.preventDefault();root.ondrop=async e=>{e.preventDefault();for(const file of e.dataTransfer.files)await upload(file);};root.onpaste=async e=>{const items=[...(e.clipboardData?.files || [])];if(items.length){e.preventDefault();for(const f of items)await upload(f);}};
-  node.__mmxReload=()=>{data=JSON.parse(value(node,'asset_edits','{}'));data.assets ||= {};data.files ||= [];hideNative();for(const i of node.inputs || [])if(/^video_\d+$/.test(i.name))i.type='VIDEO,IMAGE';node.widgets_start_y=undefined;const minimum=node.computeSize?.();if(minimum && node.size?.[1]>minimum[1]+160)node.setSize?.([Math.max(600,node.size[0]),minimum[1]]);draw();queueMicrotask(draw);};button(root,'Refresh References',draw);draw();const original=node.onConnectionsChange;node.onConnectionsChange=function(...args){const result=original?.apply(this,args);hideNative();draw();return result;};
+    }reset.disabled=!slots.length;root.__status.textContent=`${slots.length} References`;};
+  const reset=button(root,'Reset Settings',()=>{const file=data.files.find(f=>f.id===selected);if(file){const identity={id:file.id,type:file.type,filename:file.filename,name:file.name};Object.keys(file).forEach(k=>delete file[k]);Object.assign(file,identity);}else if(selected)data.assets[selected]={};save();draw();});
+  node.__mmxReload=()=>{data=JSON.parse(value(node,'asset_edits','{}'));data.assets ||= {};data.files ||= [];hideNative();for(const i of node.inputs || [])if(/^video_\d+$/.test(i.name))i.type='VIDEO,IMAGE';node.widgets_start_y=undefined;const minimum=node.computeSize?.();if(minimum && node.size?.[1]>minimum[1]+160)node.setSize?.([Math.max(600,node.size[0]),minimum[1]]);draw();queueMicrotask(draw);};draw();const original=node.onConnectionsChange;node.onConnectionsChange=function(...args){const result=original?.apply(this,args);hideNative();draw();return result;};
 }
 
 function exporter(node){const root=mount(node,'Choose Clips To Export');const getMaster=masterPicker(root,node);const list=element('div');root.append(list);button(root,'Refresh Clips',()=>{const timeline=state(getMaster());const ids=new Set(String(value(node,'clip_ids')).split(',').filter(Boolean));list.replaceChildren();for(const clip of timeline.clips || []){const check=document.createElement('input');check.type='checkbox';check.checked=ids.has(clip.id);field(list,clip.name || clip.id,check);check.onchange=()=>{check.checked?ids.add(clip.id):ids.delete(clip.id);const w=widget(node,'clip_ids');w.value=[...ids].join(',');w.callback?.(w.value);};}root.__status.textContent='Set Selection To clip_ids To Use These Checks';});}
