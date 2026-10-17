@@ -86,6 +86,19 @@ class MemoryRetention(unittest.TestCase):
             run()
             self.assertFalse(list(Path(root).glob('*.mmap')))
 
+    def test_latest_output_reuses_its_private_mapped_clip_without_assembly(self):
+        from core.output_retention import assemble_frames
+        with tempfile.TemporaryDirectory() as root:
+            manager=ProjectCacheManager('single',root)
+            original=torch.rand((22,32,64,3))
+            manager.store_clip_results('one','fixture',None,decoded_frames=original)
+            view=manager.load_clip_frames('one')[5:]
+            output=assemble_frames([view],root,reuse_single=True)
+            self.assertIs(output,view)
+            self.assertFalse(list(Path(root).glob('*.mmap')),'Latest output must not allocate a second output file')
+            output.zero_()
+            self.assertTrue(torch.equal(manager.load_clip_frames('one'),original))
+
     def test_legacy_frames_fallback_does_not_change_pixels(self):
         with tempfile.TemporaryDirectory() as root:
             path=Path(root)/'legacy.pt';pixels=torch.rand((5,8,8,3))

@@ -121,9 +121,13 @@ Connect IMAGE/AUDIO/FPS to Video Combine for previews and codec export. Video
 Output creates a native VIDEO object. Connect `project_state` to Project Video
 for cached disk assembly, individual shots, selected/all output, pre-refine
 inspection or original-source output. Project tools can create this connection.
-Disk assembly loads one cached shot at a time; the Master IMAGE preview still
-materializes its selected sequence in memory. Temporal refinement stages its
-complete output/noise in host RAM and enforces a memory budget.
+Disk assembly reads one mapped cached shot at a time and reuses unchanged
+encoded segments. Master assembles IMAGE output in bounded frame windows;
+large outputs use temporary disk-backed storage instead of one giant RAM
+allocation. Latest output avoids assembling the complete sequence. Models,
+current-clip decoding and continuity tails still require working RAM/VRAM.
+Temporal refinement stages its complete output/noise in host RAM and enforces
+a memory budget.
 
 Video Combine provides PyAV hardware/software codec selection, MP4/MKV/WebM,
 H.264/H.265/VP9/AV1, actual 10-bit input, animated WebP/AVIF, requested audio

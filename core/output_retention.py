@@ -25,7 +25,7 @@ def process_video_frames(frames, directory, operation):
     return output
 
 
-def assemble_frames(chunks, directory, canvas=None):
+def assemble_frames(chunks, directory, canvas=None, reuse_single=False):
     """Copy bounded frame windows into one budgeted IMAGE output, RAM or disk."""
     import torch
     import torch.nn.functional as F
@@ -33,6 +33,10 @@ def assemble_frames(chunks, directory, canvas=None):
     from .memory_lifecycle import reclaim_host_memory
     if not chunks:
         raise ValueError('No decoded frames to assemble.')
+    if reuse_single and len(chunks) == 1 and canvas is None:
+        # Master already owns a private mapped take (or staged pixels). Latest
+        # output can expose its trimmed view without copying the clip again.
+        return chunks[0]
     height = max(int(f.shape[1]) for f in chunks)
     width = max(int(f.shape[2]) for f in chunks)
     if canvas is not None:

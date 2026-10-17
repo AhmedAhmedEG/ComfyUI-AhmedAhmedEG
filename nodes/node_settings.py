@@ -48,7 +48,7 @@ class MiniMaxH3DirectorSettings:
                 "canvas_policy": (["manual", "original", "auto"], {"default": "manual", "tooltip": "Manual uses width/height; Original follows source dimensions; Auto uses megapixels/aspect."}),
                 "canvas_megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.1, "tooltip": "Used only by Auto canvas."}),
                 "canvas_aspect": (["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3", "auto"], {"default": "16:9", "tooltip": "Used only by Auto canvas; auto follows source aspect."}),
-                "decoded_output": (["full","latest"], {"default":"full","tooltip":"Latest retains only the last decoded clip in Master outputs. All takes still save to disk for Smart Preview and Project Video; use for large batches."}),
+                "decoded_output": (["full","latest"], {"default":"latest","tooltip":"Latest returns the last clip as raw frames; all generated clips still save for Smart Preview and Project Video. Full assembles every output clip and uses disk-backed storage for large batches."}),
             },
         }
 
@@ -81,7 +81,7 @@ class MiniMaxH3DirectorSettings:
         canvas_policy: str = "manual",
         canvas_megapixels: float = 1.0,
         canvas_aspect: str = "16:9",
-        decoded_output: str = "full",
+        decoded_output: str = "latest",
         **kwargs,
     ) -> Tuple[Dict[str, Any]]:
         if generation_mode is not None:

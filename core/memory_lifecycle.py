@@ -70,10 +70,14 @@ def log_memory_boundary(phase, clip_id, policy):
             key, _, value = line.partition(':')
             if key in ('VmRSS', 'VmHWM', 'VmSwap'):
                 fields[key] = round(int(value.split()[0]) / 1024, 1)
+        for line in Path('/proc/self/smaps_rollup').read_text().splitlines():
+            key, _, value = line.partition(':')
+            if key in ('Anonymous', 'Pss_File'):
+                fields[key] = round(int(value.split()[0]) / 1024, 1)
         import torch
         if torch.cuda.is_available():
-            fields['cuda_allocated'] = round(torch.cuda.memory_allocated() / 1048576, 1)
-            fields['cuda_reserved'] = round(torch.cuda.memory_reserved() / 1048576, 1)
+            fields['torch_cuda_allocated'] = round(torch.cuda.memory_allocated() / 1048576, 1)
+            fields['torch_cuda_reserved'] = round(torch.cuda.memory_reserved() / 1048576, 1)
         log.info('Memory %s clip=%s output=%s MiB=%s', phase, clip_id, policy, fields)
     except (OSError, ImportError, AttributeError, ValueError):
         pass

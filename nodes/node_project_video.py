@@ -69,20 +69,20 @@ class MiniMaxH3ProjectVideo:
             if stream=='first_pass':
                 meta=manager._manifest.get('first_pass',{}).get(cid)
                 if not meta: raise ValueError(f'Clip {cid} has no first pass.')
-                frames=manager._load_tensor_file(manager._clip_artifact_path(cid,'draft_frames',meta['generation']))
+                frames=manager._load_tensor_file(manager._clip_artifact_path(cid,'draft_frames',meta['generation']), mmap=True)
                 audio=manager._load_tensor_file(manager._clip_artifact_path(cid,'draft_audio',meta['generation']))
             elif stream=='refine_pass':
                 meta=manager._manifest.get('clips',{}).get(cid,{})
                 row=next((r for r in meta.get('refine_passes',[]) if r['pass']==refine_pass),None)
                 if row is None: raise ValueError(f'Clip {cid} has no refinement pass {refine_pass}.')
-                frames=manager._load_tensor_file(os.path.join(manager.project_dir,row['frames']))
+                frames=manager._load_tensor_file(os.path.join(manager.project_dir,row['frames']), mmap=True)
                 audio=manager._load_tensor_file(os.path.join(manager.project_dir,row['audio']))
 
             # Locked pack footage is cached in its original canvas. Reuse it
             # without requiring a live graph or an invented file on disk.
             metadata=manager._manifest.get('clips',{}).get(cid,{})
             if original and metadata.get('has_source'):
-                frames=manager._load_tensor_file(manager._clip_artifact_path(cid,'source_frames',metadata.get('generation')))
+                frames=manager._load_tensor_file(manager._clip_artifact_path(cid,'source_frames',metadata.get('generation')), mmap=True)
                 audio=manager._load_tensor_file(manager._clip_artifact_path(cid,'source_audio',metadata.get('generation')))
             if original and not metadata.get('has_source') and not shot.get('locked') or frames is None:
                 source=source_range(shot,state,int(state.get('width',1344)),int(state.get('height',768)),

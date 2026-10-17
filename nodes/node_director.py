@@ -444,6 +444,9 @@ class MiniMaxH3MasterDirector:
                         cached_frames = cached_frames[-1:]
                     if cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("imported_from")=="tritant":
                         cached_frames=edit_images(cached_frames,clip_item.get("color"))
+                # Latent-only approved imports need the same bounded RGB
+                # lifetime as newly generated clips when repairing media.
+                cached_frames = spill_frames(cached_frames, cache_mgr.project_dir)
                 if cached_audio is None:
                     cached_audio = decode_audio_latent(audio_vae, a_saved) if audio_vae and a_saved is not None and canon_mode != MODE_INPAINT else {"waveform": torch.zeros((1,2,round(cached_frames.shape[0]/FPS*48000))),"sample_rate":48000}
                     meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
@@ -455,6 +458,7 @@ class MiniMaxH3MasterDirector:
                         raise ValueError("The approved take's original soundtrack is missing or changed. Restore its saved audio or original source.")
                     cached_audio = choose_audio(saved_audio_mode, cached_audio, source, cached_frames.shape[0])
                 cache_mgr.restore_clip_media(clip_id, cached_frames, cached_audio)
+                cached_frames = cache_mgr.load_clip_frames(clip_id)
             if cached_frames is not None and cached_audio is not None:
                 last_latent = cached_latent
                 previous_av = cached_latent
@@ -484,6 +488,7 @@ class MiniMaxH3MasterDirector:
                     "tail_audio": cached_tail_aud,
                 }
                 run_report.append({"clip_id": clip_id, "action": "cached", "frames": int(cached_frames.shape[0])})
+                current_resources().release_spills()
                 return True
             return False
 
@@ -779,7 +784,8 @@ class MiniMaxH3MasterDirector:
             if clip_item.get("locked"):
                 if source is None:
                     raise ValueError("Locked source shots require a real source video range.")
-                frames = source["frames"]
+                frames = spill_frames(source["frames"], cache_mgr.project_dir)
+                source["frames"] = frames
                 audio = choose_audio("mute" if str(audio_mode).lower() == "mute" else "source", source["audio"], source, frames.shape[0])
                 all_decoded_frames.append(frames); all_decoded_audios.append(audio); completed_clips.append(clip_item)
                 clip_chained_flags[clip_idx] = False
@@ -1015,7 +1021,8 @@ class MiniMaxH3MasterDirector:
                 low_carry = None
                 if source is None:
                     raise ValueError(f"Unselected shot {clip_id!r} has no matching cache or real source range to fill it.")
-                frames = source["frames"]
+                frames = spill_frames(source["frames"], cache_mgr.project_dir)
+                source["frames"] = frames
                 audio = choose_audio("mute" if str(audio_mode).lower() == "mute" else "source",
                     source["audio"], source, frames.shape[0])
                 all_decoded_frames.append(frames)
@@ -1096,6 +1103,7 @@ class MiniMaxH3MasterDirector:
                         sigmas=sigmas,
                     )
 
+            current_resources().release_transients()
             if confirm_first and not clip_item.get('refine_approved',False):
                 shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
                 v_first,a_first=extract_streams_from_av_latent(sampled_latent)
@@ -1359,7 +1367,7 @@ class MiniMaxH3MasterDirector:
                 from ..core.output_retention import assemble_frames
             except ImportError:
                 from core.output_retention import assemble_frames
-            final_frames = assemble_frames(standardized_frames, cache_mgr.project_dir)
+            final_frames = assemble_frames(standardized_frames, cache_mgr.project_dir, reuse_single=True)
             final_audio = concatenate_audio_clips(standardized_audios, target_sample_rate=48000, crossfade_ms=0,
                 enable_gain_match=timeline.get("audio_gain_match", True), enable_declick=timeline.get("audio_fade_ms", 15) > 0,
                 seam_fade_ms=float(timeline.get("audio_fade_ms", 15))) if standardized_audios else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}

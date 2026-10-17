@@ -218,7 +218,7 @@ class ProjectCacheManager:
     def load_clip_pre_refine(self, clip_id):
         if not self._manifest.get("clips", {}).get(clip_id, {}).get("has_pre_refine"):
             return None
-        return self._load_tensor_file(self._clip_artifact_path(clip_id, "pre_refine"))
+        return self._load_tensor_file(self._clip_artifact_path(clip_id, "pre_refine"), mmap=True)
 
     @_locked
     def is_clip_cached_and_valid(self, clip_id: str, current_fingerprint: str) -> bool:
@@ -325,8 +325,9 @@ class ProjectCacheManager:
         return None
 
     @staticmethod
-    def _load_tensor_file(path):
+    def _load_tensor_file(path, mmap=False):
         if not os.path.isfile(path): return None
+        if mmap: return load_frame_tensor(path)
         return torch.load(path, map_location="cpu", weights_only=True)
 
     @_locked

@@ -131,3 +131,11 @@ class TestDirectorSettings(CacheIsolatedTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EfficientOutputDefault(unittest.TestCase):
+    def test_new_settings_default_to_latest_and_full_remains_explicit(self):
+        from nodes.node_settings import MiniMaxH3DirectorSettings
+        node=MiniMaxH3DirectorSettings()
+        self.assertEqual(node.build_config()[0]['decoded_output'],'latest')
+        self.assertEqual(node.build_config(decoded_output='full')[0]['decoded_output'],'full')

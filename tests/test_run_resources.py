@@ -33,3 +33,13 @@ class RunResourceContracts(unittest.TestCase):
             self.assertIsNone(current_resources())
         self.assertIsNot(owners[0], owners[1])
         self.assertTrue(all(not owner.models for owner in owners))
+
+    def test_sampling_remask_wrappers_are_released_before_vae(self):
+        release=Mock()
+        owner=RunResources();patcher=object()
+        with patch.object(owner,'_release_model',release):
+            owner.track_transient(patcher);owner.track_transient(patcher)
+            self.assertEqual(len(owner.transient_models),1)
+            owner.release_transients()
+            release.assert_called_once_with(patcher)
+            self.assertFalse(owner.transient_models)

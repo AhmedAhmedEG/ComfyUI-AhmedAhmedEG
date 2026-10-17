@@ -244,7 +244,7 @@
         "manual",
         1,
         "16:9",
-        "full"
+        "latest"
       ],
       "widgets_values_named": {
         "width": 960,
@@ -261,7 +261,7 @@
         "canvas_policy": "manual",
         "canvas_megapixels": 1,
         "canvas_aspect": "16:9",
-        "decoded_output": "full"
+        "decoded_output": "latest"
       }
     },
     {

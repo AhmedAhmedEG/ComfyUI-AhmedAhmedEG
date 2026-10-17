@@ -15,6 +15,7 @@ class RunResources:
     def __init__(self):
         self.models = OrderedDict()
         self.paths = []
+        self.transient_models = []
 
     def get(self, model, shift_video, shift_audio):
         from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
@@ -34,9 +35,20 @@ class RunResources:
         return any(shifted is model for _, shifted in self.models.values())
 
     def clear(self):
+        self.release_transients()
         for _, shifted in self.models.values():
             self._release_model(shifted)
         self.models.clear()
+
+    def track_transient(self, model):
+        if not self.holds(model) and all(item is not model for item in self.transient_models):
+            self.transient_models.append(model)
+        return model
+
+    def release_transients(self):
+        for model in self.transient_models:
+            self._release_model(model)
+        self.transient_models.clear()
 
     @staticmethod
     def _release_model(model):
