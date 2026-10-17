@@ -45,16 +45,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             entry=next((r for r in meta.get("refine_passes",[]) if r["pass"]==int(stream[5:])),None)
             if entry is None: continue
             direct_frames,direct_audio=entry["frames"],entry["audio"]
-        if scope != 'take':
-            generation = meta.get('generation')
-            fresh = bool(meta.get('preview_run_id') and
-                         meta['preview_run_id'] == manager._manifest.get('preview_run_id'))
-            rejected = generation and generation == shot.get('invalidated_generation')
-            # Fresh results stay reviewable before approval. Old unapproved takes
-            # remain on disk and in Saved Take, but do not enter the current movie.
-            if not shot.get('locked') and (rejected or
-                    shot.get('validated') is False and not fresh):
-                continue
+        # Approval controls Master regeneration, not saved-result visibility.
+        # Only the live queue context may exclude a take being replaced.
         if not meta.get("has_frames"):
             source = shot.get("source")
             if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):

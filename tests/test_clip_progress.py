@@ -7,9 +7,24 @@ from core import progress
 
 
 class ClipProgress(unittest.TestCase):
+    def test_next_clip_does_not_hide_unscheduled_unapproved_results(self):
+        import json
+        shots=[{'id':cid,'validated':False} for cid in ('one','two','three')]
+        graph={'5':{'class_type':'MiniMaxH3MasterNode','inputs':{'generation_mode':'Next clip',
+            'timeline_data':json.dumps({'project_id':'next-preview','clips':shots})}}}
+        queue=Mock();queue.get_current_queue.return_value=([],[(1,'queued-next',graph,{})])
+        self.assertEqual(progress.preview_run_context('next-preview',shots,queue)['clip_ids'],['two','three'])
+        queue.get_current_queue.return_value=([(1,'queued-next',graph,{})],[])
+        server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
+        with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):
+            progress.shot_event('5','next-preview','one','completed')
+            self.assertEqual(progress.preview_run_context('next-preview',shots,queue)['clip_ids'],['one','two','three'])
+        graph['5']['inputs']['generation_mode']='Conditioning only'
+        self.assertEqual(progress.preview_run_context('next-preview',shots,queue)['clip_ids'],['one','two','three'])
+
     def test_live_preview_excludes_future_cached_clips_and_old_run_state(self):
         shots=[{'id':'one'},{'id':'two'},{'id':'three'}]
-        graph={'5':{'class_type':'MiniMaxH3MasterNode','inputs':{'timeline_data':'{"project_id":"preview-scope"}'}}}
+        graph={'5':{'class_type':'MiniMaxH3MasterNode','inputs':{'generation_mode':'All clips','timeline_data':'{"project_id":"preview-scope"}'}}}
         queue=Mock();queue.get_current_queue.return_value=([(1,'current',graph,{})],[])
         server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
         with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):

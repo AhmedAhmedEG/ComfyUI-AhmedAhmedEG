@@ -12,6 +12,48 @@ from core.preview import create_preview_plan, encode_preview, preview_path
 
 
 class SmartPreview(unittest.TestCase):
+    def test_all_saved_results_survive_approval_changes_and_run_epochs(self):
+        for index, cid in enumerate(('three', 'four')):
+            self.manager.begin_preview_run()
+            self.manager.store_clip_results(cid, cid, {'samples': torch.zeros((1, 1, 2, 4, 4))},
+                decoded_frames=torch.ones((12, 32, 64, 3))*(index+.3))
+        self.state['clips'] = [{'id': cid, 'validated': False} for cid in ('one','two','three','four')]
+        self.manager.begin_preview_run()  # Starting another run must not erase saved-result visibility.
+        generation = self.manager._manifest['clips']['four']['generation']
+        self.state['clips'][-1]['invalidated_generation'] = generation
+        before = self.plan('full')
+        self.assertEqual(before['clip_ids'], ['one','two','three','four'])
+        self.state['clips'][0]['validated'] = True
+        after = self.plan('full')
+        self.assertEqual(before['key'], after['key'], 'Approval changes must not change preview contents or revision')
+        with av.open(self.encode(after)) as video:
+            self.assertEqual(sum(1 for _ in video.decode(video=0)), 45)
+
+    def test_full_and_latest_update_after_each_clip_in_one_running_job(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from core import progress
+        self.state['clips'] = [{'id': cid, 'validated': False} for cid in ('one','two','three','four')]
+        graph = {'5': {'class_type':'MiniMaxH3MasterNode', 'inputs': {
+            'generation_mode':'All clips', 'timeline_data':json.dumps(self.state)}}}
+        queue=Mock();queue.get_current_queue.return_value=([(1,'dynamic-four',graph,{})],[])
+        server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
+        with patch.dict('sys.modules', {'server':SimpleNamespace(PromptServer=server)}):
+            for index, shot in enumerate(self.state['clips']):
+                cid=shot['id'];progress.shot_event('5','preview_test',cid,'sampling')
+                context=progress.preview_run_context('preview_test',self.state['clips'],queue)
+                self.assertNotIn(cid,context['clip_ids'])
+                self.manager.store_clip_results(cid, 'replacement', {'samples':torch.zeros((1,1,2,4,4))},
+                    decoded_frames=torch.ones((5,32,64,3))*.5)
+                progress.shot_event('5','preview_test',cid,'completed')
+                context=progress.preview_run_context('preview_test',self.state['clips'],queue)
+                full=create_preview_plan(self.state,'full',self.temp.name,run_context=context)
+                latest=create_preview_plan(self.state,'latest',self.temp.name,run_context=context)
+                self.assertEqual(full['clip_count'],index+1)
+                self.assertEqual(latest['clip_ids'],[cid])
+                with av.open(self.encode(full)) as video:
+                    self.assertEqual(sum(1 for _ in video.decode(video=0)),5*(index+1))
+
     def setUp(self):
         torch.set_num_threads(2)
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)

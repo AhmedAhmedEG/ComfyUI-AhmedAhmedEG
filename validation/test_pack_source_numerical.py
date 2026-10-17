@@ -45,18 +45,18 @@ class PackSourceNumerical(unittest.TestCase):
             old=manager._manifest['clips']['one']['generation']
             old_latent=manager.get_clip_latent_path('one')
             manager.begin_preview_run()
-            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['two'])
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
             manager.store_clip_results('one','new',{'samples':torch.ones((1,2))},self.audio,self.frames[:24])
             fresh=manager._manifest['clips']['one']['generation']
             self.assertNotEqual(old,fresh)
             self.assertTrue(Path(old_latent).is_file(),'Regeneration preserves saved-take history')
             self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
             state['clips'][0]['invalidated_generation']=fresh
-            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['two'])
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
             self.assertTrue(Path(manager.get_clip_latent_path('one')).is_file(),'Unapproval does not delete latent')
             self.assertTrue(create_preview_plan(state,'take',folder,take_id=fresh)['found'])
             manager.begin_preview_run()
-            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['two'])
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
 
     def test_pool_megapixels_reach_model_frames_for_graph_and_files(self):
         from core.asset_editor import prepare_pack
