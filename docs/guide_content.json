@@ -92,7 +92,7 @@
         "seed": "Baseline sampling-noise seed. Per-shot seed settings can override it; fixing the seed alone does not reproduce a take after changing other effective inputs.",
         "generation_mode": "Read the Generation mode section above for scheduling, cache reuse and the external-sampler behavior of Conditioning only.",
         "continuity_mode": "Read the Continuity section above for the separate Independent, Motion Context, Latent Carry and Tail Handoff algorithms.",
-        "decoded_output": "Full assembles direct decoded Master output as before. Latest retains only the latest clip there; all generated takes remain on disk for Full Video in Smart Preview and Project Video export."
+        "decoded_output": "Latest is the default and returns the last clip as raw frames. All Clips still generates and saves every clip for Smart Preview and Project Video. Full assembles the selected sequence into a large disk-backed IMAGE batch."
       },
       "output_descriptions": [
         "Configuration consumed by the Master config input."

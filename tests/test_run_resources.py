@@ -43,3 +43,14 @@ class RunResourceContracts(unittest.TestCase):
             owner.release_transients()
             release.assert_called_once_with(patcher)
             self.assertFalse(owner.transient_models)
+
+    def test_decode_boundary_releases_residency_but_reuses_wrapper(self):
+        factory=Mock(side_effect=lambda *args:(object(),))
+        native=SimpleNamespace(MiniMaxH3SigmaShift=SimpleNamespace(execute=factory))
+        with patch.dict('sys.modules',{'comfy_extras.nodes_minimax_h3':native}):
+            owner=RunResources();parent=object();shifted=owner.get(parent,12.,3.)
+            with patch.object(owner,'_release_model') as release:
+                owner.offload_sampling_models()
+                release.assert_called_once_with(shifted)
+            self.assertIs(owner.get(parent,12.,3.),shifted)
+            self.assertEqual(factory.call_count,1)

@@ -1002,13 +1002,16 @@ class MiniMaxH3MasterDirector:
             if confirm_first and staged is None: clip_item['refine_approved']=False
             refine_pass_rows=[]
             def capture_refine_pass(number, pass_latent):
+                current_resources().offload_sampling_models()
                 video_pass,audio_pass=extract_streams_from_av_latent(pass_latent)
                 pass_frames=decode_video_latent(video_vae,video_pass)
                 end=source['frames'].shape[0] if source is not None else int(is_chained_from_previous)+visible_frames if continuation_prefix else pass_frames.shape[0]
-                pass_frames=pass_frames[:end]
+                pass_frames=spill_frames(pass_frames[:end],cache_mgr.project_dir)
                 pass_audio=decode_audio_latent(audio_vae,audio_pass) if audio_vae else {'waveform':torch.zeros((1,2,round(pass_frames.shape[0]/FPS*48000))),'sample_rate':48000}
                 pass_audio=choose_audio(audio_mode,pass_audio,source,pass_frames.shape[0])
                 refine_pass_rows.append(cache_mgr.store_refine_pass(clip_id,number,pass_frames,pass_audio))
+                pass_frames=None
+                current_resources().release_spills()
 
             # Compatibility for explicit legacy selection-filter API requests.
             skip_requested = bool(timeline.get("run_selection", False)) and not clip_item.get("selected", False)
@@ -1105,11 +1108,13 @@ class MiniMaxH3MasterDirector:
 
             current_resources().release_transients()
             if confirm_first and not clip_item.get('refine_approved',False):
+                current_resources().offload_sampling_models()
                 shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
                 v_first,a_first=extract_streams_from_av_latent(sampled_latent)
                 first_frames=decode_video_latent(video_vae,v_first)
                 if source is not None: first_frames=first_frames[:source["frames"].shape[0]]
                 elif continuation_prefix: first_frames=first_frames[:int(is_chained_from_previous)+visible_frames]
+                first_frames=spill_frames(first_frames,cache_mgr.project_dir)
                 first_audio=decode_audio_latent(audio_vae,a_first) if audio_vae else {'waveform':torch.zeros((1,2,round(first_frames.shape[0]/FPS*48000))),'sample_rate':48000}
                 first_audio=choose_audio(audio_mode,first_audio,source,first_frames.shape[0])
                 if staged is None:
@@ -1173,6 +1178,7 @@ class MiniMaxH3MasterDirector:
                 from ..core.memory_lifecycle import log_memory_boundary
             except ImportError:
                 from core.memory_lifecycle import log_memory_boundary
+            current_resources().offload_sampling_models()
             log_memory_boundary('before_decode', clip_id, decoded_output)
             shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
             decoded_frames = decode_video_latent(video_vae, v_stream)

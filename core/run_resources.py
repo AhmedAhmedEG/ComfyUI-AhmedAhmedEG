@@ -50,6 +50,12 @@ class RunResources:
             self._release_model(model)
         self.transient_models.clear()
 
+    def offload_sampling_models(self):
+        """End the sampling residency phase, retaining wrappers for reuse."""
+        self.release_transients()
+        for _, shifted in self.models.values():
+            self._release_model(shifted)
+
     @staticmethod
     def _release_model(model):
         # Remove managed residency while our patcher is still alive; dropping
