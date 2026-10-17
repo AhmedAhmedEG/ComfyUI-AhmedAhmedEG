@@ -363,6 +363,17 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.querySelector('.mmx-clip-selection input').checked,'Explicit selections survive refresh');
   editorRoot.querySelector('.mmx-clip-selection input').click();
   assert(!editorRoot.querySelector('.mmx-shot-block').classList.contains('validated'),'Unchecking restores its normal color');
+  const approvalBackup=timeline.value;
+  const chain=JSON.parse(timeline.value);chain.clips=[
+    {...chain.clips[0],id:'clip_1',validated:true},
+    {...chain.clips[0],id:'dependent',validated:true,continuity:true,continuity_mode:'Latent Carry (Pinned)'},
+    {...chain.clips[0],id:'independent',validated:true,continuity_mode:'Independent (No Continuity)'},
+    {...chain.clips[0],id:'after-independent',validated:true,continuity:true,continuity_mode:'Latent Carry (Pinned)'}];
+  timeline.value=JSON.stringify(chain);node.__mmxDirectorRefresh();
+  editorRoot.querySelector('.mmx-clip-selection input').click();
+  assert.deepStrictEqual(JSON.parse(timeline.value).clips.map(c=>c.validated),[false,false,true,true],
+    'Unapproval cascades only through the continuity dependency chain');
+  timeline.value=approvalBackup;node.__mmxDirectorRefresh();
   const executionState=JSON.parse(timeline.value),executionClip=executionState.clips.at(-1);
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'preparing',index:2,total:2}});
   assert(editorRoot.querySelector('.mmx-generating-badge'),'Preparation already identifies its clip');

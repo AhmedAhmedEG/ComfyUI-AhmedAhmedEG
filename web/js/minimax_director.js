@@ -3174,6 +3174,16 @@ function mountDirectorUI(node) {
 
 
   let cancelTimelineDrag = null;
+  const unapproveChain = clip => {
+    const index = timelineState.clips.indexOf(clip);
+    for (let i=index; i>=0 && i<timelineState.clips.length; i++) {
+      const item=timelineState.clips[i];
+      if (i>index && (item.locked || item.source || item.continuity===false ||
+          (item.continuity_mode || 'Independent (No Continuity)')==='Independent (No Continuity)')) break;
+      item.validated=false; item.refine_approved=false; item.refine_pending=false;
+      item.invalidated_generation=cachedClipResults[item.id]?.generation || null;
+    }
+  };
   const invalidateFrom = index => {
     timelineState.clips.slice(index).forEach(clip => { if (!clip.locked) clip.validated = false; });
   };
@@ -3832,7 +3842,7 @@ function mountDirectorUI(node) {
       if(selectInput.disabled)selectLabel.title='Generate this clip first. Approval requires a saved result or latent on the server.';
       if(clip.refine_pending)selectLabel.title='Review First Pass in Smart Preview, approve here, then Run to refine its saved latent. This does not approve a final take.';
       selectInput.setAttribute('aria-label',`Approve ${clip.refine_pending ? 'First Pass Of ' : ''}${clip.name || `Clip ${idx+1}`}`);
-      selectInput.onchange=()=>{if(clip.refine_pending)clip.refine_approved=selectInput.checked;else clip.validated=selectInput.checked;syncState();renderTimeline();};
+      selectInput.onchange=()=>{if(clip.refine_pending)clip.refine_approved=selectInput.checked;else if(selectInput.checked){clip.validated=true;delete clip.invalidated_generation;}else unapproveChain(clip);syncState();renderTimeline();};
       for(const event of ['pointerdown','mousedown','click'])selectLabel.addEventListener(event,e=>e.stopPropagation());
       selectLabel.append(selectInput);shotBlock.append(selectLabel);
 
@@ -4383,12 +4393,7 @@ function mountDirectorUI(node) {
     const loraRows = document.createElement("div");
     loraPanel.appendChild(loraRows);
     const commitLoRAEdit=()=>{
-      activeClip.validated=false;activeClip.refine_approved=false;activeClip.refine_pending=false;
-      const index=timelineState.clips.indexOf(activeClip);
-      for(const dependent of timelineState.clips.slice(index+1)){
-        if(dependent.locked || dependent.continuity===false || (dependent.continuity_mode || 'Independent (No Continuity)')==='Independent (No Continuity)')break;
-        dependent.validated=false;dependent.refine_approved=false;dependent.refine_pending=false;
-      }
+      unapproveChain(activeClip);
       syncState();renderTimeline();
     };
     const drawLoras = () => {

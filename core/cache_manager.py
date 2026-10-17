@@ -223,6 +223,14 @@ class ProjectCacheManager:
         return os.path.isfile(latent_path)
 
     @_locked
+    def begin_preview_run(self):
+        """Track fresh reviewable results without deleting older takes."""
+        self._manifest = self._load_manifest()
+        self._preview_run_id = uuid.uuid4().hex
+        self._manifest['preview_run_id'] = self._preview_run_id
+        self.save_manifest()
+
+    @_locked
     def store_clip_results(
         self,
         clip_id: str,
@@ -267,6 +275,7 @@ class ProjectCacheManager:
             "width": int(decoded_frames.shape[2]) if decoded_frames is not None else None,
             "height": int(decoded_frames.shape[1]) if decoded_frames is not None else None,
             "generation": generation,
+            "preview_run_id": getattr(self, "_preview_run_id", None),
             "has_pre_refine": pre_refine_frames is not None,
         }
         self._manifest.setdefault("takes", {})[generation] = {**self._manifest["clips"][clip_id], "clip_id": clip_id}
@@ -469,7 +478,8 @@ class ProjectCacheManager:
         self._atomic_save(frames.cpu(),files['draft_frames'])
         self._atomic_save(portable_tree(audio),files['draft_audio'])
         row={'fingerprint':fingerprint,'generation':token,'width':int(frames.shape[2]),'height':int(frames.shape[1]),
-             'updated_at':time.time(),'has_frames':True,'has_audio':True,**(metadata or {})}
+             'updated_at':time.time(),'has_frames':True,'has_audio':True,**(metadata or {}),
+             'preview_run_id':getattr(self, '_preview_run_id', None)}
         self._manifest.setdefault('first_pass',{})[safe_component(clip_id)]=row
         self.save_manifest()
         return row

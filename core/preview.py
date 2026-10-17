@@ -10,7 +10,7 @@ from .cache_manager import ProjectCacheManager, safe_component
 from .media_io import resolve_input_path
 
 
-def create_preview_plan(state, scope="latest", base_dir=None, quality="original", take_id=None, stream="final"):
+def create_preview_plan(state, scope="latest", base_dir=None, quality="original", take_id=None, stream="final", run_context=None):
     if scope not in ("latest", "full", "take"):
         raise ValueError("Preview scope must be latest, full or take.")
     if quality not in ("original", "540p", "720p", "1080p"):
@@ -27,8 +27,12 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         shots_to_read = [{"id": take["clip_id"], "name": next((s.get("name") for s in shots if s.get("id") == take["clip_id"]), take["clip_id"])}] if take else []
     else:
         shots_to_read = shots
+    live = run_context if scope != 'take' else None
+    allowed = set(live['clip_ids']) if live is not None else None
     for index, shot in enumerate(shots_to_read):
         cid = safe_component(shot.get("id", f"clip_{index+1}"))
+        if allowed is not None and cid not in allowed:
+            continue
         meta = take if scope == "take" else manager._manifest.get("clips", {}).get(cid, {})
         frames_kind="frames";audio_kind="audio";direct_frames=direct_audio=None
         if stream=="first_pass":
@@ -41,6 +45,16 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             entry=next((r for r in meta.get("refine_passes",[]) if r["pass"]==int(stream[5:])),None)
             if entry is None: continue
             direct_frames,direct_audio=entry["frames"],entry["audio"]
+        if scope != 'take':
+            generation = meta.get('generation')
+            fresh = bool(meta.get('preview_run_id') and
+                         meta['preview_run_id'] == manager._manifest.get('preview_run_id'))
+            rejected = generation and generation == shot.get('invalidated_generation')
+            # Fresh results stay reviewable before approval. Old unapproved takes
+            # remain on disk and in Saved Take, but do not enter the current movie.
+            if not shot.get('locked') and (rejected or
+                    shot.get('validated') is False and not fresh):
+                continue
         if not meta.get("has_frames"):
             source = shot.get("source")
             if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):
@@ -57,7 +71,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     if scope == "latest":
         rows = [max(rows, key=lambda row: row["updated_at"])] if rows else []
     if not rows:
-        return {"found": False, "scope": scope}
+        return {"found": False, "scope": scope, "run_active": live is not None,
+                "label": "Waiting for this run's first completed clip." if live is not None else "No completed clips yet. Generate a shot first."}
     # Trim a predecessor's handoff only when its immediate successor is present.
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
@@ -80,6 +95,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     return {"found": True, "scope": scope, "key": key, "project_id": manager.project_id,
         "clip_ids": [row["clip_id"] for row in rows], "clip_count": len(rows), "total_clips": len(shots),
         "missing_clips": [{"id": s["id"], "name": s.get("name", s["id"])} for s in shots if s.get("id") not in {row["clip_id"] for row in rows}] if scope == "full" else [],
+        "run_active": live is not None,
         "label": rows[0]["name"] if scope != "full" else f"{len(rows)}/{len(shots)} completed clips"}
 
 

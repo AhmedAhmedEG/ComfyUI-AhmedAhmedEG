@@ -9,6 +9,55 @@ from core.preview import create_preview_plan, encode_preview
 
 
 class PackSourceNumerical(unittest.TestCase):
+    def test_live_full_preview_never_mixes_new_clip_with_old_future_take(self):
+        from pathlib import Path
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            manager=ProjectCacheManager('live_preview',folder)
+            shots=[{'id':'one'},{'id':'two'}]
+            state={'project_id':'live_preview','clips':shots}
+            for shot in shots:
+                manager.store_clip_results(shot['id'],'old',None,self.audio,self.frames)
+            old_second=manager._manifest['clips']['two']['generation']
+            empty=create_preview_plan(state,'full',folder,run_context={'clip_ids':[]})
+            self.assertFalse(empty['found']);self.assertTrue(empty['run_active'])
+            manager.store_clip_results('one','new',None,self.audio,self.frames[:24])
+            context={'clip_ids':['one']}
+            for scope in ('latest','full'):
+                plan=create_preview_plan(state,scope,folder,run_context=context)
+                self.assertEqual(plan['clip_ids'],['one'])
+                self.assertTrue(plan['run_active'])
+            media=encode_preview('live_preview',plan['key'],folder)
+            with av.open(media) as video:
+                self.assertEqual(sum(1 for _ in video.decode(video=0)),24,'Only the new one-second clip is encoded')
+            saved=create_preview_plan(state,'take',folder,take_id=old_second,run_context=context)
+            self.assertEqual(saved['clip_ids'],['two'],'Explicit Saved Take remains available')
+            idle=create_preview_plan(state,'full',folder)
+            self.assertEqual(idle['clip_count'],2,'Idle project browsing retains existing full-project behavior')
+
+    def test_approval_and_fresh_run_results_preserve_latents_and_history(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            manager=ProjectCacheManager('approvals',folder)
+            state={'project_id':'approvals','clips':[{'id':'one','validated':False}, {'id':'two','validated':True}]}
+            for shot in state['clips']:
+                manager.store_clip_results(shot['id'],'old',{'samples':torch.zeros((1,2))},self.audio,self.frames)
+            old=manager._manifest['clips']['one']['generation']
+            old_latent=manager.get_clip_latent_path('one')
+            manager.begin_preview_run()
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['two'])
+            manager.store_clip_results('one','new',{'samples':torch.ones((1,2))},self.audio,self.frames[:24])
+            fresh=manager._manifest['clips']['one']['generation']
+            self.assertNotEqual(old,fresh)
+            self.assertTrue(Path(old_latent).is_file(),'Regeneration preserves saved-take history')
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
+            state['clips'][0]['invalidated_generation']=fresh
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['two'])
+            self.assertTrue(Path(manager.get_clip_latent_path('one')).is_file(),'Unapproval does not delete latent')
+            self.assertTrue(create_preview_plan(state,'take',folder,take_id=fresh)['found'])
+            manager.begin_preview_run()
+            self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['two'])
+
     def test_pool_megapixels_reach_model_frames_for_graph_and_files(self):
         from core.asset_editor import prepare_pack
         from unittest.mock import patch

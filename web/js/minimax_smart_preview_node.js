@@ -39,7 +39,9 @@ function mount(node) {
     player.refresh();
   };
   const handler = event => {
-    if (event.detail?.phase === "completed" && event.detail.project_id === getTimeline().project_id) player.completed();
+    if (event.detail?.project_id !== getTimeline().project_id) return;
+    if(event.detail.phase==='completed')player.completed();
+    else if(['preparing','sampling','refining','decoding','first_pass_ready'].includes(event.detail.phase))player.refresh();
   };
   api.addEventListener("minimax_director/shot", handler);
   const removed = node.onRemoved;

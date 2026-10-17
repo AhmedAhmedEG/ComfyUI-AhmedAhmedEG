@@ -371,6 +371,7 @@ class MiniMaxH3MasterDirector:
             raise ValueError("Every timeline shot must have a unique clip ID.")
 
         cache_mgr = executor.cache_mgr
+        cache_mgr.begin_preview_run()
         preview_mode = str(
             kwargs.get("preview_mode")
             or timeline.get("preview_mode")

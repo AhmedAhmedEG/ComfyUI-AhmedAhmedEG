@@ -37,7 +37,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "metadata"; video.hidden = true;
   video.setAttribute("aria-label", "Generated video preview");
   panel.append(header, empty, video); root.append(panel);
-  let request = 0, controller, disposed = false, source = "";
+  let request = 0, controller, disposed = false, source = "", checking = false;
   let project = getTimeline().project_id;
   let statusText='';
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value,take_id:takeChoice.value, autoplay: autoplay.checked, open: !panel.hidden});
@@ -45,11 +45,13 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
     video.hidden = true; empty.hidden = false;
   };
-  const refreshPreview = async () => {
+  const refreshPreview = async (background = false) => {
     if (disposed || panel.hidden) return;
+    if (background && checking) return;
     if (!getTimeline().project_id) {stop();label.textContent = "Connect the Master's project_state output.";return;}
     const token = ++request; controller?.abort(); controller = new AbortController();
-    label.textContent = "Checking completed clips…";
+    checking = true;
+    if (!source) label.textContent = "Checking completed clips…";
     try {
       takeChoice.hidden=scope.value!=='take';
       if(scope.value==='take'){
@@ -74,10 +76,11 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       const info = await response.json();
       if (disposed || token !== request || panel.hidden) return;
       if (!response.ok) throw new Error(info.error || "Preview unavailable.");
-      if (!info.found) { stop(); label.textContent = "No completed clips yet. Generate a shot first."; return; }
+      if (!info.found) { stop(); label.textContent = info.label || "No completed clips yet. Generate a shot first."; return; }
       const url = api.apiURL(`/minimax_director/preview/media?${new URLSearchParams({project_id: info.project_id, key: info.key})}`);
       statusText = `${info.scope === "latest" ? "Latest Clip" : info.scope === 'take' ? 'Saved Take' : "Full Video"} · ${info.label}`;
-      if(info.missing_clips?.length)statusText+=` · No Cached Take: ${info.missing_clips.map(c=>c.name).join(', ')}`;
+      if(info.run_active)statusText+=' · This Run';
+      if(info.missing_clips?.length)statusText+=` · ${info.run_active?'Not Ready In This Run':'No Cached Take'}: ${info.missing_clips.map(c=>c.name).join(', ')}`;
       label.textContent=statusText;
       save.href = `${url}&download=1`; save.hidden = false;
       if (url !== source) {
@@ -87,6 +90,8 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     } catch (error) {
       if (token !== request || error.name === "AbortError" || disposed) return;
       stop();label.textContent = error.message;
+    } finally {
+      if (token === request) checking = false;
     }
   };
   video.onloadeddata = () => {
@@ -107,7 +112,10 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   quality.onchange=()=>{stop();persist();refreshPreview();};
   takeChoice.onchange=()=>{stop();persist();refreshPreview();};
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };
-  refresh.onclick = refreshPreview;
+  refresh.onclick = () => refreshPreview();
+  // Completion websocket messages can be missed. The server owns run-aware
+  // eligibility, and stable revision URLs avoid rebuffering unchanged results.
+  const poll = setInterval(() => {if(scope.value!=='take')void refreshPreview(true);}, 2000);
   if (standalone || getOptions().open) show(true);
   return {
     restore() {
@@ -118,12 +126,12 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       show(standalone || !!options.open);
     },
     completed() { preview.textContent = panel.hidden ? "Preview • New clip" : "Preview"; refreshPreview(); },
-    refresh: refreshPreview,
+    refresh: () => refreshPreview(),
     contextChanged() {
       if (project !== getTimeline().project_id) {
         project = getTimeline().project_id; ++request; controller?.abort(); stop(); refreshPreview();
       }
     },
-    dispose() { disposed = true; ++request; controller?.abort(); stop(); }
+    dispose() { disposed = true; clearInterval(poll); ++request; controller?.abort(); stop(); }
   };
 }
