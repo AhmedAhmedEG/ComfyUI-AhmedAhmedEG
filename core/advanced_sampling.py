@@ -20,6 +20,7 @@ def sample_selflift(model, positive, negative, latent, seed, steps, cfg, sampler
     from .vendor.aimixer.director.selflift.pack import normalize_selflift_pack
     from .vendor.aimixer.director.selflift.sample import sample_selflift_stage
     from .vendor.aimixer.director.core_sampling import ShiftedModelCache
+    from .run_resources import current_resources
     from .vendor.aimixer.director.h3_latent_continue import install_continue_prefix_remask
     pack = normalize_selflift_pack(settings)
     if pack is None:
@@ -28,7 +29,7 @@ def sample_selflift(model, positive, negative, latent, seed, steps, cfg, sampler
         latent=latent, seed=seed, steps=steps, cfg=cfg, sampler_name=sampler,
         scheduler=scheduler, pack=pack, vae=video_vae, canvas_width=width,
         canvas_height=height, shift_video=shift_video, shift_audio=shift_audio,
-        sigmas=sigmas, shift_cache=ShiftedModelCache(), prev_low_carry=carry,
+        sigmas=sigmas, shift_cache=current_resources() or ShiftedModelCache(), prev_low_carry=carry,
         pin_frames=pin_frames, after_shift=install_continue_prefix_remask if latent.get("_director_continue_prefix_steps") else None)
 
 

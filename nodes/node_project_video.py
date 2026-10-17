@@ -112,21 +112,17 @@ class MiniMaxH3ProjectVideo:
         if sizes: canvas=(max(w for w,h in sizes),max(h for w,h in sizes))
         for index, shot in chosen:
             frames,audio=load(shot,index)
+            incoming_rms = float(previous_rms) if previous_rms is not None else None
             if fps != 24:
                 count = max(1, round(frames.shape[0]*fps/24))
                 indices = torch.arange(count, device=frames.device).mul(24/fps).long().clamp(max=frames.shape[0]-1)
                 frames = frames[indices]
             if (frames.shape[2], frames.shape[1]) != canvas:
                 try:
-                    from ..core.media_io import scale_tensor_image
+                    from ..core.output_retention import assemble_frames
                 except ImportError:
-                    from core.media_io import scale_tensor_image
-                import torch.nn.functional as F
-                h,w=frames.shape[1:3]; ratio=min(canvas[0]/w,canvas[1]/h)
-                nh,nw=max(1,round(h*ratio)),max(1,round(w*ratio))
-                pixels=F.interpolate(frames.permute(0,3,1,2),size=(nh,nw),mode="bilinear",align_corners=False)
-                px,py=(canvas[0]-nw)//2,(canvas[1]-nh)//2
-                frames=F.pad(pixels,(px,canvas[0]-nw-px,py,canvas[1]-nh-py)).permute(0,2,3,1)
+                    from core.output_retention import assemble_frames
+                frames=assemble_frames([frames],manager.project_dir,canvas=canvas)
             if audio:
                 try:
                     from ..core.audio_post import concatenate_audio_clips
@@ -148,11 +144,35 @@ class MiniMaxH3ProjectVideo:
                     wave = apply_audio_fade(wave,48000,fade,fade)
                 previous_rms = torch.sqrt(torch.mean(wave**2)+1e-8)
                 audio = {"waveform":wave,"sample_rate":48000}
-            result = MiniMaxH3VideoCombine().combine_video(frames, audio=audio, frame_rate=fps,
-                filename_prefix=f"{filename_prefix}/shot_{index+1}_{stream}", save_output=export_individual_shots,
-                codec="H.264", container="mp4", bit_depth="8-bit")
-            path = result["result"][1]
-            paths.append(path); files.extend(result["ui"]["video"])
+            try:
+                from ..core.segment_exports import encoded_segment_path, commit_encoded_segment
+            except ImportError:
+                from core.segment_exports import encoded_segment_path, commit_encoded_segment
+            import shutil
+            cid=safe_component(shot.get('id',f'clip_{index+1}'))
+            meta=manager._manifest.get('first_pass' if stream=='first_pass' else 'clips',{}).get(cid,{})
+            cached_path=encoded_segment_path(manager,cid,{
+                'version':1,'stream':stream,'refine_pass':refine_pass,'fps':fps,'canvas':canvas,
+                'metadata':meta,'selection':sorted(chosen_indices),'index':index,
+                'next_metadata':manager._manifest.get('clips',{}).get(str(shots[index+1].get('id')), {}) if index+1 in chosen_indices else None,
+                'fade':state.get('audio_fade_ms',15),'gain_match':state.get('audio_gain_match',True),
+                'incoming_rms':incoming_rms}) if meta.get('generation') else None
+            if cached_path is not None and cached_path.is_file():
+                path=str(cached_path)
+                if export_individual_shots:
+                    path,filename,subfolder=resolve_output_path(f'{filename_prefix}/shot_{index+1}_{stream}','mp4',True)
+                    shutil.copyfile(cached_path,path)
+                    files.append({'filename':filename,'subfolder':subfolder,'type':'output','format':'video/mp4'})
+            else:
+                result = MiniMaxH3VideoCombine().combine_video(frames, audio=audio, frame_rate=fps,
+                    filename_prefix=f"{filename_prefix}/shot_{index+1}_{stream}", save_output=export_individual_shots,
+                    codec="H.264", container="mp4", bit_depth="8-bit")
+                path = result["result"][1]
+                files.extend(result["ui"]["video"])
+                if cached_path is not None and os.path.isfile(path):
+                    commit_encoded_segment(path,cached_path)
+                    if not export_individual_shots: path=str(cached_path)
+            paths.append(path)
             del frames, audio
         if not paths: raise ValueError("There are no shots to export for this selection.")
         if not FFMPEG_PATH: raise RuntimeError("Project assembly requires an available FFmpeg executable.")

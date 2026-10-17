@@ -98,6 +98,7 @@ def match_color_temperature_and_grade(
     current_frames: torch.Tensor,
     prev_tail_frames: torch.Tensor,
     blend_window: int = 12,
+    inplace: bool = False,
 ) -> torch.Tensor:
     """Subtly align the color grading and luminance of opening frames to previous tail to eliminate cut flicker."""
     if current_frames is None or prev_tail_frames is None:
@@ -114,7 +115,7 @@ def match_color_temperature_and_grade(
 
     gain = (mean_tail / (mean_open + 1e-6)).clamp(0.7, 1.4)  # Limit correction factor
 
-    out = current_frames.clone().float()
+    out = current_frames if inplace and current_frames.dtype == torch.float32 else current_frames.clone().float()
     window = min(blend_window, out.shape[0])
 
     # Linear falloff ramp from gain -> 1.0
@@ -123,7 +124,7 @@ def match_color_temperature_and_grade(
 
     # Blend correction into the opening frames
     out[:window] = out[:window] * (1.0 + ramp * (gain_tensor - 1.0))
-    return out.clamp(0.0, 1.0)
+    return out.clamp_(0.0, 1.0)
 
 
 # Per-shot continuity policy, with legacy global configuration fallback.

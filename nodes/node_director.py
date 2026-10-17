@@ -40,6 +40,11 @@ except (ImportError, ValueError):
     from core.audio_post import concatenate_audio_clips
     from core.cache_manager import compute_clip_fingerprint
 
+try:
+    from ..core.run_resources import execution_resources, shifted_model as shifted_model_for, spill_frames, current_resources
+except (ImportError, ValueError):
+    from core.run_resources import execution_resources, shifted_model as shifted_model_for, spill_frames, current_resources
+
 log = logging.getLogger("MiniMaxH3MasterDirector.node")
 
 try:
@@ -162,6 +167,7 @@ class MiniMaxH3MasterDirector:
             needed.append("ref2va_model")
         return needed
 
+    @execution_resources
     def execute(
         self,
         model=None,
@@ -1031,7 +1037,7 @@ class MiniMaxH3MasterDirector:
                 shot_event(unique_id,project_id,clip_id,'sampling',index=clip_idx+1,total=len(clips))
                 try:
                     from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
-                    shifted_model, = native_outputs(MiniMaxH3SigmaShift.execute(clip_active_model,float(shift_video),float(shift_audio)))
+                    shifted_model = shifted_model_for(clip_active_model,float(shift_video),float(shift_audio))
                 except ImportError as exc: raise RuntimeError('Native H3 SigmaShift is required.') from exc
                 negative=[[torch.zeros_like(emb),dict(meta)] for emb,meta in positive]
             else:
@@ -1040,7 +1046,7 @@ class MiniMaxH3MasterDirector:
 
                 try:
                     from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
-                    shifted_model, = native_outputs(MiniMaxH3SigmaShift.execute(clip_active_model, float(shift_video), float(shift_audio)))
+                    shifted_model = shifted_model_for(clip_active_model, float(shift_video), float(shift_audio))
                 except ImportError as exc:
                     raise RuntimeError("Update ComfyUI: native MiniMaxH3SigmaShift is required for correct AV sampling.") from exc
 
@@ -1120,7 +1126,7 @@ class MiniMaxH3MasterDirector:
                 before_refine(shifted_model)
                 refine_model = refine.get("refine_model")
                 if refine_model is not None:
-                    refine_model, = native_outputs(MiniMaxH3SigmaShift.execute(refine_model, shift_video, shift_audio))
+                    refine_model = shifted_model_for(refine_model, shift_video, shift_audio)
                 sampled_latent = apply_refine_pass(
                     model=shifted_model,
                     latent_dict=sampled_latent,
@@ -1155,6 +1161,11 @@ class MiniMaxH3MasterDirector:
             previous_av = sampled_latent
             last_latent = sampled_latent
             v_stream, a_stream = extract_streams_from_av_latent(sampled_latent)
+            try:
+                from ..core.memory_lifecycle import log_memory_boundary
+            except ImportError:
+                from core.memory_lifecycle import log_memory_boundary
+            log_memory_boundary('before_decode', clip_id, decoded_output)
             shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
             decoded_frames = decode_video_latent(video_vae, v_stream)
             if source is not None:
@@ -1162,24 +1173,23 @@ class MiniMaxH3MasterDirector:
             elif continuation_prefix:
                 decoded_frames = decoded_frames[:int(is_chained_from_previous)+visible_frames]
             sampled_latent["_mmx_visible_end"] = int(decoded_frames.shape[0])
-            decoded_audio = decode_audio_latent(audio_vae, a_stream) if audio_vae else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
-            decoded_audio = fit_audio_duration(decoded_audio, decoded_frames.shape[0], FPS)
-            decoded_audio = choose_audio(audio_mode, decoded_audio, source, decoded_frames.shape[0])
             if canon_mode == MODE_INPAINT:
-                # Match DaSiWa's one-image / five-frame native workflow, with
-                # the generated final frame exposed directly as a still.
                 decoded_frames = decoded_frames[-1:]
-                decoded_audio = {"waveform": torch.zeros((1, 2, round(48000 / FPS))), "sample_rate": 48000}
 
             # Continuity Seam Color Grading
-            decoded_frames = edit_images(decoded_frames, clip_item.get("color"))
+            try:
+                from ..core.output_retention import process_video_frames
+            except ImportError:
+                from core.output_retention import process_video_frames
+            decoded_frames = process_video_frames(decoded_frames, cache_mgr.project_dir,
+                lambda pixels: edit_images(pixels, clip_item.get('color')))
             if clip_idx > 0 and clip_continuity and previous_tail is not None and "tail_frames" in previous_tail:
                 try:
                     blend_w = min(12, int(decoded_frames.shape[0]))
                     decoded_frames = match_color_temperature_and_grade(
                         decoded_frames,
                         previous_tail["tail_frames"],
-                        blend_window=blend_w,
+                        blend_window=blend_w, inplace=True,
                     )
                 except Exception as cg_err:
                     log.warning(f"Master Director: Seam color grading failed for clip {clip_idx}: {cg_err}")
@@ -1195,6 +1205,20 @@ class MiniMaxH3MasterDirector:
                     video_vae, audio_vae, clip, clip_seed, face_refine, cfg,
                     ref_images=ref_images, continuity=clip_continuity)
 
+            # Keep the finalized pixels reclaimable before staging AudioVAE.
+            # Sampling work tensors no longer participate in either decoder.
+            latent = negative = None
+            if not refine_enabled:
+                pre_refine_latent = None
+            if face_refine is not None and face_refine.get('enabled', False):
+                decoded_frames = spill_frames(decoded_frames, cache_mgr.project_dir)
+            log_memory_boundary('video_spooled', clip_id, decoded_output)
+            decoded_audio = decode_audio_latent(audio_vae, a_stream) if audio_vae else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
+            decoded_audio = fit_audio_duration(decoded_audio, decoded_frames.shape[0], FPS)
+            decoded_audio = choose_audio(audio_mode, decoded_audio, source, decoded_frames.shape[0])
+            if canon_mode == MODE_INPAINT:
+                decoded_audio = {"waveform": torch.zeros((1, 2, round(48000 / FPS))), "sample_rate": 48000}
+
             all_decoded_frames.append(decoded_frames)
             all_decoded_audios.append(decoded_audio)
 
@@ -1205,7 +1229,7 @@ class MiniMaxH3MasterDirector:
                 if refine_enabled:
                     before_video, _ = extract_streams_from_av_latent(pre_refine_latent)
                     before_frames = decode_video_latent(video_vae, before_video)
-                    before_frames = before_frames[:decoded_frames.shape[0]]
+                    before_frames = spill_frames(before_frames[:decoded_frames.shape[0]], cache_mgr.project_dir)
                 cache_mgr.store_clip_results(
                     clip_id=clip_id,
                     fingerprint=clip_fp,
@@ -1236,18 +1260,17 @@ class MiniMaxH3MasterDirector:
                 "tail_audio": tail_aud,
             }
             previous_fingerprint=clip_fp
-            if decoded_output=='latest':
-                # Preserve full temporal phase metadata on disk/CPU; cropping it
-                # would change motion/audio carry semantics. Release GPU residency.
-                try:
-                    from ..core.cache_manager import portable_tree,restore_tree
-                except ImportError:
-                    from core.cache_manager import portable_tree,restore_tree
-                sampled_latent=restore_tree(portable_tree(sampled_latent))
-                previous_av=last_latent=sampled_latent
-                low_carry=restore_tree(portable_tree(low_carry)) if low_carry is not None else None
-                previous_tail=restore_tree(portable_tree(previous_tail))
-                v_stream,a_stream=extract_streams_from_av_latent(sampled_latent)
+            # Preserve full temporal phase metadata on disk/CPU; cropping it
+            # would change motion/audio carry semantics. Release GPU residency.
+            try:
+                from ..core.cache_manager import portable_tree,restore_tree
+            except ImportError:
+                from core.cache_manager import portable_tree,restore_tree
+            sampled_latent=restore_tree(portable_tree(sampled_latent))
+            previous_av=last_latent=sampled_latent
+            low_carry=restore_tree(portable_tree(low_carry)) if low_carry is not None else None
+            previous_tail=restore_tree(portable_tree(previous_tail))
+            v_stream,a_stream=extract_streams_from_av_latent(sampled_latent)
             clip_item["refine_pending"]=False
             clip_item["refine_approved"]=False
             generated_count += 1
@@ -1260,11 +1283,24 @@ class MiniMaxH3MasterDirector:
                 "frames": int(decoded_frames.shape[0]), "trim_prefix": int(is_chained_from_previous),
                 "refine": sampled_latent.get("_mmx_refine_report", "applied" if refine_enabled else "off"), "cache_error": cache_error})
             run_report[-1]['refined']=bool(refine_enabled)
+            # The durable take already owns the pixels. Retain a file-backed
+            # view for full output, allowing old clip pages to be reclaimed
+            # while the next VAE decode runs. Preserve frames on cache failure.
+            if cache_error is None:
+                saved_frames = cache_mgr.load_clip_frames(clip_id)
+                if saved_frames is not None:
+                    all_decoded_frames[-1] = saved_frames
+                saved_frames = None
+            # These locals otherwise survive until their assignments in the
+            # next iteration, overlapping whole previous clips with decoding.
+            decoded_frames = decoded_audio = before_frames = before_video = pre_refine_latent = None
+            current_resources().release_spills()
             try:
-                from ..core.memory_lifecycle import between_clips
+                from ..core.memory_lifecycle import between_clips, log_memory_boundary
             except ImportError:
-                from core.memory_lifecycle import between_clips
+                from core.memory_lifecycle import between_clips, log_memory_boundary
             between_clips()
+            log_memory_boundary("completed", clip_id, decoded_output)
             shot_event(unique_id, project_id, clip_id, "completed", seed=str(clip_seed), next_seed=clip_item["seed"], authored_seed=authored_seed, index=clip_idx+1, total=len(clips))
             if run_mode == "clip_by_clip":
                 break
@@ -1309,23 +1345,21 @@ class MiniMaxH3MasterDirector:
                 # Trim duplicate boundary frame and audio prefix if this clip was chained from the immediately preceding clip in output
                 if clip_chained_flags[orig_idx] and (int(clip_chained_flags[orig_idx]) > 1 or k > 0 and orig_idx == out_indices[k - 1] + 1):
                     prefix_count = int(clip_chained_flags[orig_idx])
-                    f = trim_continuity_prefix(f, context_frames=prefix_count)
+                    # final torch.cat owns the returned pixels; a view here
+                    # avoids cloning every disk-backed clip before assembly.
+                    f = f[prefix_count:] if f.shape[0] > prefix_count else f
                     if curr_audio is not None:
                         curr_audio = trim_continuity_audio_prefix(curr_audio, context_frames=prefix_count)
 
                 if curr_audio is not None:
                     standardized_audios.append(curr_audio)
 
-                if f.shape[1] != target_h or f.shape[2] != target_w:
-                    scale = min(target_w / f.shape[2], target_h / f.shape[1])
-                    new_h, new_w = max(1, round(f.shape[1] * scale)), max(1, round(f.shape[2] * scale))
-                    f_res = F.interpolate(f.permute(0, 3, 1, 2), size=(new_h, new_w), mode="bilinear", align_corners=False)
-                    pad_x, pad_y = (target_w-new_w)//2, (target_h-new_h)//2
-                    f_res = F.pad(f_res, (pad_x, target_w-new_w-pad_x, pad_y, target_h-new_h-pad_y)).permute(0, 2, 3, 1)
-                    standardized_frames.append(f_res)
-                else:
-                    standardized_frames.append(f)
-            final_frames = torch.cat(standardized_frames, dim=0)
+                standardized_frames.append(f)
+            try:
+                from ..core.output_retention import assemble_frames
+            except ImportError:
+                from core.output_retention import assemble_frames
+            final_frames = assemble_frames(standardized_frames, cache_mgr.project_dir)
             final_audio = concatenate_audio_clips(standardized_audios, target_sample_rate=48000, crossfade_ms=0,
                 enable_gain_match=timeline.get("audio_gain_match", True), enable_declick=timeline.get("audio_fade_ms", 15) > 0,
                 seam_fade_ms=float(timeline.get("audio_fade_ms", 15))) if standardized_audios else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}

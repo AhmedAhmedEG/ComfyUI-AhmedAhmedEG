@@ -6,7 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from .cache_manager import ProjectCacheManager, safe_component
+from .cache_manager import ProjectCacheManager, safe_component, load_frame_tensor
 from .media_io import resolve_input_path
 
 
@@ -126,7 +126,7 @@ def encode_preview(project_id, key, base_dir=None):
             if source is None: raise ValueError("Source clip is unavailable.")
             frames, audio = source["frames"], source["audio"]
         else:
-            frames = torch.load(resolve_input_path(row["frames"], manager.project_dir), map_location="cpu", weights_only=True)
+            frames = load_frame_tensor(resolve_input_path(row["frames"], manager.project_dir))
             audio = torch.load(resolve_input_path(row["audio"], manager.project_dir), map_location="cpu", weights_only=True) if row.get("audio") else None
         count = int(frames.shape[0])
         start = max(0, int(row.get("trim_prefix", 0)))

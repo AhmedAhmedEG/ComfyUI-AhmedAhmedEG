@@ -401,7 +401,13 @@ class RuntimeContracts(unittest.TestCase):
 
     def test_returned_latent_is_sampled_and_audio_matches_video(self):
         result = self.execute()
-        self.assertIs(result[4]["samples"], self.sampling_calls[0]["samples"])
+        from core.continuity import unpack_av_samples
+        actual,_=unpack_av_samples(result[4]["samples"])
+        sampled,_=unpack_av_samples(self.sampling_calls[0]["samples"])
+        self.assertEqual(len(actual),len(sampled))
+        for output,original in zip(actual,sampled):
+            self.assertTrue(torch.equal(output,original))
+            self.assertEqual(output.device.type,'cpu','Final sampled values survive offload without GPU residency')
         self.assertEqual(result[1]["waveform"].shape[-1], round(result[7] / result[6] * 48000))
         self.assertEqual(result[2]["loaded_frame_count"], result[7])
 

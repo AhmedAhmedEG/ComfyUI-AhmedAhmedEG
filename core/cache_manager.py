@@ -64,6 +64,18 @@ def safe_component(value: str) -> str:
     return value
 
 
+def load_frame_tensor(path, mmap=True):
+    """Keep saved video pixels reclaimable by the OS, rather than copying to RAM."""
+    try:
+        return torch.load(path, map_location='cpu', weights_only=True, mmap=mmap)
+    except RuntimeError as exc:
+        # Imported legacy torch archives cannot be memory-mapped. Our own
+        # atomic_save uses the modern ZIP format; never retry genuine OOMs.
+        if not mmap or 'mmap can only be used with files saved with' not in str(exc):
+            raise
+        return torch.load(path, map_location='cpu', weights_only=True)
+
+
 def fingerprint_value(value) -> str:
     """Hash nested settings and actual media contents, preserving reference order."""
     h = hashlib.sha256()
@@ -303,11 +315,11 @@ class ProjectCacheManager:
                 log.warning("Ignoring unreadable audio cache %s: %s", clip_id, exc)
         return None
 
-    def load_clip_frames(self, clip_id: str) -> Optional[torch.Tensor]:
+    def load_clip_frames(self, clip_id: str, mmap: bool = True) -> Optional[torch.Tensor]:
         frames_path = self.get_clip_frames_path(clip_id)
         if os.path.isfile(frames_path):
             try:
-                return torch.load(frames_path, map_location="cpu", weights_only=True)
+                return load_frame_tensor(frames_path, mmap=mmap)
             except Exception as exc:
                 log.warning("Ignoring unreadable frames cache %s: %s", clip_id, exc)
         return None
