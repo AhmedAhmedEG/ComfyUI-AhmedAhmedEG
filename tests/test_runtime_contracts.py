@@ -159,14 +159,14 @@ class RuntimeContracts(unittest.TestCase):
                   "audio_fade_ms":27,"audio_gain_match":False,
                   "clips":[{"id":"one","type":"T2V","duration":2,"seed":"1234","prompt":"walk"}]}
         from nodes import node_director
-        with patch('nodes.node_director.concatenate_audio_clips', wraps=node_director.concatenate_audio_clips) as joins:
+        with patch('nodes.node_director.join_timeline_audio', wraps=node_director.join_timeline_audio) as joins:
             result=self.execute(timeline_data=json.dumps(timeline),steps=17,cfg=2.5,sampler='euler',scheduler='normal')
         call=self.sampling_calls[0]
         self.assertEqual((call['steps'],call['cfg'],call['sampler'],call['scheduler'],call['seed']),(17,2.5,'euler','normal',1234))
         self.assertIn('walk',result[5]); self.assertTrue(result[5].endswith('cinematic'))
-        self.assertEqual(joins.call_args.kwargs['seam_fade_ms'],27)
+        self.assertEqual(joins.call_args.kwargs['fade_ms'],27)
         self.assertFalse(joins.call_args.kwargs['enable_gain_match'])
-        self.assertEqual(joins.call_args.kwargs['crossfade_ms'],0)
+        self.assertEqual(result[1]['sample_rate'],48000)
 
     def test_invalid_audio_policy_fails_before_sampling(self):
         for mode in ('source','invalid'):

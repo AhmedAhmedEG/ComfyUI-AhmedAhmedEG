@@ -23,7 +23,7 @@ try:
         decode_audio_latent,
     )
     from ..core.refine import apply_refine_pass
-    from ..core.audio_post import concatenate_audio_clips
+    from ..core.audio_post import join_timeline_audio
     from ..core.cache_manager import compute_clip_fingerprint
 except (ImportError, ValueError):
     from core.config import FPS, CANVAS_MULTIPLE, align_frame_count
@@ -37,7 +37,7 @@ except (ImportError, ValueError):
         decode_audio_latent,
     )
     from core.refine import apply_refine_pass
-    from core.audio_post import concatenate_audio_clips
+    from core.audio_post import join_timeline_audio
     from core.cache_manager import compute_clip_fingerprint
 
 try:
@@ -1363,7 +1363,10 @@ class MiniMaxH3MasterDirector:
                     # avoids cloning every disk-backed clip before assembly.
                     f = f[prefix_count:] if f.shape[0] > prefix_count else f
                     if curr_audio is not None:
+                        prefix = {**curr_audio, 'waveform': curr_audio['waveform'][..., :round(prefix_count/FPS*curr_audio['sample_rate'])]}
                         curr_audio = trim_continuity_audio_prefix(curr_audio, context_frames=prefix_count)
+                        if k > 0 and orig_idx == out_indices[k - 1] + 1:
+                            curr_audio = {**curr_audio, 'seam_prefix': prefix}
 
                 if curr_audio is not None:
                     standardized_audios.append(curr_audio)
@@ -1374,9 +1377,9 @@ class MiniMaxH3MasterDirector:
             except ImportError:
                 from core.output_retention import assemble_frames
             final_frames = assemble_frames(standardized_frames, cache_mgr.project_dir, reuse_single=True)
-            final_audio = concatenate_audio_clips(standardized_audios, target_sample_rate=48000, crossfade_ms=0,
-                enable_gain_match=timeline.get("audio_gain_match", True), enable_declick=timeline.get("audio_fade_ms", 15) > 0,
-                seam_fade_ms=float(timeline.get("audio_fade_ms", 15))) if standardized_audios else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
+            final_audio = join_timeline_audio(standardized_audios,
+                enable_gain_match=timeline.get('audio_gain_match', True),
+                fade_ms=float(timeline.get('audio_fade_ms', 15)))
         else:
             final_frames = torch.zeros((1, height, width, 3), dtype=torch.float32)
             final_audio = {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}

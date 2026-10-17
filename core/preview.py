@@ -77,7 +77,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
             left["trim_tail"] = right.get("previous_trim", 0)
-    plan = {"version": 2, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
+    plan = {"version": 3, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
         "source_state": {k: state[k] for k in ("width", "height", "resolution", "references") if k in state},
         "gain_match": bool(state.get("audio_gain_match", True)), "fade_ms": float(state.get("audio_fade_ms", 15))}
     key = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -112,7 +112,7 @@ def encode_preview(project_id, key, base_dir=None):
     import numpy as np
     import torch
     import torch.nn.functional as F
-    from .audio_post import concatenate_audio_clips
+    from .audio_post import join_timeline_audio
     from .vendor.dasiwa.helper_pyav_video import encode_attempt
     manager, target = preview_path(project_id, key, base_dir)
     if target.is_file(): return str(target)
@@ -135,11 +135,12 @@ def encode_preview(project_id, key, base_dir=None):
         frames = frames[start:end]
         if audio:
             rate = int(audio["sample_rate"])
+            prefix = {**audio, 'waveform': audio['waveform'][..., :round(start/24*rate)]} if start else None
             waveform = audio["waveform"][..., round(start/24*rate):round(end/24*rate)]
             expected = round((end-start)/24*rate)
             if waveform.shape[-1] < expected:
                 waveform = F.pad(waveform, (0, expected-waveform.shape[-1]))
-            audio = {**audio, "waveform": waveform}
+            audio = {**audio, "waveform": waveform, 'seam_prefix': prefix}
         return frames, audio
 
     width, height = 0, 0
@@ -158,20 +159,27 @@ def encode_preview(project_id, key, base_dir=None):
                 yield (image[0].permute(1, 2, 0).clamp(0, 1).numpy()*255).round().astype(np.uint8)
 
     # Audio is prepared first so the shared encoder can configure its stream.
-    for row in plan["rows"]:
+    for index, row in enumerate(plan["rows"]):
         frames, audio = load(row)
         height, width = max(height, int(frames.shape[1])), max(width, int(frames.shape[2]))
         if audio is None or audio["waveform"].shape[-1] == 0:
             audio = {"waveform": torch.zeros((1, 2, round(frames.shape[0]/24*48000))), "sample_rate": 48000}
+        if index == 0 or row['index'] != plan['rows'][index-1]['index'] + 1:
+            audio.pop('seam_prefix', None)
         audios.append(audio)
         del frames
     quality = plan.get("quality", "540p")
     cap = {"540p": (960, 540), "720p": (1280, 720), "1080p": (1920, 1080)}.get(quality)
     ratio = min(1., cap[0]/width, cap[1]/height) if cap else 1.
     width, height = max(2, int(width*ratio)//2*2), max(2, int(height*ratio)//2*2)
-    sound = concatenate_audio_clips(audios, target_sample_rate=48000, crossfade_ms=0,
-        enable_gain_match=plan["gain_match"], enable_declick=plan["fade_ms"] > 0, seam_fade_ms=plan["fade_ms"])
+    sound = join_timeline_audio(audios, fade_ms=plan['fade_ms'], enable_gain_match=plan['gain_match'])
     audios.clear()
-    encode_attempt(str(target), "MP4", "libx264", width, height, 24, 8, 23, frames_iter,
-        audio=(sound["waveform"][0].numpy(), sound["sample_rate"]), audio_encoder="aac", audio_bitrate="128k")
+    fd, temporary = tempfile.mkstemp(suffix='.mp4', dir=target.parent)
+    os.close(fd)
+    try:
+        encode_attempt(temporary, "MP4", "libx264", width, height, 24, 8, 23, frames_iter,
+            audio=(sound["waveform"][0].numpy(), sound["sample_rate"]), audio_encoder="aac", audio_bitrate="128k")
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
     return str(target)

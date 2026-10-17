@@ -107,6 +107,19 @@ class SmartPreview(unittest.TestCase):
         self.state["clips"] = [{"id": "pending"}]
         self.assertFalse(self.plan()["found"])
 
+    def test_failed_encode_never_publishes_partial_media(self):
+        plan = self.plan()
+        _, target = preview_path(plan['project_id'], plan['key'], self.temp.name)
+        def fail(path, *args, **kwargs):
+            Path(path).write_bytes(b'partial mp4')
+            raise RuntimeError('interrupted encode')
+        with patch('core.vendor.dasiwa.helper_pyav_video.encode_attempt', side_effect=fail):
+            with self.assertRaisesRegex(RuntimeError, 'interrupted encode'):
+                self.encode(plan)
+        self.assertFalse(target.exists())
+        with av.open(self.encode(plan)) as media:
+            self.assertEqual(sum(1 for _ in media.decode(video=0)), 10)
+
     def test_full_preview_includes_locked_source_and_trims_its_handoff(self):
         self.state["clips"] = [{"id": "locked", "locked": True, "source": {"filename": "input.mp4"}}, {"id": "two"}]
         source = {"frames": torch.zeros((12, 32, 64, 3)), "audio": None}

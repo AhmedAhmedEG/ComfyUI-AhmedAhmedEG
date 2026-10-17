@@ -5,10 +5,10 @@ import os
 import subprocess
 import tempfile
 try:
-    from ..core.cache_manager import ProjectCacheManager, safe_component
+    from ..core.cache_manager import ProjectCacheManager, safe_component, fingerprint_value
     from ..core.source_media import source_range
 except ImportError:
-    from core.cache_manager import ProjectCacheManager, safe_component
+    from core.cache_manager import ProjectCacheManager, safe_component, fingerprint_value
     from core.source_media import source_range
 from .node_video_combine import MiniMaxH3VideoCombine, FFMPEG_PATH, resolve_output_path
 
@@ -45,7 +45,6 @@ class MiniMaxH3ProjectVideo:
         paths = []
         files = []
         canvas = None
-        previous_rms = None
         shots = state.get("clips", [])
         import math
         if not math.isfinite(fps) or not 1 <= fps <= 120:
@@ -101,18 +100,30 @@ class MiniMaxH3ProjectVideo:
                 frames=frames[prefix:end]
                 if audio:
                     rate=audio['sample_rate']
-                    audio={**audio,'waveform':audio['waveform'][...,round(prefix/24*rate):round(end/24*rate)]}
+                    context={**audio,'waveform':audio['waveform'][..., :round(prefix/24*rate)]} if prefix else None
+                    audio={**audio,'waveform':audio['waveform'][...,round(prefix/24*rate):round(end/24*rate)],'seam_prefix':context}
             return frames,audio
         # Two bounded passes avoid holding the complete decoded sequence.
         sizes=[]
+        audios=[]
         for index,shot in chosen:
-            frames,_=load(shot,index)
+            frames,audio=load(shot,index)
             sizes.append((int(frames.shape[2]),int(frames.shape[1])))
+            if audio is None:
+                audio={'waveform':torch.zeros((1,2,round(frames.shape[0]/24*48000))),'sample_rate':48000}
+            if not audios or index-1 not in chosen_indices:audio.pop('seam_prefix',None)
+            audios.append(audio)
             del frames
         if sizes: canvas=(max(w for w,h in sizes),max(h for w,h in sizes))
-        for index, shot in chosen:
-            frames,audio=load(shot,index)
-            incoming_rms = float(previous_rms) if previous_rms is not None else None
+        try:
+            from ..core.audio_post import prepare_timeline_audio
+        except ImportError:
+            from core.audio_post import prepare_timeline_audio
+        prepared_audio=prepare_timeline_audio(audios,float(state.get('audio_fade_ms',15)),state.get('audio_gain_match',True))
+        audios.clear()
+        for position,(index, shot) in enumerate(chosen):
+            frames,_=load(shot,index)
+            audio=prepared_audio[position]
             if fps != 24:
                 count = max(1, round(frames.shape[0]*fps/24))
                 indices = torch.arange(count, device=frames.device).mul(24/fps).long().clamp(max=frames.shape[0]-1)
@@ -123,27 +134,6 @@ class MiniMaxH3ProjectVideo:
                 except ImportError:
                     from core.output_retention import assemble_frames
                 frames=assemble_frames([frames],manager.project_dir,canvas=canvas)
-            if audio:
-                try:
-                    from ..core.audio_post import concatenate_audio_clips
-                except ImportError:
-                    from core.audio_post import concatenate_audio_clips
-                processed = concatenate_audio_clips([audio],crossfade_ms=0,enable_gain_match=False,
-                    enable_declick=False)
-                wave = processed["waveform"]
-                if previous_rms is not None and state.get("audio_gain_match",True):
-                    current_rms = torch.sqrt(torch.mean(wave**2)+1e-8)
-                    gain = (previous_rms/current_rms).clamp(10**(-6/20),10**(6/20))
-                    wave = wave*gain
-                fade = float(state.get("audio_fade_ms",15))
-                if fade > 0:
-                    try:
-                        from ..core.audio_post import apply_audio_fade
-                    except ImportError:
-                        from core.audio_post import apply_audio_fade
-                    wave = apply_audio_fade(wave,48000,fade,fade)
-                previous_rms = torch.sqrt(torch.mean(wave**2)+1e-8)
-                audio = {"waveform":wave,"sample_rate":48000}
             try:
                 from ..core.segment_exports import encoded_segment_path, commit_encoded_segment
             except ImportError:
@@ -152,11 +142,11 @@ class MiniMaxH3ProjectVideo:
             cid=safe_component(shot.get('id',f'clip_{index+1}'))
             meta=manager._manifest.get('first_pass' if stream=='first_pass' else 'clips',{}).get(cid,{})
             cached_path=encoded_segment_path(manager,cid,{
-                'version':1,'stream':stream,'refine_pass':refine_pass,'fps':fps,'canvas':canvas,
+                'version':2,'stream':stream,'refine_pass':refine_pass,'fps':fps,'canvas':canvas,
                 'metadata':meta,'selection':sorted(chosen_indices),'index':index,
                 'next_metadata':manager._manifest.get('clips',{}).get(str(shots[index+1].get('id')), {}) if index+1 in chosen_indices else None,
                 'fade':state.get('audio_fade_ms',15),'gain_match':state.get('audio_gain_match',True),
-                'incoming_rms':incoming_rms}) if meta.get('generation') else None
+                'audio_signature':fingerprint_value(audio)}) if meta.get('generation') else None
             if cached_path is not None and cached_path.is_file():
                 path=str(cached_path)
                 if export_individual_shots:

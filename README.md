@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.7.2** consolidates the MiniMax/video production features of
+Version **1.7.10** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -10,7 +10,14 @@ quality or speed benchmarks. See [REVIEW.md](REVIEW.md) for validation evidence.
 
 The separate **Smart Preview** node plays the **latest completed clip** by default.
 Switch to **Full video** to review the completed sequence. Each scope has its own
-cached H.264/AAC preview file, so latest mode downloads only the new clip.
+cached H.264/AAC preview file. Playback buffers with autoplay off, retains loaded
+video during temporary status failures, and reuses browser-cached revisions.
+When generation is idle, Latest mode also prepares Full video in the background.
+The browser keeps up to 32 previews / 1 GiB in persistent storage when available
+and up to 8 previews / 256 MiB in session memory. Larger media uses browser streaming.
+Continuity audio joins blend the successor's discarded audio prefix into its
+predecessor before the cut, preserving timeline duration. Independent clips use
+de-click fades; sound content continuity still depends on generation audio context.
 
 Each feature has one configuration owner. Settings controls canvas and sampling.
 Reference Pack owns media preparation; RefMod Library owns character adapter

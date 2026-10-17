@@ -61,6 +61,51 @@ def match_audio_rms(
     return target_waveform * gain
 
 
+def prepare_timeline_audio(audio_clips, fade_ms=15., enable_gain_match=True):
+    """Join visible clip audio using discarded continuity prefixes, without
+    shortening the timeline. Returns one independently encodable segment per clip.
+    """
+    if not math.isfinite(fade_ms) or fade_ms < 0:
+        raise ValueError('Audio join fade must be a finite nonnegative number of milliseconds.')
+    segments = []
+    for clip in audio_clips:
+        wave = concatenate_audio_clips([clip], crossfade_ms=0,
+            enable_gain_match=False, enable_declick=False)['waveform']
+        gain = 1.
+        if segments and enable_gain_match:
+            gain = (torch.sqrt(torch.mean(segments[-1] ** 2) + 1e-8) /
+                    torch.sqrt(torch.mean(wave ** 2) + 1e-8)).clamp(10**(-6/20), 10**(6/20))
+            wave = wave * gain
+        if segments and fade_ms > 0:
+            previous = segments[-1]
+            prefix = clip.get('seam_prefix')
+            if prefix and prefix['waveform'].shape[-1]:
+                context = concatenate_audio_clips([prefix], crossfade_ms=0,
+                    enable_gain_match=False, enable_declick=False)['waveform'] * gain
+                n = min(round(fade_ms / 1000 * 48000), previous.shape[-1], context.shape[-1])
+                if n:
+                    # The discarded prefix ends exactly where visible audio begins.
+                    # Blend before the cut, leaving all video/sample timings intact.
+                    ramp = .5 * (1-torch.cos(torch.linspace(0, math.pi, n)))
+                    previous = previous.clone()
+                    previous[..., -n:] = previous[..., -n:] * (1-ramp) + context[..., -n:] * ramp
+                    segments[-1] = previous
+            else:
+                segments[-1] = apply_audio_fade(previous, 48000, 0, fade_ms)
+                wave = apply_audio_fade(wave, 48000, fade_ms, 0)
+        segments.append(wave)
+    if segments and fade_ms > 0:
+        segments[0] = apply_audio_fade(segments[0], 48000, fade_ms, 0)
+        segments[-1] = apply_audio_fade(segments[-1], 48000, 0, fade_ms)
+    return [{'waveform': wave, 'sample_rate': 48000} for wave in segments]
+
+
+def join_timeline_audio(audio_clips, fade_ms=15., enable_gain_match=True):
+    segments = prepare_timeline_audio(audio_clips, fade_ms, enable_gain_match)
+    return {'waveform': torch.cat([a['waveform'] for a in segments], dim=-1),
+            'sample_rate': 48000} if segments else {'waveform': torch.zeros((1, 2, 48000)), 'sample_rate': 48000}
+
+
 def concatenate_audio_clips(
     audio_clips: List[Dict[str, Any]],
     target_sample_rate: int = 48000,
