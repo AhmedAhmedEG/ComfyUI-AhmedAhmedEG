@@ -9,14 +9,14 @@ w.alert = message => problems.push(message);
 w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, {get: (_,key) => key === 'measureText' ? text => ({width:text.length*7}) : () => {}});
 w.app = {registerExtension: extension => {w.extension=extension;},graph:{links:{},getNodeById:()=>null,setDirtyCanvas:()=>{}},canvas:{setDirty:()=>{}}};
 const listeners = new Map();
-let submittedDraft,progressSnapshot=null;
+let submittedDraft,progressSnapshot=null,cacheStatusReads=0;
 w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name)=>listeners.delete(name),fetchApi:async (url,options={}) => {
   let result = [];
   if(url.includes("/minimax_director/progress"))result={state:progressSnapshot,active:progressSnapshot?.active};
   if (url.includes('waveform')) result={duration:5,peaks:[0,.5,1,.5]};
   if (url.includes('media/upload')) result={name:'tail.mp4',subfolder:'minimax_assets',media_type:'video'};
   if (url.includes('source/info')) result={duration:60,width:960,height:544};
-  if (url.includes('project/cache/status')) result={clips:{clip_1:{can_approve:true,has_latent:true,has_frames:true,has_audio:true}}};
+  if (url.includes('project/cache/status')) {cacheStatusReads++;result={clips:{clip_1:{can_approve:true,has_latent:true,has_frames:true,has_audio:true}}};}
   if (url.includes('forge/draft')) result={context_key:'context',count:1,shots:[{prompt:'Drafted action',type:'T2VA',duration:5}]};
   if (url.includes('forge/apply')) { const body=JSON.parse(options.body); submittedDraft=body.draft; result={timeline:{...body.timeline,clips:[{id:'clip_1',...body.draft.shots[0]}]}}; }
   return {ok:true,json:async()=>result};
@@ -376,10 +376,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.querySelector('.mmx-shot-block.active').getAttribute('aria-current')==='true');
   await new Promise(resolve=>setTimeout(resolve,0));
   const previousExecutionClip=executionState.clips[0];
+  const cacheReadsBeforeTransition=cacheStatusReads;
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:previousExecutionClip.id,phase:'sampling',sequence:100}});
   progressSnapshot={node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'sampling',sequence:102};
   listeners.get('executing')({type:'executing',detail:String(node.id)});await new Promise(resolve=>setTimeout(resolve,0));
   assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`),'Read-only snapshot recovers a missed clip transition');
+  assert(cacheStatusReads>cacheReadsBeforeTransition,'Recovering the next clip also refreshes completed take availability');
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:previousExecutionClip.id,phase:'completed',sequence:101}});
   assert(editorRoot.querySelector(`[data-clip-id="${executionClip.id}"].generating`),'An older event cannot overwrite the current clip');
   progressSnapshot={...progressSnapshot,active:false};

@@ -5118,7 +5118,7 @@ function mountDirectorUI(node) {
       const response=await api.fetchApi('/minimax_director/progress?'+new URLSearchParams({node:String(node.id),project_id:timelineState.project_id}),{cache:'no-store'});
       const result=await response.json();
       if(response.ok && progressWatching && !node.__mmxDisposed){
-        if(result.active===false){if(generatingClipId!==null){generatingClipId=null;progressLabel.textContent='Idle';renderTimeline();}return;}
+        if(result.active===false){if(generatingClipId!==null){generatingClipId=null;progressLabel.textContent='Idle';renderTimeline();void refreshClipResults();}return;}
         const needsRestore=result.state && generatingClipId!==result.state.clip_id && ['preparing','sampling','refining','decoding','face_refining'].includes(result.state.phase);
         if(result.state && (Number(result.state.sequence)>progressSequence || needsRestore))node.__mmxShotHandler?.({detail:result.state,snapshot:true});
       }
@@ -5140,7 +5140,7 @@ function mountDirectorUI(node) {
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
     const phaseLabel=({preparing:'Preparing',sampling:'Generating',refining:'Refining',decoding:'Decoding',face_refining:'Refining Faces',completed:'Completed',source_ready:'Source Ready'})[detail.phase] || detail.phase;
     progressLabel.textContent = `${phaseLabel}: ${eventClip?.name || 'Clip '+(timelineState.clips.indexOf(eventClip)+1)}${detail.index ? ` (${detail.index}/${detail.total || timelineState.clips.length})` : ''}`;
-    if(runningPhase) {generatingClipId=detail.clip_id;generatingPhase=detail.phase;renderTimeline();}
+    if(runningPhase) {const previous=generatingClipId;generatingClipId=detail.clip_id;generatingPhase=detail.phase;renderTimeline();if(previous!==null && previous!==detail.clip_id)void refreshClipResults();}
     if(detail.phase==='completed' && generatingClipId===detail.clip_id){generatingClipId=null;renderTimeline();}
     if(detail.phase==='source_ready') {
       const clip=timelineState.clips.find(value=>value.id===detail.clip_id);
