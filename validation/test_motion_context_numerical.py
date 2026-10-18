@@ -29,7 +29,7 @@ class MotionContextNumerical(unittest.TestCase):
             self.assertEqual(guides[index]['resolved_frame_index'],offset)
             self.assertTrue(torch.equal(guides[index]['latent'],before[:,:,65+index:66+index]))
         sound=guides[7]
-        self.assertEqual(sound['resolved_frame_index'],-2.)
+        self.assertEqual(sound['resolved_frame_index'],-1.8)
         self.assertTrue(torch.equal(sound['audio_latent'],self.previous['samples'][1][...,-40:]))
         self.assertEqual((trim,old_trim,source),(22,0,'sampled_latent'))
         self.assertIs(positive[0][1]['minimax_refs'][0],self.extra)
@@ -44,7 +44,7 @@ class MotionContextNumerical(unittest.TestCase):
         self.previous={'samples':(torch.ones((1,2,17,2,2)),torch.arange(93.).reshape(1,1,1,93))}
         positive,*_=self.apply()
         sound=next(g for g in positive[0][1]['minimax_keyframes'] if 'audio_latent' in g)
-        self.assertAlmostEqual(sound['resolved_frame_index'],-2.2)
+        self.assertAlmostEqual(sound['resolved_frame_index'],-2.4)
         self.assertEqual(sound['audio_latent'].shape[-1],40)
 
     def test_cropped_export_aligns_both_streams_to_same_source_endpoint(self):

@@ -81,7 +81,10 @@ def apply_motion_context(positive, target, *, previous_av, previous_tail, vae,
                 audio, ticks = _encode_tail_audio(audio_vae, sound, audio_frames / 24)
                 phase = 0.
         if audio is not None and int(audio.shape[-1]):
-            guides.append({"resolved_frame_index": span + phase * 24 / 40 - ticks * 24 / 40,
+            # Quantize the GUIDE END on H3's 40 Hz grid before deriving its
+            # start, matching the original Extender's native-guide contract.
+            end_tick = round(span * 40 / 24 + phase)
+            guides.append({"resolved_frame_index": (end_tick-ticks) * 24 / 40,
                            "audio_latent": audio})
 
     out = []

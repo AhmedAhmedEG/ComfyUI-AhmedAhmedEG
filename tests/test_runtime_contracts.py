@@ -663,6 +663,26 @@ class RuntimeContracts(unittest.TestCase):
         self.assertIsNotNone(self.sampling_calls[-1]['noise_mask'])
         self.assertNotIn('minimax_keyframes',self.sampling_calls[-1]['positive'][0][1])
 
+    def test_changed_parent_latent_invalidates_staged_motion_take(self):
+        first={'id':'one','type':'T2VA','duration':2,'continuity':False}
+        self.execute([first]);first['validated']=True
+        second={'id':'two','type':'T2VA','duration':2,'continuity_mode':'Motion Context (Chained)',
+                'context_length':22,'audio_context_length':24}
+        options={'enabled':True,'mode':'refine','confirm_first_pass':True,'skip_fl2v':False}
+        state=json.loads(self.execute([first,second],refine=options)[-1])
+        manager=ProjectCacheManager('regression',self.temp.name)
+        old=manager.load_first_pass('two')['generation']
+        parent=manager.load_clip_latent('one')
+        from core.continuity import extract_streams_from_av_latent
+        video,audio=extract_streams_from_av_latent(parent)
+        parent['samples']=(video+1,audio+1)
+        manager.store_clip_results('one',manager._manifest['clips']['one']['fingerprint'],parent,
+            manager.load_clip_audio('one'),manager.load_clip_frames('one'),validated=True)
+        state['clips'][1]['refine_approved']=True
+        with patch('nodes.node_director.apply_refine_pass',side_effect=AssertionError('Changed parent requires first-pass review')):
+            self.execute(timeline_data=json.dumps(state),refine=options)
+        self.assertNotEqual(manager.load_first_pass('two')['generation'],old)
+
     def test_latent_carry_receives_per_shot_audio_policy(self):
         clips=[{"id":"one","type":"T2VA","duration":2,"continuity_mode":"Independent (No Continuity)"},
                {"id":"two","type":"T2VA","duration":2,"continuity_mode":"Latent Carry (Pinned)","context_length":39,"audio_context_length":5,"continuity_redraw":.3}]

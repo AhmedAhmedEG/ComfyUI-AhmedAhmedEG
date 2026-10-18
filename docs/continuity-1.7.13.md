@@ -2,7 +2,7 @@
 
 Motion Context now attaches compatible previous sampled AV latent tails directly as native temporal guides. It no longer routinely decodes and re-encodes them. Decoded-tail encoding remains an explicit fallback for imported footage or a changed canvas; the run report records the path. Guide insertion preserves reference metadata and interior/closing guides, never installs global patches and never creates a target noise mask.
 
-Audio context is independent of video context. The existing Continuity tab supports Off, 5, 22, **24**, 39 and 56 audio frames, including the original Extender's 22-video/24-audio configuration. Temporal audio is end-aligned using the signed 40-Hz/24-fps boundary remainder. Automatic promotion of previous audio to an additional standalone reference is removed; explicitly selected audio references remain active.
+Audio context is independent of video context. The existing Continuity tab supports Off, 5, 22, **24**, 39 and 56 audio frames, including the original Extender's 22-video/24-audio configuration. Temporal audio is end-aligned using the signed 40-Hz/24-fps boundary remainder, quantizing its guide end before deriving the start, as in Extender. Automatic promotion of previous audio to an additional standalone reference is removed; explicitly selected audio references remain active.
 
 Latent Carry remains a mutually exclusive path using its existing tapered redraw masks and scoped model wrapper. Help text now describes that behavior rather than implying the whole prefix is frozen.
 
@@ -17,9 +17,9 @@ Master output and Smart Preview now share frame-boundary PCM slicing and retain 
 
 ## Validation
 
-- 247 backend tests pass, including original take reuse and preview durability contracts.
+- 248 backend tests pass, including original take reuse and preview durability contracts.
 - 50 real CPU numerical checks pass, including exact sampled-tail guide values, negative audio phase, source/target immutability, independent audio windows, pixel fallback, duration budgets, redraw behavior and cumulative PCM lengths.
 - Editor regression verifies independent audio context and duration persistence. Four preview JavaScript suites pass.
-- Runtime contracts verify no automatic standalone audio, preservation of explicit audio, guide/carry exclusivity, native guide rows reaching the sampler, total-duration output and external checkpoint handling.
+- Runtime contracts verify no automatic standalone audio, preservation of explicit audio, guide/carry exclusivity, native guide rows reaching the sampler, total-duration output and external checkpoint handling. Actual native guide contents also participate in the staged-take fingerprint, so changing a parent latent requires a fresh first-pass review even when its prompt and seed match.
 
 These model-free results establish execution contracts, not visual seam superiority. Live GPU comparison results will be recorded after deployment. No third-party source files were changed.

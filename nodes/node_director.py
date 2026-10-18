@@ -976,6 +976,9 @@ class MiniMaxH3MasterDirector:
             last_positive = positive
             last_latent = latent
             last_prompt = final_prompt
+            native_guide_signature = fingerprint_value([
+                entry[1].get("minimax_keyframes", []) for entry in positive
+            ]) if continuation_prefix and not latent_carry else None
 
             if execution_mode == "Conditioning Guide Output":
                 continue
@@ -997,6 +1000,7 @@ class MiniMaxH3MasterDirector:
                     "face_refine": face_refine, "semantic_bridge": semantic_bridge, "sigmas": sigmas,
                     "continuity_mode": clip_continuity_mode, "context_length": clip_context_length,
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
+                    "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
@@ -1010,7 +1014,7 @@ class MiniMaxH3MasterDirector:
                 'seed':clip_seed,'size':(width,height),'duration':clip_dur,'steps':steps,'cfg':cfg,
                 'sampler':sampler,'scheduler':scheduler,'sigmas':sigmas,'shifts':(shift_video,shift_audio),
                 'model':clip_active_model,'loras':clip_lora_files,'refs':(ref_images,ref_videos,ref_video_audios,ref_audios,first_frame,last_frame,clip_refmod_items),
-                'guides':guide_frames,'selflift':selflift,'semantic':semantic_bridge,
+                'guides':guide_frames,'native_guides':native_guide_signature,'selflift':selflift,'semantic':semantic_bridge,
                 'upstream':previous_fingerprint if clip_continuity else None,'redraw':clip_item.get('continuity_redraw',.1),
                 'continuity':(clip_continuity_mode,clip_context_length,clip_audio_context,clip_tail_sec,clip_duration_policy),
                 'initial_latent':latent,'video_vae':video_vae,'audio_vae':audio_vae,'clip':clip,
