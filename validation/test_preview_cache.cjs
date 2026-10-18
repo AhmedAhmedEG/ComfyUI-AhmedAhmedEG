@@ -24,6 +24,10 @@ const api={apiURL:p=>'http://localhost'+p,fetchApi:async (p,options)=>{lastOptio
   assert(!stored.has('http://localhost/full-old'),'Replaced full preview evicted');
   assert(!stored.has('http://localhost/latest-old'),'Replaced latest preview evicted');
   assert(stored.has('http://localhost/other-project'),'Other project stays buffered');
+  await w.fetchPreview(api,'/new-full');await w.fetchPreview(api,'/new-latest');
+  await Promise.all([w.rememberForTest(api,'/new-full',info('parallel','one')),w.rememberForTest(api,'/new-latest',info('parallel','one'))]);
+  await w.rememberForTest(api,'/replacement',info('parallel','two'));
+  assert(!stored.has('http://localhost/new-full') && !stored.has('http://localhost/new-latest'),'Concurrent scope completions both remain tracked for replacement eviction');
   for(let i=0;i<35;i++)await w.fetchPreview(api,'/take'+i);
   assert.equal(stored.size,32,'Persistent cache has a bounded take count');
   dom.window.close();console.log('Preview cache passed: shared downloads, persistent reuse, failure recovery, bounded storage.');

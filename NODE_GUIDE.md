@@ -1,7 +1,7 @@
 # Choose a node
 
 The [illustrated user guide](docs/index.html) is the complete reference for version
-**1.7.14**. Start with [Your first clip](docs/getting-started.html), then use
+**1.7.15**. Start with [Your first clip](docs/getting-started.html), then use
 [Practical workflows](docs/workflows.html) or the
 [timeline and reference editor guide](docs/editor.html).
 

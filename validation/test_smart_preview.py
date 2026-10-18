@@ -42,17 +42,17 @@ class SmartPreview(unittest.TestCase):
             for index, shot in enumerate(self.state['clips']):
                 cid=shot['id'];progress.shot_event('5','preview_test',cid,'sampling')
                 context=progress.preview_run_context('preview_test',self.state['clips'],queue)
-                self.assertNotIn(cid,context['clip_ids'])
+                self.assertIn(cid,context['clip_ids'])
                 self.manager.store_clip_results(cid, 'replacement', {'samples':torch.zeros((1,1,2,4,4))},
                     decoded_frames=torch.ones((5,32,64,3))*.5)
                 progress.shot_event('5','preview_test',cid,'completed')
                 context=progress.preview_run_context('preview_test',self.state['clips'],queue)
                 full=create_preview_plan(self.state,'full',self.temp.name,run_context=context)
                 latest=create_preview_plan(self.state,'latest',self.temp.name,run_context=context)
-                self.assertEqual(full['clip_count'],index+1)
+                self.assertEqual(full['clip_count'],max(2,index+1))
                 self.assertEqual(latest['clip_ids'],[cid])
                 with av.open(self.encode(full)) as video:
-                    self.assertEqual(sum(1 for _ in video.decode(video=0)),5*(index+1))
+                    self.assertEqual(sum(1 for _ in video.decode(video=0)), 14 if index == 0 else 5*(index+1))
 
     def setUp(self):
         torch.set_num_threads(2)

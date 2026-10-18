@@ -9,7 +9,7 @@ from core.preview import create_preview_plan, encode_preview
 
 
 class PackSourceNumerical(unittest.TestCase):
-    def test_live_full_preview_never_mixes_new_clip_with_old_future_take(self):
+    def test_live_preview_retains_old_results_until_each_replacement_is_saved(self):
         from pathlib import Path
         import json
         with tempfile.TemporaryDirectory() as folder:
@@ -20,16 +20,17 @@ class PackSourceNumerical(unittest.TestCase):
                 manager.store_clip_results(shot['id'],'old',None,self.audio,self.frames)
             old_second=manager._manifest['clips']['two']['generation']
             empty=create_preview_plan(state,'full',folder,run_context={'clip_ids':[]})
-            self.assertFalse(empty['found']);self.assertTrue(empty['run_active'])
+            self.assertEqual(empty['clip_ids'],['one','two']);self.assertTrue(empty['run_active'])
             manager.store_clip_results('one','new',None,self.audio,self.frames[:24])
             context={'clip_ids':['one']}
             for scope in ('latest','full'):
                 plan=create_preview_plan(state,scope,folder,run_context=context)
-                self.assertEqual(plan['clip_ids'],['one'])
+                self.assertEqual(plan['clip_ids'],['one'] if scope=='latest' else ['one','two'])
                 self.assertTrue(plan['run_active'])
+            self.assertEqual(manager._manifest['clips']['two']['generation'],old_second)
             media=encode_preview('live_preview',plan['key'],folder)
             with av.open(media) as video:
-                self.assertEqual(sum(1 for _ in video.decode(video=0)),24,'Only the new one-second clip is encoded')
+                self.assertEqual(sum(1 for _ in video.decode(video=0)),24+len(self.frames),'Full preview combines the new first clip with the still-current second clip')
             with self.assertRaises(ValueError):create_preview_plan(state,'take',folder)
             idle=create_preview_plan(state,'full',folder)
             self.assertEqual(idle['clip_count'],2,'Idle project browsing retains existing full-project behavior')

@@ -29,13 +29,8 @@ def progress_snapshot(node_id, project_id, queue):
 
 
 def preview_run_context(project_id, shots, queue, stream='final'):
-    """Hide only takes scheduled for replacement; admit each completion live."""
+    """Report a matching run without using scheduling as media eligibility."""
     running, pending = queue.get_current_queue()
-    blocked = set()
-    matched_prompt = None
-    with _lock:
-        states = [dict(state) for (_, project), state in _states.items()
-                  if project == str(project_id)]
     for item in [*running, *pending]:
         for node_id, node in item[2].items():
             if node.get('class_type') not in ('MiniMaxH3MasterNode', 'MiniMaxH3MasterDirector'):
@@ -45,34 +40,14 @@ def preview_run_context(project_id, shots, queue, stream='final'):
                 submitted = json.loads(inputs.get('timeline_data') or '{}')
             except (ValueError, TypeError):
                 continue
+            if not isinstance(submitted, dict):
+                continue
             if str(submitted.get('project_id') or node_id) != str(project_id):
                 continue
-            matched_prompt = item[1]
-            authored = submitted.get('clips', shots)
-            mode = inputs.get('generation_mode', submitted.get('generation_mode', 'Next clip'))
-            if mode == 'Conditioning only':
+            if inputs.get('generation_mode', submitted.get('generation_mode')) == 'Conditioning only':
                 continue
-            # These submitted flags describe what Master actually scheduled.
-            # Current editor approval changes never hide idle saved footage or
-            # expose an old take while its replacement is still being sampled.
-            candidates = [s['id'] for s in authored if not s.get('validated') and not s.get('locked')]
-            scheduled = set(candidates if mode in ('All clips', 'All shots') else candidates[:1])
-            if item in running:
-                matches = [state for state in states if state.get('prompt_id') == item[1]
-                           and str(state.get('node')).rsplit(':', 1)[-1] == str(node_id).rsplit(':', 1)[-1]]
-                if matches:
-                    state = max(matches, key=lambda value: value['sequence'])
-                    index = next((i for i, shot in enumerate(authored) if shot.get('id') == state.get('clip_id')), None)
-                    if index is not None:
-                        include_current = state['phase'] == 'completed' or (
-                            state['phase'] == 'first_pass_ready' and stream == 'first_pass')
-                        completed = {s['id'] for s in authored[:index + int(include_current)]}
-                        scheduled -= completed
-            blocked.update(scheduled)
-    if matched_prompt is None:
-        return None
-    return {'prompt_id': matched_prompt,
-            'clip_ids': [shot['id'] for shot in shots if shot['id'] not in blocked]}
+            return {'prompt_id': item[1], 'clip_ids': [shot['id'] for shot in shots]}
+    return None
 
 
 def shot_event(node_id, project_id, clip_id, phase, **data):

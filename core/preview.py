@@ -24,11 +24,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     rows = []
     shots_to_read = shots
     live = run_context
-    allowed = set(live['clip_ids']) if live is not None else None
     for index, shot in enumerate(shots_to_read):
         cid = safe_component(shot.get("id", f"clip_{index+1}"))
-        if allowed is not None and cid not in allowed:
-            continue
         meta = manager._manifest.get("clips", {}).get(cid, {})
         frames_kind="frames";audio_kind="audio";direct_frames=direct_audio=None
         if stream=="first_pass":
@@ -42,7 +39,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             if entry is None: continue
             direct_frames,direct_audio=entry["frames"],entry["audio"]
         # Approval controls Master regeneration, not saved-result visibility.
-        # Only the live queue context may exclude a take being replaced.
+        # Queuing/sampling a replacement never hides the current saved result.
+        # store_clip_results publishes its replacement only after a successful save.
         if not meta.get("has_frames"):
             source = shot.get("source")
             if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):
@@ -60,7 +58,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         rows = [max(rows, key=lambda row: row["updated_at"])] if rows else []
     if not rows:
         return {"found": False, "scope": scope, "run_active": live is not None,
-                "label": "Waiting for this run's first completed clip." if live is not None else "No completed clips yet. Generate a shot first."}
+                "label": "No completed clips yet. Generate a shot first."}
     # Trim a predecessor's handoff only when its immediate successor is present.
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:

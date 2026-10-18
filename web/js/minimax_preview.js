@@ -6,7 +6,15 @@ const reloadMedia = new Set();
 const MEDIA_LIMIT = 256 * 1024 * 1024;
 let legacyCacheCleared;
 const revisionStorage = 'minimax-preview-revisions-v2';
-async function rememberPreview(api, path, info) {
+let revisionUpdates = Promise.resolve();
+function rememberPreview(api, path, info) {
+  // Both scopes/players can finish buffering together. Serialize the shared
+  // read/evict/write so one completion cannot lose the other's revision entry.
+  const update=revisionUpdates.then(()=>updatePreviewRevision(api,path,info));
+  revisionUpdates=update.catch(()=>{});
+  return update;
+}
+async function updatePreviewRevision(api, path, info) {
   const url=api.apiURL(path), generations=info.clip_generations;
   if(!generations || !Object.keys(generations).length)return;
   let revisions={};
@@ -114,7 +122,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let request = 0, controller, disposed = false, source = "", checking = false;
   let project = getTimeline().project_id;
   let statusText='';
-  let blobUrl='', warmRevision='';
+  let blobUrl='', warmRevision='', loadingSource='';
   let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, open: !panel.hidden});
   let positionWritten=0,mediaReady=false;
@@ -136,6 +144,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     return options;
   };
   const stop = () => {
+    loadingSource='';
     savePosition(true);mediaReady=false;
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
     if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl='';}
@@ -158,35 +167,43 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       const info = await response.json();
       if (disposed || token !== request || panel.hidden) return;
       if (!response.ok) throw new Error(info.error || "Preview unavailable.");
-      if (!info.found) { stop(); label.textContent = info.label || "No completed clips yet. Generate a shot first."; return; }
+      if (!info.found) {
+        // A transient empty manifest/run response must not erase playable media.
+        label.textContent = source ? statusText+' · Waiting for an updated result…' : info.label || "No completed clips yet. Generate a shot first.";
+        return;
+      }
       const path = `/minimax_director/preview/media?${new URLSearchParams({project_id: info.project_id, key: info.key})}`;
       const url = api.apiURL(path);
-      await rememberPreview(api,path,info);
-      if(disposed || token!==request || panel.hidden)return;
       statusText = `${info.scope === "latest" ? "Latest Clip" : "Full Video"} · ${info.label}`;
-      if(info.run_active)statusText+=' · This Run';
-      if(info.missing_clips?.length)statusText+=` · ${info.run_active?'Not Ready In This Run':'No Cached Take'}: ${info.missing_clips.map(c=>c.name).join(', ')}`;
+      if(info.run_active)statusText+=' · Generation running';
+      if(info.missing_clips?.length)statusText+=` · No Saved Result: ${info.missing_clips.map(c=>c.name).join(', ')}`;
       label.textContent=statusText+(video.hidden && source===url?' · Buffering…':'');
       save.href = `${url}&download=1`; save.hidden = false;
       if (url !== source) {
-        stop();
         if (failedRevision !== url) {failedRevision=url;retryCount=0;}
-        recovering=false; source = url;label.textContent=statusText+' · Buffering…';
+        recovering=false; loadingSource=url;label.textContent=statusText+' · Buffering replacement…';
         void bufferedPreview(api,path).then(blob=>{
-          if(disposed || panel.hidden || source!==url)return;
+          if(disposed || panel.hidden || token!==request || loadingSource!==url)return;
+          savePosition(true);mediaReady=false;
+          const previousBlob=blobUrl;
+          source=url;loadingSource='';
           blobUrl=URL.createObjectURL(blob);video.src=blobUrl;video.load();save.hidden=false;
+          if(previousBlob)URL.revokeObjectURL(previousBlob);
           video.hidden=false;empty.hidden=true;label.textContent=statusText;
-        }).catch(error=>{if(!disposed && source===url){
-          if(error.stream){video.src=url;video.load();video.hidden=false;empty.hidden=true;label.textContent=statusText;save.hidden=false;}
+          void rememberPreview(api,path,info);
+        }).catch(error=>{if(!disposed && token===request && loadingSource===url){
+          loadingSource='';
+          if(error.stream){savePosition(true);mediaReady=false;source=url;video.src=url;video.load();if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl='';video.hidden=false;empty.hidden=true;label.textContent=statusText;save.hidden=false;void rememberPreview(api,path,info);}
+          else if(source){label.textContent=statusText+' · Replacement buffering failed; keeping saved result. Retrying…';}
           else {retryMedia(url, error.message);}
         }});
       }
-      // Once generation is idle, prepare the full movie without playing it.
-      // This is keyed by the latest revision, so polling does not redownload it.
-      if(scope.value==='latest' && !info.run_active && warmRevision!==url){
+      // Prebuffer both scopes after each completion, including during a run.
+      // Revision URLs deduplicate transfers; autoplay never gates buffering.
+      if(warmRevision!==url){
         warmRevision=url;
-        void api.fetchApi('/minimax_director/preview/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({timeline:getTimeline(),scope:'full',quality:quality.value,stream:stream.value})})
-          .then(r=>r.ok?r.json():null).then(full=>{if(full?.found && !disposed && project===full.project_id)return bufferedPreview(api,`/minimax_director/preview/media?${new URLSearchParams({project_id:full.project_id,key:full.key})}`);})
+        void api.fetchApi('/minimax_director/preview/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({timeline:getTimeline(),scope:scope.value==='latest'?'full':'latest',quality:quality.value,stream:stream.value})})
+          .then(r=>r.ok?r.json():null).then(async other=>{if(other?.found && !disposed && project===other.project_id){const path=`/minimax_director/preview/media?${new URLSearchParams({project_id:other.project_id,key:other.key})}`;await bufferedPreview(api,path);if(!disposed && warmRevision===url)await rememberPreview(api,path,other);}})
           .catch(error=>{if(!error.stream && warmRevision===url)warmRevision='';});
       }
     } catch (error) {
@@ -231,8 +248,8 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   quality.onchange=()=>{stop();persist();refreshPreview();};
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };
   refresh.onclick = () => {retryCount=0;retryAt=0;refreshPreview();};
-  // Completion websocket messages can be missed. The server owns run-aware
-  // eligibility, and stable revision URLs avoid rebuffering unchanged results.
+  // Completion websocket messages can be missed. Poll current saved results;
+  // stable revision URLs avoid rebuffering unchanged results.
   const poll = setInterval(() => {void refreshPreview(true);}, 2000);
   const resume=()=>{if(document.hidden)savePosition(true);else if(!disposed && !panel.hidden)void refreshPreview(true);};
   const leaving=()=>savePosition(true);

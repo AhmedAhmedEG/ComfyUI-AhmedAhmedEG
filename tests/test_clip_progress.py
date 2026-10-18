@@ -7,60 +7,27 @@ from core import progress
 
 
 class ClipProgress(unittest.TestCase):
-    def test_next_clip_does_not_hide_unscheduled_unapproved_results(self):
+    def test_queue_and_progress_never_hide_current_saved_results(self):
         import json
         shots=[{'id':cid,'validated':False} for cid in ('one','two','three')]
-        graph={'5':{'class_type':'MiniMaxH3MasterNode','inputs':{'generation_mode':'Next clip',
-            'timeline_data':json.dumps({'project_id':'next-preview','clips':shots})}}}
-        queue=Mock();queue.get_current_queue.return_value=([],[(1,'queued-next',graph,{})])
-        self.assertEqual(progress.preview_run_context('next-preview',shots,queue)['clip_ids'],['two','three'])
-        queue.get_current_queue.return_value=([(1,'queued-next',graph,{})],[])
+        ids=[shot['id'] for shot in shots]
+        graph={'5':{'class_type':'MiniMaxH3MasterNode','inputs':{
+            'timeline_data':json.dumps({'project_id':'retained-preview','clips':shots})}}}
+        queue=Mock()
         server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
-        with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):
-            progress.shot_event('5','next-preview','one','completed')
-            self.assertEqual(progress.preview_run_context('next-preview',shots,queue)['clip_ids'],['one','two','three'])
+        for mode in ('All clips','Next clip'):
+            graph['5']['inputs']['generation_mode']=mode
+            for running,pending in (([],[(1,'run',graph,{})]), ([(1,'run',graph,{})],[])):
+                queue.get_current_queue.return_value=(running,pending)
+                with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):
+                    for phase in ('preparing','sampling','completed','first_pass_ready'):
+                        progress.shot_event('5','retained-preview','two',phase)
+                        self.assertEqual(progress.preview_run_context('retained-preview',shots,queue)['clip_ids'],ids)
+                self.assertIsNone(progress.preview_run_context('unrelated',shots,queue))
         graph['5']['inputs']['generation_mode']='Conditioning only'
-        self.assertEqual(progress.preview_run_context('next-preview',shots,queue)['clip_ids'],['one','two','three'])
-
-    def test_live_preview_excludes_future_cached_clips_and_old_run_state(self):
-        shots=[{'id':'one'},{'id':'two'},{'id':'three'}]
-        graph={'5':{'class_type':'MiniMaxH3MasterNode','inputs':{'generation_mode':'All clips','timeline_data':'{"project_id":"preview-scope"}'}}}
-        queue=Mock();queue.get_current_queue.return_value=([(1,'current',graph,{})],[])
-        server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
-        with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):
-            self.assertEqual(progress.preview_run_context('preview-scope',shots,queue)['clip_ids'],[])
-            progress.shot_event('5','preview-scope','one','preparing')
-            self.assertEqual(progress.preview_run_context('preview-scope',shots,queue)['clip_ids'],[])
-            progress.shot_event('5','preview-scope','two','sampling')
-            self.assertEqual(progress.preview_run_context('preview-scope',shots,queue)['clip_ids'],['one'])
-            progress.shot_event('5','preview-scope','two','completed')
-            self.assertEqual(progress.preview_run_context('preview-scope',shots,queue)['clip_ids'],['one','two'])
-            progress.shot_event('5','preview-scope','three','first_pass_ready')
-            self.assertEqual(progress.preview_run_context('preview-scope',shots,queue)['clip_ids'],['one','two'])
-            self.assertEqual(progress.preview_run_context('preview-scope',shots,queue,'first_pass')['clip_ids'],['one','two','three'])
-        queue.get_current_queue.return_value=([(2,'next-run',graph,{})],[])
-        self.assertEqual(progress.preview_run_context('preview-scope',shots,queue)['clip_ids'],[])
-        self.assertIsNone(progress.preview_run_context('unrelated',shots,queue))
+        self.assertIsNone(progress.preview_run_context('retained-preview',shots,queue))
         queue.get_current_queue.return_value=([],[])
-        self.assertIsNone(progress.preview_run_context('preview-scope',shots,queue))
-
-    def test_approved_future_take_is_reused_but_submitted_regeneration_wins(self):
-        import json
-        shots=[{'id':'one','validated':False},{'id':'two','validated':True}]
-        def graph(clips):
-            return {'5':{'class_type':'MiniMaxH3MasterNode','inputs':{'generation_mode':'All clips',
-                'timeline_data':json.dumps({'project_id':'approved-preview','clips':clips})}}}
-        queue=Mock();queue.get_current_queue.return_value=([(1,'run-approved',graph(shots),{})],[])
-        self.assertEqual(progress.preview_run_context('approved-preview',shots,queue)['clip_ids'],['two'])
-        server=SimpleNamespace(instance=SimpleNamespace(prompt_queue=queue,send_sync=Mock()))
-        with patch.dict(sys.modules,{'server':SimpleNamespace(PromptServer=server)}):
-            progress.shot_event('5','approved-preview','one','sampling')
-            self.assertEqual(progress.preview_run_context('approved-preview',shots,queue)['clip_ids'],['two'])
-            shots[0]['validated']=True
-            self.assertEqual(progress.preview_run_context('approved-preview',shots,queue)['clip_ids'],['two'],
-                'Checking after enqueue cannot expose the result being regenerated')
-        queue.get_current_queue.return_value=([],[(2,'pending',graph([{'id':'one','validated':False},{'id':'two','validated':True}]),{})])
-        self.assertEqual(progress.preview_run_context('approved-preview',shots,queue)['clip_ids'],['two'])
+        self.assertIsNone(progress.preview_run_context('retained-preview',shots,queue))
 
     def test_reconnect_snapshot_is_scoped_to_live_prompt_and_subgraph(self):
         queue=Mock()
