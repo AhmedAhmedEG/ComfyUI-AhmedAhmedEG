@@ -26,6 +26,22 @@ def master():
 
 
 class MasterPreviewRepairs(unittest.TestCase):
+    def test_replacing_parent_removes_dependent_cache_and_approval_before_reuse(self):
+        with master() as case:
+            shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},
+                   {'id':'two','type':'T2V','duration':1,'continuity_mode':'Motion Context (Chained)',
+                    'context_length':5,'audio_context_length':5}]
+            state=json.loads(case.execute(shots)[-1])
+            manager=ProjectCacheManager('regression',case.temp.name)
+            old=manager._manifest['clips']['two']['generation']
+            state['clips'][1]['validated']=True
+            case.sampling_calls.clear()
+            result=case.execute(timeline_data=json.dumps(state))
+            self.assertEqual(len(case.sampling_calls),2,'The old approved successor must not be reused after its parent changes')
+            self.assertFalse(json.loads(result[-1])['clips'][1]['validated'])
+            self.assertNotEqual(ProjectCacheManager('regression',case.temp.name)._manifest['clips']['two']['generation'],old)
+            self.assertFalse(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+
     def test_paired_audio_reaches_native_numbered_slots(self):
         with master() as case:
             audio = {'waveform': torch.ones((1, 2, 32000)), 'sample_rate': 32000}

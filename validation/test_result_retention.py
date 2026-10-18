@@ -11,6 +11,56 @@ from core.preview import create_preview_plan
 
 
 class ResultRetention(unittest.TestCase):
+    def test_successful_parent_replacement_deletes_only_its_dependency_chain(self):
+        from core.continuity import dependent_successors
+        shots = [{'id':'one','continuity':False},
+                 {'id':'two','continuity_mode':'Motion Context (Chained)'},
+                 {'id':'three','continuity_mode':'Latent Carry (Pinned)'},
+                 {'id':'four','continuity':False},
+                 {'id':'five','continuity_mode':'FL2VA Tail Handoff'}]
+        for shot in shots: self.store(shot['id'])
+        draft=self.manager.store_first_pass('two','draft',self.latent,self.frames,self.audio)
+        stage=self.manager.store_refine_pass('two',1,self.frames,self.audio)
+        self.manager.update_clip_metadata('two',{'first_pass':draft,'refine_passes':[stage]})
+        self.manager.store_source_media('three',self.frames,self.audio)
+        state={'project_id':'retention','clips':shots}
+        old=create_preview_plan(state,'full',self.temp.name)
+        before=set(self.folder.glob('*.pt'))
+        self.manager.begin_preview_run()
+        self.assertEqual(create_preview_plan(state,'full',self.temp.name)['key'],old['key'])
+        self.assertEqual(set(self.folder.glob('*.pt')),before)
+        ids=dependent_successors(shots,0)
+        self.assertEqual(ids,['two','three'])
+        self.manager.store_clip_results('one','new',self.latent,self.audio,self.frames,invalidate_clip_ids=ids)
+        current=create_preview_plan(state,'full',self.temp.name)
+        self.assertEqual(current['clip_ids'],['one','four','five'])
+        self.assertEqual(current['invalidated_clip_ids'],['three','two'])
+        self.assertFalse(list(self.folder.glob('clip_two_*.pt')))
+        self.assertFalse(list(self.folder.glob('clip_three_*.pt')))
+        self.assertNotIn('two',self.manager._manifest['first_pass'])
+        self.assertTrue(list(self.folder.glob('clip_four_*.pt')))
+        self.assertTrue(list(self.folder.glob('clip_five_*.pt')))
+        self.store('two')
+        self.assertEqual(create_preview_plan(state,'full',self.temp.name)['clip_ids'],['one','two','four','five'])
+        self.assertEqual(self.manager._manifest['invalidated_clips'],['three'])
+
+    def test_failed_parent_replacement_preserves_dependent_files_and_manifest(self):
+        self.store('one');self.store('two')
+        old=self.manager._load_manifest()
+        files=set(self.folder.glob('*.pt'))
+        with patch.object(self.manager,'save_manifest',side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.manager.store_clip_results('one','replacement',self.latent,self.audio,self.frames,invalidate_clip_ids=['two'])
+        self.assertEqual(self.manager._load_manifest(),old)
+        self.assertEqual(set(self.folder.glob('*.pt')),files)
+
+    def test_dependency_chain_stops_at_source_and_disabled_context(self):
+        from core.continuity import dependent_successors
+        for stop in ({'type':'VIDEO'},{'source':{'ref_id':'video_1'}},{'locked':True},
+                     {'continuity':False},{'continuity_mode':'Independent (No Continuity)'},{'tail_seconds':0}):
+            shots=[{'id':'one'},{'id':'two'},dict({'id':'stop'},**stop),{'id':'later'}]
+            self.assertEqual(dependent_successors(shots,0),['two'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

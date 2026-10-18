@@ -28,6 +28,11 @@ const api={apiURL:p=>'http://localhost'+p,fetchApi:async (p,options)=>{lastOptio
   await Promise.all([w.rememberForTest(api,'/new-full',info('parallel','one')),w.rememberForTest(api,'/new-latest',info('parallel','one'))]);
   await w.rememberForTest(api,'/replacement',info('parallel','two'));
   assert(!stored.has('http://localhost/new-full') && !stored.has('http://localhost/new-latest'),'Concurrent scope completions both remain tracked for replacement eviction');
+  await w.fetchPreview(api,'/dependent-final');await w.fetchPreview(api,'/dependent-draft');
+  await w.rememberForTest(api,'/dependent-final',{project_id:'chain',stream:'final',clip_generations:{two:'old'}});
+  await w.rememberForTest(api,'/dependent-draft',{project_id:'chain',stream:'first_pass',clip_generations:{two:'draft'}});
+  await w.rememberForTest(api,'/new-parent',{project_id:'chain',stream:'final',clip_generations:{one:'new'},invalidated_clip_ids:['two']});
+  assert(!stored.has('http://localhost/dependent-final') && !stored.has('http://localhost/dependent-draft'),'Parent replacement evicts dependent browser media across stages');
   for(let i=0;i<35;i++)await w.fetchPreview(api,'/take'+i);
   assert.equal(stored.size,32,'Persistent cache has a bounded take count');
   dom.window.close();console.log('Preview cache passed: shared downloads, persistent reuse, failure recovery, bounded storage.');

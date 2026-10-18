@@ -16,12 +16,14 @@ function rememberPreview(api, path, info) {
 }
 async function updatePreviewRevision(api, path, info) {
   const url=api.apiURL(path), generations=info.clip_generations;
-  if(!generations || !Object.keys(generations).length)return;
+  const invalidated=new Set(info.invalidated_clip_ids || []);
+  if((!generations || !Object.keys(generations).length) && !invalidated.size)return;
   let revisions={};
   try{revisions=JSON.parse(globalThis.localStorage?.getItem(revisionStorage) || '{}');}catch{}
   for(const [old,entry] of Object.entries(revisions)) {
-    if(entry.project!==info.project_id || entry.stream!==(info.stream || 'final'))continue;
-    if(Object.entries(generations).some(([clip,generation])=>entry.generations?.[clip] && entry.generations[clip]!==generation)) {
+    if(entry.project!==info.project_id)continue;
+    if(Object.keys(entry.generations || {}).some(clip=>invalidated.has(clip)) ||
+      entry.stream===(info.stream || 'final') && Object.entries(generations || {}).some(([clip,generation])=>entry.generations?.[clip] && entry.generations[clip]!==generation)) {
       await evictPreview(old);delete revisions[old];
     }
   }

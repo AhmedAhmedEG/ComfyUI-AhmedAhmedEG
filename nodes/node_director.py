@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -411,6 +411,12 @@ class MiniMaxH3MasterDirector:
         except ImportError:
             from core.progress import shot_event
         run_report = []
+        def clear_dependent_approvals(ids):
+            for item in clips:
+                if str(item['id']) in ids:
+                    item['validated'] = False
+                    item['refine_approved'] = False
+                    item['refine_pending'] = False
         if kwargs.get("timeline") is not None:
             shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
         algorithm_signature = algorithm_provenance(selflift, refine, semantic_bridge) if execution_mode != "Conditioning Guide Output" else []
@@ -803,8 +809,10 @@ class MiniMaxH3MasterDirector:
                 if source_ref_id:
                     meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
                     if meta.get("fingerprint") != previous_fingerprint or not meta.get("has_frames") or not os.path.isfile(cache_mgr.get_clip_frames_path(clip_id)):
+                        invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length)
                         cache_mgr.store_clip_results(clip_id, previous_fingerprint, None, audio,
-                            source.get("original_frames", frames), validated=True)
+                            source.get("original_frames", frames), validated=True, invalidate_clip_ids=invalidated)
+                        clear_dependent_approvals(invalidated)
                         cache_mgr.store_source_media(clip_id,source.get("original_frames",frames),source["audio"])
                         cache_mgr.update_clip_metadata(clip_id, {"mode": "VIDEO", "trim_prefix": 0, "previous_trim": 0})
                     clip_item["duration"] = int(frames.shape[0]) / FPS
@@ -1266,6 +1274,7 @@ class MiniMaxH3MasterDirector:
                     before_video, _ = extract_streams_from_av_latent(pre_refine_latent)
                     before_frames = decode_video_latent(video_vae, before_video)
                     before_frames = spill_frames(before_frames[:decoded_frames.shape[0]], cache_mgr.project_dir)
+                invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length)
                 cache_mgr.store_clip_results(
                     clip_id=clip_id,
                     fingerprint=clip_fp,
@@ -1274,7 +1283,9 @@ class MiniMaxH3MasterDirector:
                     decoded_frames=decoded_frames,
                     validated=clip_validated,
                     pre_refine_frames=before_frames,
+                    invalidate_clip_ids=invalidated,
                 )
+                clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
                     "refine_passes":refine_pass_rows,"refinement_pending":False,

@@ -1,5 +1,5 @@
 {
-  "version": "1.7.15",
+  "version": "1.7.16",
   "reviewed": "2026-10-19",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -1377,7 +1377,7 @@
         {
           "goal": "Review a four-clip run as it progresses",
           "setup": "Leave the preview connected and choose Full video.",
-          "expect": "Saved clips remain viewable while replacements are queued or sampled. Each successfully completed replacement updates that clip in Latest and Full video; approval only controls regeneration."
+          "expect": "Queuing alone preserves the old preview. Once a predecessor is successfully replaced, its continuity-dependent successors lose their old cached files and approvals. Regenerated successors appear as they finish; independent clips remain."
         },
         {
           "goal": "Watch later without autoplay",
@@ -1395,7 +1395,7 @@
         "Saved Take history is removed. Regeneration replaces the current result and evicts superseded preview revisions.",
         "Original Resolution preserves generation dimensions; 540p/720p/1080p are playback caps, not model settings.",
         "Browser cache cannot restore deleted server latents, and a preview MP4 is not a continuation checkpoint.",
-        "Starting All clips retains every current saved result. Latest and Full prebuffer after completion, even with autoplay off; an existing displayed video stays loaded while a replacement downloads."
+        "Starting All clips preserves the old preview until a successful replacement. Replacing a predecessor deletes its continuity-dependent successors’ cached results; independent/source clips stop that chain. Both scopes prebuffer completed revisions with autoplay off."
       ],
       "options": {
         "project_state": {

@@ -43,7 +43,7 @@
       },
       {
         "title": "6. Review, reuse and export",
-        "body": "<p>The yellow outline selects an editor target. A saved-result indicator means files exist. Approval asks the Master to reuse a result. Unapproving preserves its files and clears continuity-dependent later approvals; successful regeneration replaces the current result.</p><p>Smart Preview updates during the run as clips finish. Its Full video scope is separate from Director Settings decoded_output. For a full cached sequence, use Project Video. Video Combine encodes only the frames and audio you feed it.</p>",
+        "body": "<p>The yellow outline selects an editor target. A saved-result indicator means files exist. Approval asks the Master to reuse a result. Unapproving preserves its files and clears continuity-dependent later approvals; successful regeneration replaces the current result and deletes the old caches of continuity-dependent successors. Independent/source clips stop that deletion chain.</p><p>Smart Preview updates during the run as clips finish. Its Full video scope is separate from Director Settings decoded_output. For a full cached sequence, use Project Video. Video Combine encodes only the frames and audio you feed it.</p>",
         "id": "review-and-export",
         "photo": "smart-preview"
       },

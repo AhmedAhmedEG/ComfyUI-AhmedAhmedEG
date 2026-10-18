@@ -40,7 +40,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             direct_frames,direct_audio=entry["frames"],entry["audio"]
         # Approval controls Master regeneration, not saved-result visibility.
         # Queuing/sampling a replacement never hides the current saved result.
-        # store_clip_results publishes its replacement only after a successful save.
+        # store_clip_results publishes its replacement and removes dependent
+        # cached results together, only after a successful save.
         if not meta.get("has_frames"):
             source = shot.get("source")
             if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):
@@ -79,6 +80,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         finally:
             if os.path.exists(temporary): os.unlink(temporary)
     return {"found": True, "scope": scope, "key": key, "project_id": manager.project_id,
+        "invalidated_clip_ids": manager._manifest.get('invalidated_clips', []),
         "stream": stream, "clip_generations": {row['clip_id']: row.get('generation') for row in rows if row.get('generation')},
         "clip_ids": [row["clip_id"] for row in rows], "clip_count": len(rows), "total_clips": len(shots),
         "missing_clips": [{"id": s["id"], "name": s.get("name", s["id"])} for s in shots if s.get("id") not in {row["clip_id"] for row in rows}] if scope == "full" else [],

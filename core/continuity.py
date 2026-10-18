@@ -157,6 +157,20 @@ def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
             "duration_policy": duration_policy}
 
 
+def dependent_successors(clips, changed_index, legacy_mode=MODES[1], legacy_frames=22):
+    """The contiguous dependency chain; an independent/source clip breaks it."""
+    result = []
+    for shot in clips[changed_index + 1:]:
+        if str(shot.get('type', '')).upper() == 'VIDEO':
+            break
+        policy = resolve_continuity(shot, legacy_mode, legacy_frames)
+        tail = float(shot.get('tail_seconds', float(shot.get('tail_frames', 12)) / FPS))
+        if policy['mode'] == MODES[0] or tail <= 0:
+            break
+        result.append(str(shot['id']))
+    return result
+
+
 def continuity_frame_budget(visible_frames, context_frames, policy="new"):
     """Return (sample frames, visible frames); old workflows retain new-time policy."""
     from .config import align_frame_count

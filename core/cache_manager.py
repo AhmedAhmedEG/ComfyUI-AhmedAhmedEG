@@ -337,6 +337,7 @@ class ProjectCacheManager:
         decoded_frames: Optional[torch.Tensor] = None,
         validated: bool = True,
         pre_refine_frames=None,
+        invalidate_clip_ids=(),
     ):
         """Save clip latent, audio, and frames to server disk cache."""
         self._manifest = self._load_manifest()
@@ -380,6 +381,14 @@ class ProjectCacheManager:
                 "preview_run_id": getattr(self, "_preview_run_id", None),
                 "has_pre_refine": pre_refine_frames is not None,
             }
+            invalidated = {safe_component(cid) for cid in invalidate_clip_ids} - {clip_id}
+            for cid in invalidated:
+                old = self._manifest.get('clips', {}).pop(cid, None)
+                if old: obsolete.update(self._result_files(cid, old))
+                draft = self._manifest.get('first_pass', {}).pop(cid, None)
+                if draft: obsolete.update(self._result_files(cid, draft, draft=True))
+            self._manifest['invalidated_clips'] = sorted(
+                (set(self._manifest.get('invalidated_clips', [])) | invalidated) - {clip_id})
             self.save_manifest()
         except Exception:
             self._manifest = self._load_manifest()

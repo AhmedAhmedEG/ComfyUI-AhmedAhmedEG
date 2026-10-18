@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.7.15** consolidates the MiniMax/video production features of
+Version **1.7.16** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -14,7 +14,10 @@ cached H.264/AAC preview file. Playback buffers with autoplay off, retains loade
 video during temporary status failures, and reuses browser-cached revisions.
 Both Latest clip and Full video prebuffer as results finish, including during an active
 run. Saved results remain viewable until each successful replacement is published;
-a queued regeneration does not clear the player.
+a queued regeneration does not clear the player. Once a predecessor is replaced,
+its continuity-dependent successors lose their old cached artifacts and approvals.
+The dependency chain stops at an independent/source clip; rebuilt successors return
+to the preview as they finish.
 The browser keeps up to 32 previews / 1 GiB in persistent storage when available
 and up to 8 previews / 256 MiB in session memory. Larger media uses browser streaming.
 Continuity audio joins blend the successor's discarded audio prefix into its
@@ -77,7 +80,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.7.15 reports 27 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.7.16 reports 27 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.
