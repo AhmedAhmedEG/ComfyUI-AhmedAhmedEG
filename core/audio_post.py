@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from fractions import Fraction
 from typing import Any, Dict, List
 
 import torch
@@ -17,6 +18,18 @@ def fit_audio_duration(audio, frame_count, fps=24.0):
         padding = torch.zeros((*wf.shape[:-1], length - wf.shape[-1]), device=wf.device, dtype=wf.dtype)
         wf = torch.cat([wf, padding], dim=-1)
     return {**audio, "waveform": wf}
+
+
+def slice_audio_frames(audio, start, end, fps=24):
+    """Slice PCM using frame boundaries, keeping discarded context for the join."""
+    rate = int(audio["sample_rate"])
+    first, last = round(start / fps * rate), round(end / fps * rate)
+    wave = audio["waveform"]
+    out = fit_audio_duration({**audio, "waveform": wave[..., first:last]}, end-start, fps)
+    out.update(frame_count=end-start, fps=fps)
+    if start:
+        out["seam_prefix"] = {"waveform": wave[..., :first], "sample_rate": rate}
+    return out
 
 
 def apply_audio_fade(
@@ -68,9 +81,24 @@ def prepare_timeline_audio(audio_clips, fade_ms=15., enable_gain_match=True):
     if not math.isfinite(fade_ms) or fade_ms < 0:
         raise ValueError('Audio join fade must be a finite nonnegative number of milliseconds.')
     segments = []
+    elapsed = Fraction(0)
+    previous_boundary = 0
     for clip in audio_clips:
         wave = concatenate_audio_clips([clip], crossfade_ms=0,
             enable_gain_match=False, enable_declick=False)['waveform']
+        if 'frame_count' in clip:
+            count, fps = int(clip['frame_count']), Fraction(str(clip.get('fps', 24)))
+            if count < 1 or fps <= 0:
+                raise ValueError('Timeline audio needs positive frame count and FPS.')
+            elapsed += Fraction(count, 1) / fps
+        else:
+            elapsed += Fraction(int(wave.shape[-1]), 48000)
+        boundary = round(elapsed * 48000)
+        length = boundary - previous_boundary
+        previous_boundary = boundary
+        wave = wave[..., :length]
+        if wave.shape[-1] < length:
+            wave = torch.nn.functional.pad(wave, (0, length-wave.shape[-1]))
         gain = 1.
         if segments and enable_gain_match:
             gain = (torch.sqrt(torch.mean(segments[-1] ** 2) + 1e-8) /

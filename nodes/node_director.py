@@ -539,6 +539,7 @@ class MiniMaxH3MasterDirector:
             clip_continuity_mode = continuity["mode"]
             clip_context_length = continuity["video_frames"]
             clip_audio_context = continuity["audio_frames"]
+            clip_duration_policy = continuity["duration_policy"]
             clip_continuity = (clip_idx > 0 or continuation is not None) and clip_continuity_mode != "Independent (No Continuity)"
             clip_ref_ids = clip_item.get("ref_ids", [])
             clip_ref_ids = list(dict.fromkeys([*timeline.get("shared_ref_ids", []), *clip_ref_ids]))
@@ -719,9 +720,6 @@ class MiniMaxH3MasterDirector:
                 if clip_continuity and previous_tail is not None and clip_idx > 0:
                     if not ref_images and not ref_videos and previous_tail.get("last_frame") is not None:
                         ref_images["ref_image_1"] = previous_tail["last_frame"]
-                    if clip_audio_context and not ref_audios and previous_tail.get("tail_audio") is not None:
-                        audio_tail = previous_tail["tail_audio"]
-                        ref_audios["ref_audio_1"] = {**audio_tail, "waveform": audio_tail["waveform"][..., -round(clip_audio_context / FPS * audio_tail["sample_rate"]):]}
                 is_chained_from_previous = False
 
 
@@ -768,18 +766,18 @@ class MiniMaxH3MasterDirector:
             visible_frames = source["frames"].shape[0] if source is not None else align_frame_count(int(clip_dur * FPS))
             continuation_prefix = 0
             latent_carry = clip_continuity_mode == "Latent Carry (Pinned)"
+            continuity_source = None
             if source is None and canon_mode != MODE_INPAINT and clip_continuity and previous_tail is not None:
                 frames = previous_tail.get("tail_frames")
                 if frames is not None and frames.shape[0] >= 5 and clip_continuity_mode in ("Motion Context (Chained)", "Latent Carry (Pinned)"):
                     count = align_frame_count(min(clip_context_length, int(frames.shape[0])), "down")
                     continuation_prefix = count
-                    clip_audio_context = min(clip_audio_context, count)
-                    clip_dur = align_frame_count(visible_frames + count) / FPS
-                    if not latent_carry:
-                        guide_audio = previous_tail.get("tail_audio") if clip_audio_context else None
-                        if guide_audio is not None:
-                            guide_audio = {**guide_audio, "waveform": guide_audio["waveform"][..., -round(min(count, clip_audio_context)/FPS*guide_audio["sample_rate"]):]}
-                        guide_frames = [{"frame": frames[-count:], "frame_idx": 0, "audio": guide_audio}]
+                    try:
+                        from ..core.continuity import continuity_frame_budget
+                    except ImportError:
+                        from core.continuity import continuity_frame_budget
+                    sample_frames, visible_frames = continuity_frame_budget(visible_frames, count, clip_duration_policy)
+                    clip_dur = sample_frames / FPS
                     if first_frame is not None and not is_chained_from_previous:
                         guide_frames = [*(guide_frames or []), {"frame": first_frame, "frame_idx": count}]
                     first_frame = None
@@ -942,6 +940,18 @@ class MiniMaxH3MasterDirector:
                     raise RuntimeError(f"Enabled Semantic Bridge failed: {exc}") from exc
 
             previous_trim = 0
+            if not latent_carry and continuation_prefix:
+                try:
+                    from ..core.motion_context import apply_motion_context
+                except ImportError:
+                    from core.motion_context import apply_motion_context
+                positive, trim_count, previous_trim, continuity_source = apply_motion_context(
+                    positive, latent, previous_av=previous_av, previous_tail=previous_tail,
+                    vae=video_vae, audio_vae=audio_vae, context_frames=continuation_prefix,
+                    audio_frames=clip_audio_context,
+                    context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None)
+                is_chained_from_previous = trim_count
+                clip_chained_flags[clip_idx] = trim_count
             if latent_carry and continuation_prefix:
                 try:
                     from ..core.vendor.aimixer.director.h3_latent_continue import apply_latent_continue
@@ -950,19 +960,19 @@ class MiniMaxH3MasterDirector:
                 latent, trim_count, previous_trim = apply_latent_continue(latent,
                     prev_av=previous_av, prev_tail=previous_tail["tail_frames"], vae=video_vae,
                     context_length=continuation_prefix,
-                    context_end_frame=previous_av.get("_mmx_visible_end") if previous_av else None,
+                    context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None,
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
                     pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
                     seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
-                if clip_idx == 0 or clip_item.get("continuation_source"):
-                    # The context came from an external file, not the preceding
-                    # timeline output. Never trim unrelated delivered footage.
-                    previous_trim = 0
+                continuity_source = "latent_carry"
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
-                if previous_trim and all_decoded_frames:
-                    all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
-                    all_decoded_audios[-1] = fit_audio_duration(all_decoded_audios[-1], all_decoded_frames[-1].shape[0], FPS)
+            if clip_idx == 0 or clip_item.get("continuation_source"):
+                # External context never trims unrelated delivered footage.
+                previous_trim = 0
+            if previous_trim and all_decoded_frames:
+                all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
+                all_decoded_audios[-1] = fit_audio_duration(all_decoded_audios[-1], all_decoded_frames[-1].shape[0], FPS)
             last_positive = positive
             last_latent = latent
             last_prompt = final_prompt
@@ -981,12 +991,12 @@ class MiniMaxH3MasterDirector:
                 loras=clip_lora_files,
                 ref_signatures=[fingerprint_value([ref_images, ref_videos, ref_video_audios, ref_audios, clip_refmod_items, first_frame, last_frame])],
                 upstream_fingerprint=previous_fingerprint if clip_continuity else None,
-                generation_settings={"version": 3, "runtime": runtime_signature, "algorithm_weights": algorithm_signature, "mode": canon_mode, "steps": steps, "cfg": cfg,
+                generation_settings={"version": 4, "runtime": runtime_signature, "algorithm_weights": algorithm_signature, "mode": canon_mode, "steps": steps, "cfg": cfg,
                     "sampler": sampler, "scheduler": scheduler, "shift_video": shift_video,
                     "shift_audio": shift_audio, "selflift": selflift, "refine": refine,
                     "face_refine": face_refine, "semantic_bridge": semantic_bridge, "sigmas": sigmas,
                     "continuity_mode": clip_continuity_mode, "context_length": clip_context_length,
-                    "audio_context_length": clip_audio_context,
+                    "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
@@ -1002,7 +1012,7 @@ class MiniMaxH3MasterDirector:
                 'model':clip_active_model,'loras':clip_lora_files,'refs':(ref_images,ref_videos,ref_video_audios,ref_audios,first_frame,last_frame,clip_refmod_items),
                 'guides':guide_frames,'selflift':selflift,'semantic':semantic_bridge,
                 'upstream':previous_fingerprint if clip_continuity else None,'redraw':clip_item.get('continuity_redraw',.1),
-                'continuity':(clip_continuity_mode,clip_context_length,clip_audio_context,clip_tail_sec),
+                'continuity':(clip_continuity_mode,clip_context_length,clip_audio_context,clip_tail_sec,clip_duration_policy),
                 'initial_latent':latent,'video_vae':video_vae,'audio_vae':audio_vae,'clip':clip,
                 'audio_mode':audio_mode,'source_audio':source['audio'] if source is not None else None})
             staged=cache_mgr.load_first_pass(clip_id,first_fp) if confirm_first else None
@@ -1308,6 +1318,7 @@ class MiniMaxH3MasterDirector:
             save_autosave(cache_mgr, timeline)
             run_report.append({"clip_id": clip_id, "action": "generated", "seed": str(clip_seed),
                 "frames": int(decoded_frames.shape[0]), "trim_prefix": int(is_chained_from_previous),
+                "continuity_source": continuity_source, "continuity_duration_policy": clip_duration_policy,
                 "refine": sampled_latent.get("_mmx_refine_report", "applied" if refine_enabled else "off"), "cache_error": cache_error})
             run_report[-1]['refined']=bool(refine_enabled)
             # The durable take already owns the pixels. Retain a file-backed
@@ -1376,13 +1387,16 @@ class MiniMaxH3MasterDirector:
                     # avoids cloning every disk-backed clip before assembly.
                     f = f[prefix_count:] if f.shape[0] > prefix_count else f
                     if curr_audio is not None:
-                        prefix = {**curr_audio, 'waveform': curr_audio['waveform'][..., :round(prefix_count/FPS*curr_audio['sample_rate'])]}
-                        curr_audio = trim_continuity_audio_prefix(curr_audio, context_frames=prefix_count)
-                        if k > 0 and orig_idx == out_indices[k - 1] + 1:
-                            curr_audio = {**curr_audio, 'seam_prefix': prefix}
+                        try:
+                            from ..core.audio_post import slice_audio_frames
+                        except ImportError:
+                            from core.audio_post import slice_audio_frames
+                        curr_audio = slice_audio_frames(curr_audio, prefix_count, prefix_count+f.shape[0], FPS)
+                        if k == 0 or orig_idx != out_indices[k - 1] + 1:
+                            curr_audio.pop('seam_prefix', None)
 
                 if curr_audio is not None:
-                    standardized_audios.append(curr_audio)
+                    standardized_audios.append({**curr_audio, 'frame_count':int(f.shape[0]), 'fps':FPS})
 
                 standardized_frames.append(f)
             try:

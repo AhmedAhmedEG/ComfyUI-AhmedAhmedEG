@@ -3,7 +3,7 @@ import copy,hashlib,io,json,math,re,uuid,zipfile
 from pathlib import Path,PurePosixPath
 from .task_modes import normalize_mode
 from .project import migrate_timeline, seed_string
-from .continuity import MODES, GRID
+from .continuity import MODES, GRID, AUDIO_GRID
 from .loras import normalize_loras
 
 MEDIA={'.png','.jpg','.jpeg','.webp','.bmp','.gif','.mp4','.mov','.mkv','.webm','.wav','.mp3','.flac','.ogg','.m4a'}
@@ -161,10 +161,11 @@ def convert_project(data,source='auto'):
                 if source=='tritant' and key=='audio_context_length' and value==0:
                     value=int(row.get('context_length',22))
                     warnings.append(f'Clip {index+1}: Tritant audio context 0 means follow video; converted to {value} frames.')
-                if value not in ((*GRID,0) if key=='audio_context_length' else GRID):raise ValueError(f'Invalid {key}.')
+                if value not in (AUDIO_GRID if key=='audio_context_length' else GRID):raise ValueError(f'Invalid {key}.')
                 clip[key]=value
-        for key in ('source','source_start','source_end','locked','audio_mode','color','continuity','continuity_redraw','seed_mode','tail_seconds'):
+        for key in ('source','source_start','source_end','locked','audio_mode','color','continuity','continuity_redraw','continuity_duration_policy','seed_mode','tail_seconds'):
             if key in row: clip[key]=row[key]
+        if source=='tritant': clip['continuity_duration_policy']='total'
         if source=='tritant' and isinstance(row.get('color_adjustment'),dict):
             raw=row['color_adjustment'];values={key:float(raw.get(key,100))/100 for key in ('saturation','contrast','brightness')}
             if any(not math.isfinite(v) or v<0 or v>2 for v in values.values()) or values['brightness']<=0:raise ValueError('Invalid imported Tritant color adjustment.')

@@ -131,6 +131,7 @@ def match_color_temperature_and_grade(
 MODES = ("Independent (No Continuity)", "Motion Context (Chained)",
          "Latent Carry (Pinned)", "FL2VA Tail Handoff")
 GRID = (5, 22, 39, 56)
+AUDIO_GRID = (0, 5, 22, 24, 39, 56)
 
 
 def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
@@ -141,12 +142,29 @@ def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
     if video not in GRID:
         raise ValueError("Video context must be 5, 22, 39 or 56 frames.")
     audio = int(shot.get("audio_context_length", video))
-    if audio not in (0, *GRID):
-        raise ValueError("Audio context must be off, 5, 22, 39 or 56 frames.")
+    if audio not in AUDIO_GRID:
+        raise ValueError("Audio context must be off, 5, 22, 24, 39 or 56 frames.")
+    duration_policy = shot.get("continuity_duration_policy", "new")
+    if duration_policy not in ("new", "total"):
+        raise ValueError("Continuity duration policy must be new or total.")
     if shot.get("continuity") is False or shot.get("locked") or shot.get("source"):
         mode = MODES[0]
     if mode == MODES[0]:
         video = audio = 0
     elif mode == MODES[3]:
         video, audio = 1, 0
-    return {"mode": mode, "video_frames": video, "audio_frames": min(audio, video)}
+    return {"mode": mode, "video_frames": video, "audio_frames": audio,
+            "duration_policy": duration_policy}
+
+
+def continuity_frame_budget(visible_frames, context_frames, policy="new"):
+    """Return (sample frames, visible frames); old workflows retain new-time policy."""
+    from .config import align_frame_count
+    requested = align_frame_count(int(visible_frames))
+    if policy == "total":
+        if context_frames >= requested:
+            raise ValueError("Continuity context must be shorter than the requested total duration.")
+        return requested, requested - context_frames
+    if policy != "new":
+        raise ValueError("Unknown continuity duration policy.")
+    return align_frame_count(requested + context_frames), requested

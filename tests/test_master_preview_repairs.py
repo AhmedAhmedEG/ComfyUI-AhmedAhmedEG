@@ -44,7 +44,8 @@ class MasterPreviewRepairs(unittest.TestCase):
             result = case.execute([{'id': 'one', 'type': 'I2VA', 'duration': 1,
                 'continuity': True, 'continuity_mode': 'Motion Context (Chained)'}], latent_checkpoint=checkpoint)
             self.assertEqual(len(case.sampling_calls), 1)
-            self.assertTrue(any(name == 'MiniMaxH3AddGuide' for name, _ in case.native_calls))
+            self.assertTrue(case.sampling_calls[0]['positive'][0][1]['minimax_keyframes'])
+            self.assertEqual(json.loads(result[8])['shots'][0]['continuity_source'],'decoded_fallback')
             self.assertEqual(json.loads(result[8])['shots'][0]['action'], 'generated')
             manager = ProjectCacheManager('regression', case.temp.name)
             self.assertEqual(manager._manifest['clips']['one']['previous_trim'], 0)

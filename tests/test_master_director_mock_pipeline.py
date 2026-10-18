@@ -65,8 +65,10 @@ class MockVAE:
         return torch.zeros((1, 64, 64, 3), dtype=torch.float32)
 
     def encode(self, image_tensor):
+        if image_tensor.ndim == 3:
+            return torch.zeros((1,32,2,round(image_tensor.shape[1]/32000*40)))
         b, h, w, c = image_tensor.shape
-        return torch.zeros((b, 16, 2, h // 16, w // 16), dtype=torch.float32)
+        return torch.zeros((1, 16, video_latent_t(b), h // 16, w // 16), dtype=torch.float32)
 
 
 class MockCLIP:
@@ -108,9 +110,10 @@ class TestMockPipeline(CacheIsolatedTestCase):
         state={"clips":[{"id":"next","type":"T2V","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":22}]}
         with patch("core.executor.MasterDirectorExecutor.build_conditioning") as build:
             build.return_value=([[torch.zeros(1,768),{}]],checkpoint["latent"],"text")
-            self.director.execute(video_vae=self.mock_vae,audio_vae=self.mock_audio_vae,clip=self.mock_clip,
+            result=self.director.execute(video_vae=self.mock_vae,audio_vae=self.mock_audio_vae,clip=self.mock_clip,
                 timeline_data=json.dumps(state),latent_checkpoint=checkpoint,generation_mode="Conditioning only",width=64,height=64)
-            self.assertEqual(build.call_args.kwargs['guide_frames'][0]['frame'].shape[0],22)
+            self.assertIsNone(build.call_args.kwargs['guide_frames'])
+            self.assertEqual(sum('latent' in g for g in result[3][0][1]['minimax_keyframes']),7)
 
     def test_legacy_file_context_becomes_preceding_timeline_video(self):
         frames = torch.zeros((56, 64, 64, 3))
@@ -121,12 +124,12 @@ class TestMockPipeline(CacheIsolatedTestCase):
         with patch("nodes.node_director.source_range", return_value={"frames":frames,"audio":audio}) as load, \
              patch("core.executor.MasterDirectorExecutor.build_conditioning") as build:
             build.return_value = ([[torch.zeros(1, 768), {}]], {"samples": (torch.zeros(1,16,7,4,4),torch.zeros(1,32,2,12))}, "text")
-            self.director.execute(video_vae=self.mock_vae, audio_vae=self.mock_audio_vae,
+            result=self.director.execute(video_vae=self.mock_vae, audio_vae=self.mock_audio_vae,
                 clip=self.mock_clip, timeline_data=json.dumps(state), width=64, height=64)
             load.assert_called_once()
-            guides = build.call_args.kwargs["guide_frames"]
-            self.assertEqual(guides[0]["frame"].shape[0], 22)
-            self.assertEqual(guides[0]["audio"]["waveform"].shape[-1], 10000)
+            guides = result[3][0][1]['minimax_keyframes']
+            self.assertEqual(sum('latent' in g for g in guides),7)
+            self.assertEqual(next(g['audio_latent'] for g in guides if 'audio_latent' in g).shape[-1],8)
 
     def setUp(self):
         super().setUp()
@@ -135,6 +138,9 @@ class TestMockPipeline(CacheIsolatedTestCase):
         self.mock_clip = MockCLIP()
         self.mock_model = MockModel()
         self.director = MiniMaxH3MasterDirector()
+        resize=patch('core.motion_context._resize_frames',side_effect=lambda frames,w,h:
+            torch.nn.functional.interpolate(frames.permute(0,3,1,2),size=(h,w),mode='bilinear',align_corners=False).permute(0,2,3,1))
+        resize.start();self.addCleanup(resize.stop)
 
     def test_mock_node_guide_mode_execution(self):
         """Test Master Director execution in 'Conditioning Guide Output' mode."""

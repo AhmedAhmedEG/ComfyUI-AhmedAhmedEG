@@ -2840,7 +2840,7 @@ function mountDirectorUI(node) {
     // All generation edits pass through this boundary. Runtime notifications
     // explicitly accept their own seed/source updates without rejecting takes.
     const keys = ['type','duration','prompt','prompt_mode','structured_prompt','ref_ids',
-      'continuity','continuity_mode','context_length','audio_context_length','continuity_redraw',
+      'continuity','continuity_mode','context_length','audio_context_length','continuity_redraw','continuity_duration_policy',
       'tail_seconds','tail_frames','seed','seed_mode','audio_mode','model_override','guides',
       'loras','color','source','source_start','source_end','group'];
     const shared = JSON.stringify([timelineState.shared_prompt || '', timelineState.shared_prompt_policy || 'prepend', timelineState.shared_ref_ids || [], builderState]);
@@ -3779,7 +3779,7 @@ function mountDirectorUI(node) {
         const priorFrames=external || timelineState.clips[index-1]?.source?rawFrames:Math.max(5,5+Math.ceil((rawFrames-5)/17)*17);
         const grid=[56,39,22,5].find(count=>count<=priorFrames && count<=Number(clip.context_length || 22)) || 0;
         const video=method==="FL2VA Tail Handoff"?1:grid;
-        const audio=method==="FL2VA Tail Handoff"?0:Math.min(video,Number(clip.audio_context_length ?? video));
+        const audio=method==="FL2VA Tail Handoff"?0:Number(clip.audio_context_length ?? video);
         if(video>0 || audio>0) {
           const link=document.createElement('span');link.className='mmx-continuity-link';link.dataset.start=elapsed;link.dataset.clipId=clip.id;
           link.dataset.videoFrames=video;link.dataset.audioFrames=audio;link.setAttribute('role','img');
@@ -4532,19 +4532,28 @@ function mountDirectorUI(node) {
     const continuityMode=document.createElement("select");continuityMode.className="mmx-shot-continuity-mode";
     for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method.replace(/ \(.*\)$/, "");continuityMode.append(option);}
     continuityMode.value=activeClip.continuity_mode || "Independent (No Continuity)";
-    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;activeClip.audio_context_length=Math.min(Number(activeClip.audio_context_length ?? activeClip.context_length),Number(activeClip.context_length));activeClip.validated=false;syncState();renderTimeline();};
+    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;activeClip.validated=false;syncState();renderTimeline();};
     continuityMode.onchange=commitContinuity;
-    continuityPanel.append(field("Method",continuityMode,"Independent starts fresh. Motion guides new sampling with decoded frames. Latent Carry pins previous latent data. FL2VA hands off one final frame."));
-    if([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) for (const [key,title,choices,fallback] of [["context_length","Video Context (Seconds)",[5,22,39,56],22],["audio_context_length","Audio Context (Seconds)",[0,5,22,39,56],22]]) {
+    continuityPanel.append(field("Method",continuityMode,"Independent starts fresh. Motion Context uses saved audiovisual latent guides, with decoded footage as a fallback. Latent Carry copies the tail into the sample with tapered redraw masks. FL2VA hands off one final frame."));
+    if([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) for (const [key,title,choices,fallback] of [["context_length","Video Context (Seconds)",[5,22,39,56],22],["audio_context_length","Audio Context (Seconds)",[0,5,22,24,39,56],22]]) {
       const input=document.createElement("select");input.className="mmx-shot-"+key;
-      for (const value of choices){const option=document.createElement("option");option.value=value;option.textContent=value===0?"Off":`${(value/24).toFixed(2)} s`;option.disabled=key==='audio_context_length' && value>Number(activeClip.context_length || 22);input.append(option);}
-      input.value=key==='audio_context_length'?Math.min(Number(activeClip[key] ?? fallback),Number(activeClip.context_length || 22)):activeClip[key] ?? fallback;input.disabled=!!activeClip.locked || [continuityModes[0],continuityModes[3]].includes(continuityMode.value);
+      for (const value of choices){const option=document.createElement("option");option.value=value;option.textContent=value===0?"Off":`${(value/24).toFixed(2)} s (${value} frames)`;input.append(option);}
+      input.value=activeClip[key] ?? fallback;input.disabled=!!activeClip.locked || [continuityModes[0],continuityModes[3]].includes(continuityMode.value);
       input.onchange=()=>{activeClip[key]=Number(input.value);commitContinuity();};
-      continuityPanel.append(field(title,input,key==="audio_context_length"?"Audio context is capped at the video context. No previous audio means no audio carry.":"Context is sampled before the new clip and removed from its delivered frames."));
+      continuityPanel.append(field(title,input,key==="audio_context_length"?"Audio is independent of video context: 24 frames = 1 second. Off disables audio carry.":"Context is sampled before the new clip and removed from its delivered frames."));
+    }
+    if ([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) {
+      const policy=document.createElement("select");policy.className="mmx-shot-continuity-duration-policy";
+      for (const [value,label] of [["new","Duration = new footage"],["total","Duration includes context (Extender)"]]) {
+        const option=document.createElement("option");option.value=value;option.textContent=label;policy.append(option);
+      }
+      policy.value=activeClip.continuity_duration_policy || "new";
+      policy.onchange=()=>{activeClip.continuity_duration_policy=policy.value;commitContinuity();};
+      continuityPanel.append(field("Duration",policy,"New footage preserves the requested visible length. Extender includes the borrowed context, so the delivered clip is shorter. Frame counts snap to H3's temporal grid."));
     }
     if (continuityMode.value===continuityModes[2]){
       const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="0.95";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
-      redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Seam redraw strength",redraw,"0 pins the seam most strongly; 1 permits full redraw."));
+      redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Seam redraw strength",redraw,"Tapered redraw near the seam: 0 holds the seam most strongly; higher values allow more redraw (maximum 0.95)."));
     }
     if(continuityMode.value===continuityModes[0]) {
       const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);

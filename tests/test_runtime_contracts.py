@@ -25,6 +25,8 @@ class NativeOutput:
 
 class SmallVAE:
     def encode(self, pixels):
+        if pixels.ndim == 3:
+            return torch.zeros((1,32,2,round(pixels.shape[1]/32000*40)))
         return torch.zeros((1, 24, video_latent_t(pixels.shape[0]), 2, 2))
 
     def decode(self, latent):
@@ -78,7 +80,7 @@ class RuntimeContracts(unittest.TestCase):
         self.assertNotIsInstance(noise, dict)
         self.assertNotIsInstance(latent_image, dict)
         self.sampling_calls.append({"model": model, "seed": seed, "steps": steps, "cfg": cfg, "sampler": sampler_name, "scheduler": scheduler,
-            "samples": latent_image, "sigmas": sigmas, "noise_mask": noise_mask,
+            "samples": latent_image, "positive": positive, "sigmas": sigmas, "noise_mask": noise_mask,
             "disable_noise": disable_noise, "start_step": start_step, "last_step": last_step})
         return latent_image
 
@@ -541,19 +543,19 @@ class RuntimeContracts(unittest.TestCase):
         clips = [{"id": "one", "type": "T2VA", "duration": 1},
                  {"id": "two", "type": "REF2VA", "duration": 1}]
         result = self.execute(clips)
-        guides = [kw for name, kw in self.native_calls if name == "MiniMaxH3AddGuide"]
-        self.assertEqual(len(guides), 1)
-        self.assertEqual(guides[0]["frame_idx"], 0)
-        self.assertEqual(guides[0]["image"].shape[0], 22)
+        guides = self.sampling_calls[-1]['positive'][0][1]['minimax_keyframes']
+        self.assertEqual(sum('latent' in g for g in guides), 7)
+        self.assertEqual([g['resolved_frame_index'] for g in guides if 'latent' in g], [0,1,5,9,13,17,18])
+        self.assertFalse(any(name == 'MiniMaxH3AddGuide' for name, _ in self.native_calls))
         self.assertEqual(result[7], 39 + 39)
 
     def test_per_shot_context_overrides_global_and_can_disable_audio(self):
         clips = [{"id":"one","type":"T2VA","duration":2,"continuity_mode":"Independent (No Continuity)"},
                  {"id":"two","type":"T2VA","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":39,"audio_context_length":0}]
         self.execute(clips, continuity_mode="Independent (No Continuity)")
-        guides = [kw for name,kw in self.native_calls if name=="MiniMaxH3AddGuide"]
-        self.assertEqual(guides[0]["image"].shape[0],39)
-        self.assertIsNone(guides[0].get("audio"))
+        guides = self.sampling_calls[-1]['positive'][0][1]['minimax_keyframes']
+        self.assertEqual(sum('latent' in g for g in guides),12)
+        self.assertFalse(any('audio_latent' in g for g in guides))
 
     def test_independent_bypasses_tail_guides_and_carry(self):
         clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
@@ -572,9 +574,10 @@ class RuntimeContracts(unittest.TestCase):
                 "audio":{"waveform":torch.zeros((1,2,112000)),"sample_rate":48000}}
         clips=[{"id":"footage","type":"V2V","duration":56/24,"source":{"filename":"source.mp4"},"locked":True},
                {"id":"next","type":"T2V","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":22}]
-        with patch('nodes.node_director.source_range',return_value=source):self.execute(clips)
-        guide=next(kw for name,kw in self.native_calls if name=='MiniMaxH3AddGuide')
-        self.assertEqual(guide['image'].shape,(22,32,64,3))
+        with patch('nodes.node_director.source_range',return_value=source), patch('core.motion_context._resize_frames',side_effect=lambda frames,w,h:torch.zeros((frames.shape[0],h,w,3))) as resize, patch('core.motion_context._encode_tail_audio',return_value=(torch.zeros((1,32,2,37)),37)):
+            result=self.execute(clips)
+        self.assertEqual(resize.call_args.args[0].shape,(22,32,64,3))
+        self.assertEqual(json.loads(result[8])['shots'][-1]['continuity_source'],'decoded_fallback')
         self.assertEqual(len(self.sampling_calls),1,'Existing footage is not sampled')
 
     def test_video_edit_reference_uses_input_budget_not_output_canvas(self):
@@ -599,9 +602,10 @@ class RuntimeContracts(unittest.TestCase):
         clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
                {"id":"two","type":"T2V","duration":2,"continuity_mode":"Motion Context (Chained)","context_length":39,"audio_context_length":5}]
         self.execute(clips)
-        guide=next(kw for name,kw in self.native_calls if name=='MiniMaxH3AddGuide')
-        self.assertEqual(guide['image'].shape[0],39)
-        self.assertEqual(guide['audio']['waveform'].shape[-1],round(5/24*guide['audio']['sample_rate']))
+        guides=self.sampling_calls[-1]['positive'][0][1]['minimax_keyframes']
+        self.assertEqual(sum('latent' in g for g in guides),12)
+        audio=next(g['audio_latent'] for g in guides if 'audio_latent' in g)
+        self.assertEqual(audio.shape[-1],round(5/24*40))
         self.assertEqual(ProjectCacheManager('regression',self.temp.name)._manifest['clips']['two']['trim_prefix'],39)
 
     def test_master_timeline_generation_mode_overrides_config(self):
@@ -609,13 +613,55 @@ class RuntimeContracts(unittest.TestCase):
         self.execute(timeline_data=json.dumps({"version":2,"project_id":"regression","generation_mode":"Next shot","clips":clips}),run_mode="full_batch")
         self.assertEqual(len(self.sampling_calls),1)
 
-    def test_continuity_modes_validate_and_clamp_audio(self):
+    def test_continuity_modes_validate_independent_audio(self):
         from core.continuity import resolve_continuity
         result=resolve_continuity({"continuity_mode":"Latent Carry (Pinned)","context_length":5,"audio_context_length":56})
-        self.assertEqual(result["audio_frames"],5)
+        self.assertEqual(result["audio_frames"],56)
         self.assertEqual(resolve_continuity({"continuity_mode":"FL2VA Tail Handoff"})["video_frames"],1)
         self.assertEqual(resolve_continuity({"continuity":False})["video_frames"],0)
         with self.assertRaises(ValueError):resolve_continuity({"context_length":12})
+
+    def test_motion_context_uses_cached_latents_and_no_automatic_audio_reference(self):
+        refs={'refs':[{'id':'hero','type':'image','data':torch.ones((1,32,32,3))},
+                      {'id':'music','type':'audio','data':{'waveform':torch.ones((1,2,32000)),'sample_rate':32000}}]}
+        clips=[{'id':'one','type':'REF2VA','duration':2,'ref_ids':['hero'],'continuity':False},
+               {'id':'two','type':'REF2VA','duration':2,'ref_ids':['hero'],
+                'continuity_mode':'Motion Context (Chained)','context_length':22,'audio_context_length':24}]
+        with patch.object(self.vae,'encode',side_effect=AssertionError('Compatible latent must avoid VAE encode')):
+            result=self.execute(clips,ref_pack=refs)
+        native=[kw for name,kw in self.native_calls if name=='MiniMaxH3ReferenceToVideo']
+        self.assertEqual(native[-1]['ref_audios'],{})
+        guides=self.sampling_calls[-1]['positive'][0][1]['minimax_keyframes']
+        self.assertEqual(next(g['audio_latent'] for g in guides if 'audio_latent' in g).shape[-1],40)
+        self.assertIsNone(self.sampling_calls[-1]['noise_mask'])
+        self.assertEqual(json.loads(result[8])['shots'][-1]['continuity_source'],'sampled_latent')
+        clips[1]['ref_ids'].append('music');self.native_calls.clear()
+        self.execute(clips,ref_pack=refs)
+        native=[kw for name,kw in self.native_calls if name=='MiniMaxH3ReferenceToVideo']
+        self.assertEqual(list(native[-1]['ref_audios']),['ref_audio_1'])
+
+    def test_extender_duration_samples_requested_total_and_keeps_shorter_output(self):
+        clips=[{'id':'one','type':'T2VA','duration':2,'continuity':False},
+               {'id':'two','type':'T2VA','duration':2,'continuity_mode':'Motion Context (Chained)',
+                'context_length':22,'audio_context_length':24,'continuity_duration_policy':'total'}]
+        result=self.execute(clips)
+        targets=[kw['length'] for name,kw in self.native_calls if name=='MiniMaxH3ImageToVideo']
+        self.assertEqual(targets,[56,56])
+        self.assertEqual(result[7],56+56-22)
+        self.assertEqual(result[1]['waveform'].shape[-1],result[7]*2000)
+        self.assertIsNone(self.sampling_calls[-1]['noise_mask'])
+
+    def test_motion_context_and_carry_are_exclusive(self):
+        clips=[{'id':'one','type':'T2VA','duration':2,'continuity':False},
+               {'id':'two','type':'T2VA','duration':2,'continuity_mode':'Latent Carry (Pinned)',
+                'context_length':22,'audio_context_length':24}]
+        def stage(model,latent,steps,cfg,sampler,scheduler,positive,negative,seed,**kwargs):
+            self.sampling_calls.append({'noise_mask':latent.get('noise_mask'),'positive':positive})
+            return latent
+        with patch('core.motion_context.apply_motion_context',side_effect=AssertionError('Do not stack guides with carry')), patch('core.advanced_sampling.sample_stage',side_effect=stage):
+            self.execute(clips)
+        self.assertIsNotNone(self.sampling_calls[-1]['noise_mask'])
+        self.assertNotIn('minimax_keyframes',self.sampling_calls[-1]['positive'][0][1])
 
     def test_latent_carry_receives_per_shot_audio_policy(self):
         clips=[{"id":"one","type":"T2VA","duration":2,"continuity_mode":"Independent (No Continuity)"},

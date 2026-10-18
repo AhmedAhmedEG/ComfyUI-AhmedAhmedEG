@@ -69,7 +69,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
             left["trim_tail"] = right.get("previous_trim", 0)
-    plan = {"version": 3, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
+    plan = {"version": 4, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
         "source_state": {k: state[k] for k in ("width", "height", "resolution", "references") if k in state},
         "gain_match": bool(state.get("audio_gain_match", True)), "fade_ms": float(state.get("audio_fade_ms", 15))}
     key = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -126,13 +126,8 @@ def encode_preview(project_id, key, base_dir=None):
         if end <= start: raise ValueError("Cached clip has no visible frames after context trimming.")
         frames = frames[start:end]
         if audio:
-            rate = int(audio["sample_rate"])
-            prefix = {**audio, 'waveform': audio['waveform'][..., :round(start/24*rate)]} if start else None
-            waveform = audio["waveform"][..., round(start/24*rate):round(end/24*rate)]
-            expected = round((end-start)/24*rate)
-            if waveform.shape[-1] < expected:
-                waveform = F.pad(waveform, (0, expected-waveform.shape[-1]))
-            audio = {**audio, "waveform": waveform, 'seam_prefix': prefix}
+            from .audio_post import slice_audio_frames
+            audio = slice_audio_frames(audio, start, end)
         return frames, audio
 
     width, height = 0, 0

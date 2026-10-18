@@ -268,9 +268,14 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
     listeners.get('executing')({type:'executing',detail:{node:null}});editorRoot.querySelector('.mmx-shot-block .mmx-clip-selection input').click();
   }
   const reduceVideo=editorRoot.querySelector('.mmx-shot-context_length');reduceVideo.value='5';reduceVideo.onchange();
-  assert.equal(JSON.parse(timeline.value).clips.at(-1).audio_context_length,5,'Audio setting reflects the real video-context cap');
-  assert.equal(editorRoot.querySelector('.mmx-continuity-link').dataset.audioFrames,'5');
-  assert(editorRoot.querySelector('.mmx-shot-audio_context_length option[value="22"]').disabled);
+  assert.equal(JSON.parse(timeline.value).clips.at(-1).audio_context_length,22,'Video edits preserve independent audio context');
+  assert.equal(editorRoot.querySelector('.mmx-continuity-link').dataset.audioFrames,'22');
+  assert(!editorRoot.querySelector('.mmx-shot-audio_context_length option[value="24"]').disabled);
+  const independentAudio=editorRoot.querySelector('.mmx-shot-audio_context_length');independentAudio.value='24';independentAudio.onchange();
+  assert.equal(JSON.parse(timeline.value).clips.at(-1).audio_context_length,24);
+  const durationPolicy=editorRoot.querySelector('.mmx-shot-continuity-duration-policy');assert.equal(durationPolicy.value,'new');
+  durationPolicy.value='total';durationPolicy.onchange();
+  assert.equal(JSON.parse(timeline.value).clips.at(-1).continuity_duration_policy,'total');
   const audioOff=editorRoot.querySelector('.mmx-shot-audio_context_length');audioOff.value='0';audioOff.onchange();
   assert(!editorRoot.querySelector('.mmx-continuity-overlay.audio'),'Off removes the audio context card');
   const pinned=editorRoot.querySelector('.mmx-shot-continuity-mode');pinned.value='Latent Carry (Pinned)';pinned.onchange();
