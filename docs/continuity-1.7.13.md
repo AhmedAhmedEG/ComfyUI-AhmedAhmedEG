@@ -22,4 +22,17 @@ Master output and Smart Preview now share frame-boundary PCM slicing and retain 
 - Editor regression verifies independent audio context and duration persistence. Four preview JavaScript suites pass.
 - Runtime contracts verify no automatic standalone audio, preservation of explicit audio, guide/carry exclusivity, native guide rows reaching the sampler, total-duration output and external checkpoint handling. Actual native guide contents also participate in the staged-take fingerprint, so changing a parent latent requires a fresh first-pass review even when its prompt and seed match.
 
-These model-free results establish execution contracts, not visual seam superiority. Live GPU comparison results will be recorded after deployment. No third-party source files were changed.
+## Live GPU and preview verification
+
+Deployed and loaded 1.7.13 at `faf2299` with 27 public nodes. The queue was idle before each reload. No third-party source files were changed.
+
+At 320×192, two Euler/simple steps, fixed seeds and the four connected image references:
+
+- Initial All clips run completed four clips: independent, Motion Context with Extender duration, Motion Context with new-footage duration, then Latent Carry. Sampling/completion events advanced through clips 1–4 in order.
+- Final corrected-code run reused the approved first clip without sampling and generated clips 2–4 successfully. Both motion clips reported `sampled_latent`; the carry clip reported `latent_carry`. No cache errors or CUDA errors occurred. Full output: 197 frames at 24 fps.
+- Matched comparison used the installed **MiniMaxH3MotionContextRAM** node, the exact same clip-1 AV checkpoint, seed 222, ordered references, fresh 56-frame target, model, shifts and sampler schedule. Both sampled streams matched the corrected Master's Extender-duration Motion Context output **bit for bit**: video `[1,24,17,12,20]`, audio `[1,32,2,93]`; maximum and mean absolute differences were zero. This checks continuity execution for this small case, not the whole original Extender engine or visual quality at production resolution.
+- Full preview encoded all four clips: 197 frames / 8.2083 s. Latest encoded 56 visible frames / 2.3333 s. Historical Saved take encoded the earlier clip-2 version: 34 visible frames / 1.4167 s. Each carried stereo 48 kHz audio with matching duration to MP4 timestamp precision.
+- Fourteen additional real preview/media codec tests passed. Total unique Python checks across the backend, numerical and preview/media suites: **312**, plus the editor and four preview JavaScript suites.
+- Memory/progress snapshots were retained during both short runs. There was no OOM/crash, but these are not long-chain peak-memory benchmarks and do not establish absence of every possible leak.
+
+Evidence remains in `.validation/continuity1713-{history,events,stats}.json`, `.validation/continuity1713-final-{history,events,stats,report}.json`, `.validation/continuity1713-original-history.json`, `.validation/continuity1713-gpu-comparison.json` and `.validation/continuity1713-preview-results.json`. All temporary test/remote helper processes exit after collection. The user's `first_video` project, workflow and existing takes were not changed.
