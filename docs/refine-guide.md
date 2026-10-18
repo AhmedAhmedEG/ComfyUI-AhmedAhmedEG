@@ -29,3 +29,11 @@ For an initial comparison, try same-resolution `refine`, one pass, three steps, 
 Enable Confirm First Pass to pause after initial generation. Review the clip, approve the first pass on its timeline card, then run again. If the first-pass fingerprint still matches, the Master reuses it and performs refinement without repeating initial sampling. Continuity successors do not consume an unreviewed first pass.
 
 First Pass, Before Refine, and Pass N are processing stages of the current clip result, not a history of previous generations. Replacing a clip removes superseded generation artifacts while retaining the current result's comparison stages.
+
+## Ten steps now, fifteen later?
+
+A completed ten-step clip followed by fifteen refinement steps is **not equivalent** to a twenty-five-step initial generation. The first run already finished its noise schedule. Refinement adds noise again according to denoise strength and runs a separate schedule.
+
+Persistent exact sampling resume is not exposed by the pack. That would require planning the original schedule, saving its unfinished noisy latent and schedule position, and preserving any required sampler history. A clip checkpoint contains the completed result instead.
+
+To review and refine later without repeating initial sampling, enable Confirm First Pass before generating. A clip generated earlier without that option is not automatically reused as a refinement-only first pass.

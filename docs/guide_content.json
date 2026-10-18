@@ -561,12 +561,12 @@
       "summary": "Loads a complete saved take from a project’s server-side cache.",
       "when": "Use it to resume or branch from an already completed clip.",
       "behavior": [
-        "latest selects the current take for clip_id. An explicit take UUID selects that historical generation from the manifest.",
+        "Loads the current result for clip_id. Regeneration replaces that result; historical generations are not retained.",
         "Loads the saved latent, decoded frames and audio. Fails if any required artifact is missing or unreadable.",
         "Returns a continuation object plus separate media and latent outputs; it does not generate a new take."
       ],
       "steps": [
-        "Find the project ID, shot ID and optional take UUID in the Master’s saved-take tools.",
+        "Find the project ID and clip ID in the Master timeline data.",
         "Enter those values and load the checkpoint.",
         "Connect checkpoint to another Master continuation input to branch or continue."
       ],
@@ -591,8 +591,8 @@
         "Saved sampled joint latent."
       ],
       "beginner": {
-        "meaning": "A take is one generated version of a shot. This loads a complete take saved in this pack’s server-side cache, including the compressed generation result needed by continuation workflows. It is not a diffusion-model loader.",
-        "first_use": "Choose the project ID, clip ID and take ID of a completed saved take. These IDs identify cache entries; they are not the friendly shot name. Use the outputs in a continuation graph. Importing a workflow JSON alone does not bring those cache files with it."
+        "meaning": "Loads the current completed clip, including its sampled latent, frames and audio. Regenerating the clip replaces this checkpoint. It does not resume an unfinished sampling schedule.",
+        "first_use": "Enter the project ID and clip ID of a completed result. Connect checkpoint to Master.latent_checkpoint for continuation. This is a completed result, not a paused sampler state."
       }
     },
     "MiniMaxH3AdvanceCheckpoint": {
@@ -880,7 +880,7 @@
       "when": "Connect this at the end of the starter instead of a video-saving node.",
       "behavior": [
         "Reads the Master’s project_state output to identify completed cached takes. It does not generate video or combine the full movie on every run.",
-        "Latest clip requests a separate preview file for the newest completed take. Full video explicitly requests the completed sequence. Preview copies fit within 960 × 540.",
+        "Latest clip requests the newest completed current clip; Full video assembles current clips in timeline order. Original Resolution is the default; optional caps reduce transfer size.",
         "Autoplay, Refresh and Save preview live in this player. Preview URLs are revision-addressed so unchanged clips do not rebuffer."
       ],
       "steps": [
@@ -893,7 +893,8 @@
       ],
       "notes": [
         "This is an output node: its connection makes the Master run. It needs completed take caches on the same ComfyUI server.",
-        "For final-resolution export, use the consolidated workflow’s Create Video → Save Video path."
+        "For final-resolution export, use the consolidated workflow’s Create Video → Save Video path.",
+        "Regenerating a clip replaces its result and evicts superseded previews. Historical Saved Take selection is removed; First Pass and Refine passes are stages of the current result."
       ],
       "related": [
         "MiniMaxH3MasterNode",
