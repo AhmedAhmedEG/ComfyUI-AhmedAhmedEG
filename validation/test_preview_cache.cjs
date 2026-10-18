@@ -4,7 +4,7 @@ const dom=new JSDOM('',{url:'http://localhost/',runScripts:'outside-only'}),w=do
 const stored=new Map();let downloads=0,fail=false,lastOptions;
 const response=key=>({ok:true,headers:{get:()=> '100'},blob:async()=>({size:100,key}),clone(){return response(key);}});
 w.caches={open:async()=>({match:async k=>stored.get(String(k)),put:async(k,r)=>stored.set(String(k),r),keys:async()=>[...stored.keys()],delete:async k=>stored.delete(String(k))})};
-w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function')+'\nglobalThis.fetchPreview=bufferedPreview;globalThis.clearSession=()=>previewMedia.clear();globalThis.evictPreviewForTest=evictPreview;');
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function')+'\nglobalThis.fetchPreview=bufferedPreview;globalThis.clearSession=()=>previewMedia.clear();globalThis.evictPreviewForTest=evictPreview;globalThis.rememberForTest=rememberPreview;');
 const api={apiURL:p=>'http://localhost'+p,fetchApi:async (p,options)=>{lastOptions=options;downloads++;if(fail)throw Error('offline');return response(p);}};
 (async()=>{
   await Promise.all([w.fetchPreview(api,'/one'),w.fetchPreview(api,'/one')]);
@@ -14,6 +14,16 @@ const api={apiURL:p=>'http://localhost'+p,fetchApi:async (p,options)=>{lastOptio
   await w.fetchPreview(api,'/two');assert.equal(downloads,3,'A failed transfer can be retried');
   await w.evictPreviewForTest('http://localhost/one');assert(!stored.has('http://localhost/one'));
   const beforeReload=downloads;await w.fetchPreview(api,'/one');assert.equal(downloads,beforeReload+1);assert.equal(lastOptions.cache,'reload','Playback recovery bypasses the HTTP cache too');
+  fail=false;
+  await w.fetchPreview(api,'/full-old');await w.fetchPreview(api,'/latest-old');await w.fetchPreview(api,'/other-project');
+  const info=(project,generation)=>({project_id:project,stream:'final',clip_generations:{one:generation}});
+  await w.rememberForTest(api,'/full-old',info('project','old'));
+  await w.rememberForTest(api,'/latest-old',info('project','old'));
+  await w.rememberForTest(api,'/other-project',info('other','old'));
+  await w.rememberForTest(api,'/latest-new',info('project','new'));
+  assert(!stored.has('http://localhost/full-old'),'Replaced full preview evicted');
+  assert(!stored.has('http://localhost/latest-old'),'Replaced latest preview evicted');
+  assert(stored.has('http://localhost/other-project'),'Other project stays buffered');
   for(let i=0;i<35;i++)await w.fetchPreview(api,'/take'+i);
   assert.equal(stored.size,32,'Persistent cache has a bounded take count');
   dom.window.close();console.log('Preview cache passed: shared downloads, persistent reuse, failure recovery, bounded storage.');

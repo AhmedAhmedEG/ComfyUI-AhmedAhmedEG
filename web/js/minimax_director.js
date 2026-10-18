@@ -3137,7 +3137,7 @@ function mountDirectorUI(node) {
     const button = document.createElement("button"); button.textContent = label;
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];
     if(label==="Delete Saved Results")button.classList.add("mmx-project-danger");
-    button.title=({"Delete Saved Results":"Delete cached generations, saved takes and the last autosave for this project. Keep the current timeline and uploaded references.","Restore Last Autosave":"Replace the current timeline with the snapshot saved after the last generated clip. Does not resume rendering.","New Project":"Start a blank timeline with a new project ID and fresh shared/audio settings. Existing server-side saved results are kept."})[label] || label;
+    button.title=({"Delete Saved Results":"Delete cached results and the last autosave for this project. Keep the current timeline and uploaded references.","Restore Last Autosave":"Replace the current timeline with the snapshot saved after the last generated clip. Does not resume rendering.","New Project":"Start a blank timeline with a new project ID and fresh shared/audio settings. Existing server-side saved results are kept."})[label] || label;
     button.onclick = async () => {
       if(button.disabled)return;
       button.disabled=true;button.textContent=({"Delete Saved Results":"Deleting…","Restore Last Autosave":"Restoring…","New Project":"Creating…"})[label] || `${label}…`;button.setAttribute('aria-busy','true');
@@ -3149,7 +3149,7 @@ function mountDirectorUI(node) {
     projectTools.appendChild(button);
   };
   addProjectAction("Delete Saved Results", async () => {
-    if (!confirm("Delete this project's cached generations, saved takes and last autosave? The current timeline and uploaded references are kept.")) return false;
+    if (!confirm("Delete this project's cached results and last autosave? The current timeline and uploaded references are kept.")) return false;
     await requestJson("/minimax_director/project/clear_cache", {project_id: timelineState.project_id});
     cachedClipResults={};cacheStatusRequest++;
     timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();

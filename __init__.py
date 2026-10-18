@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.13"
+__version__ = "1.7.14"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -98,9 +98,9 @@ if getattr(PromptServer, "instance", None) is not None:
             body = await request.json()
             timeline = body['timeline']
             context = preview_run_context(timeline['project_id'], timeline.get('clips', []),
-                PromptServer.instance.prompt_queue, body.get('stream', 'final')) if body.get('scope') != 'take' else None
+                PromptServer.instance.prompt_queue, body.get('stream', 'final'))
             result = await asyncio.to_thread(create_preview_plan, body["timeline"], body.get("scope", "latest"),
-                quality=body.get("quality", "original"), take_id=body.get("take_id"),stream=body.get("stream","final"), run_context=context)
+                quality=body.get("quality", "original"),stream=body.get("stream","final"), run_context=context)
             return web.json_response(result)
         except (ValueError, KeyError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
@@ -466,17 +466,6 @@ if getattr(PromptServer, "instance", None) is not None:
         except FileNotFoundError:
             return web.json_response({"error": "This project has no saved run."}, status=404)
         except (ValueError, TypeError) as exc:
-            return web.json_response({"error": str(exc)}, status=400)
-
-    @routes.get("/minimax_director/project/takes")
-    async def project_takes(request):
-        try:
-            mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
-            clip_id = request.query.get("clip_id")
-            rows = [{"take_id": key, **value} for key, value in mgr._manifest.get("takes", {}).items()
-                if clip_id is None or value.get("clip_id") == clip_id]
-            return web.json_response(sorted(rows, key=lambda row: row.get("updated_at", 0), reverse=True))
-        except ValueError as exc:
             return web.json_response({"error": str(exc)}, status=400)
 
     @routes.get("/minimax_director/project/cache/status")

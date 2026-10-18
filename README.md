@@ -99,7 +99,7 @@ Project Video to control playback/export FPS while keeping audio timing explicit
 - **Continuity:** independent, endpoint handoff, native motion guides in every
   video mode, or phase-aware latent carry with redraw masks. Prefix/video/audio
   trim is shared by previews and cached exports. Importing an existing video
-  creates locked Clip 0. Saved takes can be selected as checkpoints and advanced
+  creates locked Clip 0. Current clip results can be loaded as checkpoints and advanced
   through an explicit graph gate.
 - **Sampling/refinement:** AIMixer Euler-state SelfLift with lift/rho/pixel
   anchor/transition and low-resolution carry; validated learned 3D H3 latent
@@ -111,7 +111,7 @@ Project Video to control playback/export FPS while keeping audio timing explicit
   stitch controls, Semantic Bridge with exact compatible weights, and optional
   model-scoped residual Cache. Missing optional dependencies produce errors;
   detected no-face clips are reported and retained.
-- **Projects/output:** atomic per-shot takes, restart provenance, autosave/recover,
+- **Projects/output:** atomic current results per shot, restart provenance, autosave/recover,
   lightweight cache reconnect, portable media packs, append/overwrite import,
   missing-file checks, completed-shot seed advancement, source/generate/mute
   audio policy, grading, watermarking, seamless loops and progress reports.

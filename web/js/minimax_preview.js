@@ -4,13 +4,33 @@ const previewMedia = new Map();
 const pendingMedia = new Map();
 const reloadMedia = new Set();
 const MEDIA_LIMIT = 256 * 1024 * 1024;
+let legacyCacheCleared;
+const revisionStorage = 'minimax-preview-revisions-v2';
+async function rememberPreview(api, path, info) {
+  const url=api.apiURL(path), generations=info.clip_generations;
+  if(!generations || !Object.keys(generations).length)return;
+  let revisions={};
+  try{revisions=JSON.parse(globalThis.localStorage?.getItem(revisionStorage) || '{}');}catch{}
+  for(const [old,entry] of Object.entries(revisions)) {
+    if(entry.project!==info.project_id || entry.stream!==(info.stream || 'final'))continue;
+    if(Object.entries(generations).some(([clip,generation])=>entry.generations?.[clip] && entry.generations[clip]!==generation)) {
+      await evictPreview(old);delete revisions[old];
+    }
+  }
+  delete revisions[url];revisions[url]={project:info.project_id,stream:info.stream || 'final',generations};
+  try{globalThis.localStorage?.setItem(revisionStorage,JSON.stringify(Object.fromEntries(Object.entries(revisions).slice(-64))));}catch{}
+}
 async function bufferedPreview(api, path) {
   const url = api.apiURL(path);
   if (previewMedia.has(url)) {const blob=previewMedia.get(url);previewMedia.delete(url);previewMedia.set(url,blob);return blob;}
   if (pendingMedia.has(url)) return pendingMedia.get(url);
   const task=(async()=>{
     let cache, response;
-    try {cache=await globalThis.caches?.open('minimax-preview-v1');response=reloadMedia.has(url)?null:await cache?.match(url);} catch {}
+    try {
+      legacyCacheCleared ||= Promise.resolve(globalThis.caches?.delete?.('minimax-preview-v1'));
+      await legacyCacheCleared;
+      cache=await globalThis.caches?.open('minimax-preview-v2');response=reloadMedia.has(url)?null:await cache?.match(url);
+    } catch {}
     if (!response) {
       response=await api.fetchApi(path,reloadMedia.has(url)?{cache:'reload'}:undefined);
       reloadMedia.delete(url);
@@ -37,7 +57,7 @@ async function evictPreview(url) {
   previewMedia.delete(url);
   reloadMedia.add(url);
   if(reloadMedia.size>32)reloadMedia.delete(reloadMedia.values().next().value);
-  try {const cache=await globalThis.caches?.open('minimax-preview-v1');await cache?.delete(url);} catch {}
+  try {const cache=await globalThis.caches?.open('minimax-preview-v2');await cache?.delete(url);} catch {}
 }
 
 export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions, standalone = false}) {
@@ -51,6 +71,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   saveOptions=value=>{
     const stored=readStored('options');
     const options={...value,updated_at:Math.max(Date.now(),Number(nodeOptions()?.updated_at || 0)+1,Number(stored.updated_at || 0)+1)};
+    delete options.take_id;
     try{const key=storageKey('options');if(key)globalThis.localStorage?.setItem(key,JSON.stringify(options));}catch{}
     writeNodeOptions(options);
   };
@@ -65,16 +86,15 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const header = document.createElement("div"); header.className = "mmx-toolbar";header.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:8px';
   const scope = document.createElement("select"); scope.className = "mmx-language-select"; scope.style.width = "auto";
   scope.setAttribute("aria-label", "Preview scope");
-  for (const [value, text] of [["latest", "Latest clip"], ["full", "Full video"], ["take", "Saved Take"]]) {
+  for (const [value, text] of [["latest", "Latest clip"], ["full", "Full video"]]) {
     const option = document.createElement("option"); option.value = value; option.textContent = text; scope.append(option);
   }
-  scope.value = ['full','take'].includes(getOptions().scope) ? getOptions().scope : "latest";
+  scope.value = getOptions().scope === 'full' ? getOptions().scope : "latest";
   const quality=document.createElement('select');quality.className='mmx-preview-quality';quality.setAttribute('aria-label','Preview Resolution');
   for(const [value,text] of [['original','Original Resolution'],['1080p','1080p'],['720p','720p'],['540p','540p · Smaller Download']]){
     const option=document.createElement('option');option.value=value;option.textContent=text;quality.append(option);
   }
   quality.value=getOptions().quality || 'original';
-  const takeChoice=document.createElement('select');takeChoice.className='mmx-preview-take';takeChoice.setAttribute('aria-label','Saved Take');takeChoice.hidden=true;
   const label = document.createElement("span"); label.className = "mmx-preview-status"; label.textContent = "No completed clips yet.";
   const autoplayLabel = document.createElement("label");
   const autoplay = document.createElement("input"); autoplay.type = "checkbox"; autoplay.checked = !!getOptions().autoplay;
@@ -85,7 +105,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const stream=document.createElement('select');stream.setAttribute('aria-label','Preview Stage');
   for(const [v,t] of [['final','Final Output'],['first_pass','First Pass · Review'],['pre_refine','Before Refinement'],...Array.from({length:20},(_,i)=>['pass:'+(i+1),'Refine Pass '+(i+1)])]){const o=document.createElement('option');o.value=v;o.textContent=t;stream.append(o);}
   stream.value=getOptions().stream || 'final';
-  header.append(scope, quality, stream,takeChoice, label, autoplayLabel, refresh, save);
+  header.append(scope, quality, stream, label, autoplayLabel, refresh, save);
   const empty = document.createElement("div"); empty.className = "mmx-preview-empty";
   empty.textContent = "Your completed clip will appear here.";
   const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "auto"; video.hidden = true;
@@ -96,7 +116,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let statusText='';
   let blobUrl='', warmRevision='';
   let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
-  const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value,take_id:takeChoice.value, autoplay: autoplay.checked, open: !panel.hidden});
+  const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, open: !panel.hidden});
   let positionWritten=0,mediaReady=false;
   const savePosition = (force=false) => {
     if(!mediaReady || !source || !Number.isFinite(video.currentTime) || !force && Date.now()-positionWritten<2000)return;
@@ -109,12 +129,10 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   };
   const restoreOptions = () => {
     const options=getOptions();
-    scope.value=['full','take'].includes(options.scope)?options.scope:'latest';
+    scope.value=options.scope === 'full'?options.scope:'latest';
     quality.value=options.quality || 'original';if(!quality.value)quality.value='original';
     stream.value=options.stream || 'final';if(!stream.value)stream.value='final';
     autoplay.checked=!!options.autoplay;
-    takeChoice.replaceChildren();
-    if(options.take_id){const option=document.createElement('option');option.value=options.take_id;option.textContent='Loading saved take…';takeChoice.append(option);takeChoice.value=options.take_id;}
     return options;
   };
   const stop = () => {
@@ -134,33 +152,18 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     checking = true;
     if (!source) label.textContent = "Checking completed clips…";
     try {
-      takeChoice.hidden=scope.value!=='take';
-      if(scope.value==='take'){
-        const takesResponse=await api.fetchApi(`/minimax_director/project/takes?project_id=${encodeURIComponent(getTimeline().project_id)}`,{signal:controller.signal});
-        const takes=await takesResponse.json();
-        if(disposed || token!==request || panel.hidden)return;
-        if(!takesResponse.ok)throw new Error(takes.error || 'Could not list saved takes.');
-        const previous=takeChoice.value || getOptions().take_id;takeChoice.replaceChildren();
-        for(const take of takes.filter(t=>t.has_frames)){
-          const option=document.createElement('option');option.value=take.take_id;
-          const name=getTimeline().clips?.find(c=>c.id===take.clip_id)?.name || take.clip_id;
-          option.textContent=`${name} · ${take.width && take.height?`${take.width}×${take.height} · `:''}${new Date(take.updated_at*1000).toLocaleString()}`;
-          takeChoice.append(option);
-        }
-        if([...takeChoice.options].some(option=>option.value===previous))takeChoice.value=previous;
-        if(!takeChoice.value){stop();label.textContent='No Saved Takes Available.';return;}
-        persist();
-      }
       const response = await api.fetchApi("/minimax_director/preview/info", {method: "POST",
         headers: {"Content-Type": "application/json"}, signal: controller.signal,
-        body: JSON.stringify({timeline: getTimeline(), scope: scope.value, quality:quality.value,stream:stream.value,take_id:scope.value==='take'?takeChoice.value:undefined})});
+        body: JSON.stringify({timeline: getTimeline(), scope: scope.value, quality:quality.value,stream:stream.value})});
       const info = await response.json();
       if (disposed || token !== request || panel.hidden) return;
       if (!response.ok) throw new Error(info.error || "Preview unavailable.");
       if (!info.found) { stop(); label.textContent = info.label || "No completed clips yet. Generate a shot first."; return; }
       const path = `/minimax_director/preview/media?${new URLSearchParams({project_id: info.project_id, key: info.key})}`;
       const url = api.apiURL(path);
-      statusText = `${info.scope === "latest" ? "Latest Clip" : info.scope === 'take' ? 'Saved Take' : "Full Video"} · ${info.label}`;
+      await rememberPreview(api,path,info);
+      if(disposed || token!==request || panel.hidden)return;
+      statusText = `${info.scope === "latest" ? "Latest Clip" : "Full Video"} · ${info.label}`;
       if(info.run_active)statusText+=' · This Run';
       if(info.missing_clips?.length)statusText+=` · ${info.run_active?'Not Ready In This Run':'No Cached Take'}: ${info.missing_clips.map(c=>c.name).join(', ')}`;
       label.textContent=statusText+(video.hidden && source===url?' · Buffering…':'');
@@ -226,12 +229,11 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   scope.onchange = () => { stop(); persist(); refreshPreview(); };
   stream.onchange=()=>{stop();persist();refreshPreview();};
   quality.onchange=()=>{stop();persist();refreshPreview();};
-  takeChoice.onchange=()=>{stop();persist();refreshPreview();};
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };
   refresh.onclick = () => {retryCount=0;retryAt=0;refreshPreview();};
   // Completion websocket messages can be missed. The server owns run-aware
   // eligibility, and stable revision URLs avoid rebuffering unchanged results.
-  const poll = setInterval(() => {if(scope.value!=='take' || recovering)void refreshPreview(true);}, 2000);
+  const poll = setInterval(() => {void refreshPreview(true);}, 2000);
   const resume=()=>{if(document.hidden)savePosition(true);else if(!disposed && !panel.hidden)void refreshPreview(true);};
   const leaving=()=>savePosition(true);
   document.addEventListener('visibilitychange',resume);

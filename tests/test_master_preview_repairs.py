@@ -77,11 +77,13 @@ class MasterPreviewRepairs(unittest.TestCase):
             old = manager.load_first_pass('one')
             manager.store_first_pass('one', 'unrelated-new-draft', old['latent'],
                 manager.load_clip_frames('one'), manager.load_clip_audio('one'))
-            info = create_preview_plan(state, 'take', case.temp.name, take_id=take, stream='first_pass')
-            plan = json.loads((Path(manager.project_dir)/'previews'/(info['key']+'.json')).read_text())
-            self.assertEqual(plan['rows'][0]['generation'], draft)
+            # The current draft remains reviewable; historical take selection is removed.
+            info = create_preview_plan(state, base_dir=case.temp.name, stream='first_pass')
+            self.assertTrue(info['found'])
+            with self.assertRaises(ValueError):
+                create_preview_plan(state, 'take', case.temp.name)
             manager.update_clip_metadata('one', {'first_pass': None})
-            self.assertFalse(create_preview_plan(state, 'take', case.temp.name, take_id=take, stream='first_pass')['found'])
+            self.assertFalse(create_preview_plan(state, base_dir=case.temp.name, stream='first_pass')['found'])
 
     def test_approved_recovery_uses_saved_color_not_current_controls(self):
         with master() as case:

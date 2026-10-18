@@ -26,7 +26,7 @@ class MiniMaxH3Checkpoint:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"project_id": ("STRING", {"default": "default_director"}),
-                "clip_id": ("STRING", {"default": "clip_1"}), "take_id": ("STRING", {"default": "latest"})}}
+                "clip_id": ("STRING", {"default": "clip_1"})}}
     RETURN_TYPES = ("MMX_CONTINUATION", "IMAGE", "AUDIO", "LATENT")
     RETURN_NAMES = ("checkpoint", "frames", "audio", "latent")
     FUNCTION = "load"
@@ -34,17 +34,13 @@ class MiniMaxH3Checkpoint:
     @classmethod
     def IS_CHANGED(cls, project_id, clip_id, take_id="latest"):
         manager = ProjectCacheManager(project_id)
-        if take_id != "latest": return take_id
         import os
         return os.path.getmtime(manager.get_clip_latent_path(clip_id))
 
     def load(self, project_id, clip_id, take_id="latest"):
         manager = ProjectCacheManager(project_id)
-        if take_id != "latest":
-            take = manager._manifest.get("takes", {}).get(take_id)
-            if take is None or take.get("clip_id") != clip_id:
-                raise ValueError("Selected take does not belong to this project/shot.")
-            manager._manifest["clips"][clip_id] = take
+        if take_id != "latest" and take_id != manager._manifest.get("clips", {}).get(clip_id, {}).get("generation"):
+            raise ValueError("Historical takes are no longer retained; load the current clip result.")
         latent = manager.load_clip_latent(clip_id)
         frames = manager.load_clip_frames(clip_id)
         audio = manager.load_clip_audio(clip_id)

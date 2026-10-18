@@ -101,29 +101,23 @@ class SmartPreview(unittest.TestCase):
             self.assertEqual(self.encode(latest), latest_path)
         self.assertEqual(Path(latest_path).stat().st_mtime_ns, before)
 
-    def test_saved_revision_survives_a_later_generation(self):
+    def test_replaced_preview_revision_is_deleted(self):
         old = self.plan()
         self.manager.store_clip_results("two", "new", {"samples": torch.zeros((1, 1, 2, 4, 4))},
             decoded_frames=torch.zeros((5, 32, 64, 3)))
         new = self.plan()
         self.assertNotEqual(old["key"], new["key"])
-        with av.open(self.encode(old)) as video:
-            self.assertEqual(len(list(video.decode(video=0))), 10)
+        with self.assertRaises(FileNotFoundError):self.encode(old)
         with av.open(self.encode(new)) as video:
             self.assertEqual(len(list(video.decode(video=0))), 5)
 
-    def test_saved_take_remains_viewable_after_same_clip_is_regenerated(self):
-        old_take = self.manager._manifest["clips"]["one"]["generation"]
+    def test_historical_take_scope_is_rejected(self):
+        old_path = self.manager.get_clip_latent_path("one")
         self.manager.store_clip_results("one", "new", {"samples": torch.zeros((1, 1, 2, 4, 4))},
             decoded_frames=torch.ones((5, 32, 64, 3))*.9)
-        plan = create_preview_plan(self.state, "take", self.temp.name, take_id=old_take)
-        self.assertEqual(plan["clip_ids"], ["one"])
-        with av.open(self.encode(plan)) as video:
-            frames=list(video.decode(video=0))
-            self.assertEqual(len(frames),12)
-            self.assertLess(frames[0].to_ndarray(format="rgb24").mean(),70)
-        self.assertNotEqual(self.manager._load_manifest()["clips"]["one"]["generation"], old_take,
-                            "Viewing must not change the current take")
+        self.assertFalse(Path(old_path).exists())
+        with self.assertRaises(ValueError):create_preview_plan(self.state,"take",self.temp.name)
+        self.assertNotIn('takes',self.manager._load_manifest())
 
     def test_mixed_resolution_full_preview_keeps_both_clips_at_original_canvas(self):
         self.manager.store_clip_results("two", "large", {"samples": torch.zeros((1, 1, 2, 4, 4))},

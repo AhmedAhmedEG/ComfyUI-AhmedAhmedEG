@@ -215,6 +215,91 @@ class ProjectCacheManager:
         suffix = "_" + safe_component(generation) if generation else ""
         return os.path.join(self.project_dir, f"clip_{clip_id}{suffix}_{kind}.pt")
 
+    def _result_files(self, clip_id, meta, draft=False):
+        """Enumerate only this pack's artifacts; never follow manifest paths outside the project."""
+        files = set()
+        token = meta.get('generation')
+        kinds = ('draft','draft_frames','draft_audio') if draft else ('latent','audio','frames','pre_refine','source_frames','source_audio')
+        for kind in kinds:
+            files.add(os.path.basename(self._clip_artifact_path(clip_id, kind, token)))
+        if not draft:
+            for row in meta.get('refine_passes', []):
+                files.update(row[key] for key in ('frames','audio') if isinstance(row.get(key), str))
+            if meta.get('first_pass'):
+                files.update(self._result_files(clip_id, meta['first_pass'], draft=True))
+        return files
+
+    def _prune_files(self, candidates):
+        active = set()
+        for cid, meta in self._manifest.get('clips', {}).items():
+            active.update(self._result_files(cid, meta))
+        for cid, meta in self._manifest.get('first_pass', {}).items():
+            active.update(self._result_files(cid, meta, draft=True))
+        pending = []
+        removed = 0
+        for name in {name for name in (*candidates, *self._manifest.get('pending_prune', [])) if isinstance(name, str)}:
+            if name in active or not isinstance(name, str) or os.path.basename(name) != name or not re.fullmatch(r'clip_[A-Za-z0-9_.-]+_(?:latent|audio|frames|pre_refine|source_frames|source_audio|draft|draft_frames|draft_audio|pass_frames|pass_audio)\.pt', name):
+                continue
+            path = os.path.join(self.project_dir, name)
+            if os.path.realpath(os.path.dirname(path)) != os.path.realpath(self.project_dir) or os.path.islink(path):
+                continue
+            try:
+                os.unlink(path); removed += 1
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pending.append(name)  # Windows may still have an old mapped preview open.
+        if pending:
+            self._manifest['pending_prune'] = pending
+        else:
+            self._manifest.pop('pending_prune', None)
+        return removed
+
+    def _prune_previews(self, include_orphans=False):
+        """Discard derived revisions which refer to a replaced generation."""
+        folder = os.path.join(self.project_dir, 'previews')
+        if not os.path.isdir(folder) or os.path.islink(folder): return
+        for name in os.listdir(folder):
+            if include_orphans and re.fullmatch(r'[0-9a-f]{64}\.mp4', name):
+                media = os.path.join(folder, name)
+                if not os.path.exists(media[:-4]+'.json') and not os.path.islink(media):
+                    try: os.unlink(media)
+                    except OSError: pass
+            if not re.fullmatch(r'[0-9a-f]{64}\.json', name): continue
+            path = os.path.join(folder, name)
+            if os.path.islink(path): continue
+            try:
+                with open(path, encoding='utf-8') as source: plan = json.load(source)
+                obsolete = False
+                for row in plan.get('rows', []):
+                    if row.get('source'): continue
+                    cid = row.get('clip_id')
+                    meta = self._manifest.get('first_pass' if plan.get('stream') == 'first_pass' else 'clips', {}).get(cid, {})
+                    if row.get('generation') != meta.get('generation'): obsolete = True
+                if obsolete:
+                    for target in (path, path[:-5]+'.mp4'):
+                        if not os.path.islink(target):
+                            try: os.unlink(target)
+                            except FileNotFoundError: pass
+            except (OSError, ValueError, TypeError):
+                continue
+
+    @_locked
+    def prune_history(self, include_orphans=False):
+        """One-time idle migration, or retry cleanup after a successful replacement."""
+        self._manifest = self._load_manifest()
+        candidates = set()
+        for row in self._manifest.pop('takes', {}).values():
+            if row.get('clip_id'): candidates.update(self._result_files(row['clip_id'], row))
+        if include_orphans:
+            candidates.update(name for name in os.listdir(self.project_dir)
+                if re.fullmatch(r'clip_[A-Za-z0-9_.-]+_(?:latent|audio|frames|pre_refine|source_frames|source_audio|draft|draft_frames|draft_audio|pass_frames|pass_audio)\.pt', name))
+        self.save_manifest()  # Stop exposing history before unlinking its artifacts.
+        count = self._prune_files(candidates)
+        self._prune_previews(include_orphans=include_orphans)
+        self.save_manifest()
+        return count
+
     def load_clip_pre_refine(self, clip_id):
         if not self._manifest.get("clips", {}).get(clip_id, {}).get("has_pre_refine"):
             return None
@@ -236,7 +321,7 @@ class ProjectCacheManager:
 
     @_locked
     def begin_preview_run(self):
-        """Track fresh reviewable results without deleting older takes."""
+        """Track fresh reviewable results; the current clip remains until replacement succeeds."""
         self._manifest = self._load_manifest()
         self._preview_run_id = uuid.uuid4().hex
         self._manifest['preview_run_id'] = self._preview_run_id
@@ -255,42 +340,53 @@ class ProjectCacheManager:
     ):
         """Save clip latent, audio, and frames to server disk cache."""
         self._manifest = self._load_manifest()
+        previous = self._manifest.get('clips', {}).get(clip_id, {})
+        obsolete = self._result_files(clip_id, previous) if previous else set()
+        for row in self._manifest.pop('takes', {}).values():
+            if row.get('clip_id'): obsolete.update(self._result_files(row['clip_id'], row))
         generation = uuid.uuid4().hex
         latent_path = self._clip_artifact_path(clip_id, "latent", generation)
-        if latent_dict is not None:
-            from .continuity import unpack_av_samples
-            streams, nested = unpack_av_samples(latent_dict["samples"])
-            portable = dict(latent_dict)
-            portable["samples"] = tuple(s.cpu() for s in streams) if nested else streams[0].cpu()
-            self._atomic_save(portable_tree(portable), latent_path)
+        try:
+            if latent_dict is not None:
+                from .continuity import unpack_av_samples
+                streams, nested = unpack_av_samples(latent_dict["samples"])
+                portable = dict(latent_dict)
+                portable["samples"] = tuple(s.cpu() for s in streams) if nested else streams[0].cpu()
+                self._atomic_save(portable_tree(portable), latent_path)
 
-        if audio_dict is not None:
-            audio_path = self._clip_artifact_path(clip_id, "audio", generation)
-            self._atomic_save({**audio_dict, "waveform": audio_dict["waveform"].cpu()}, audio_path)
+            if audio_dict is not None:
+                audio_path = self._clip_artifact_path(clip_id, "audio", generation)
+                self._atomic_save({**audio_dict, "waveform": audio_dict["waveform"].cpu()}, audio_path)
 
-        if decoded_frames is not None:
-            frames_path = self._clip_artifact_path(clip_id, "frames", generation)
-            self._atomic_save(decoded_frames.cpu(), frames_path)
-        if pre_refine_frames is not None:
-            self._atomic_save(pre_refine_frames.cpu(), self._clip_artifact_path(clip_id, "pre_refine", generation))
+            if decoded_frames is not None:
+                frames_path = self._clip_artifact_path(clip_id, "frames", generation)
+                self._atomic_save(decoded_frames.cpu(), frames_path)
+            if pre_refine_frames is not None:
+                self._atomic_save(pre_refine_frames.cpu(), self._clip_artifact_path(clip_id, "pre_refine", generation))
 
-        if "clips" not in self._manifest:
-            self._manifest["clips"] = {}
+            if "clips" not in self._manifest:
+                self._manifest["clips"] = {}
 
-        self._manifest["clips"][clip_id] = {
-            "fingerprint": fingerprint,
-            "validated": bool(validated),
-            "updated_at": time.time(),
-            "has_audio": audio_dict is not None,
-            "has_latent": latent_dict is not None,
-            "has_frames": decoded_frames is not None,
-            "width": int(decoded_frames.shape[2]) if decoded_frames is not None else None,
-            "height": int(decoded_frames.shape[1]) if decoded_frames is not None else None,
-            "generation": generation,
-            "preview_run_id": getattr(self, "_preview_run_id", None),
-            "has_pre_refine": pre_refine_frames is not None,
-        }
-        self._manifest.setdefault("takes", {})[generation] = {**self._manifest["clips"][clip_id], "clip_id": clip_id}
+            self._manifest["clips"][clip_id] = {
+                "fingerprint": fingerprint,
+                "validated": bool(validated),
+                "updated_at": time.time(),
+                "has_audio": audio_dict is not None,
+                "has_latent": latent_dict is not None,
+                "has_frames": decoded_frames is not None,
+                "width": int(decoded_frames.shape[2]) if decoded_frames is not None else None,
+                "height": int(decoded_frames.shape[1]) if decoded_frames is not None else None,
+                "generation": generation,
+                "preview_run_id": getattr(self, "_preview_run_id", None),
+                "has_pre_refine": pre_refine_frames is not None,
+            }
+            self.save_manifest()
+        except Exception:
+            self._manifest = self._load_manifest()
+            self._prune_files(self._result_files(clip_id, {'generation':generation}))
+            raise
+        self._prune_files(obsolete)
+        self._prune_previews()
         self.save_manifest()
 
     def load_clip_latent(self, clip_id: str) -> Optional[Dict[str, Any]]:
@@ -356,9 +452,6 @@ class ProjectCacheManager:
         self._atomic_save({**audio, "waveform": audio["waveform"].cpu()}, self.get_clip_audio_path(clip_id))
         metadata = {"has_frames": True, "has_audio": True, "width": int(frames.shape[2]), "height": int(frames.shape[1])}
         self._manifest["clips"][clip_id].update(metadata)
-        generation = self._manifest["clips"][clip_id].get("generation")
-        if generation in self._manifest.get("takes", {}):
-            self._manifest["takes"][generation].update(metadata)
         self.save_manifest()
 
     @_locked
@@ -368,10 +461,14 @@ class ProjectCacheManager:
         if clip_id not in self._manifest["clips"]:
             raise ValueError("Cannot annotate a missing cached shot.")
         self._manifest["clips"][clip_id].update(metadata)
-        generation = self._manifest["clips"][clip_id].get("generation")
-        if generation in self._manifest.get("takes", {}):
-            self._manifest["takes"][generation].update(metadata)
+        if 'first_pass' in metadata:
+            if metadata['first_pass'] is None:
+                self._manifest.get('first_pass', {}).pop(clip_id, None)
         self.save_manifest()
+        if 'first_pass' in metadata:
+            self._prune_files(name for name in os.listdir(self.project_dir) if name.startswith('clip_'+clip_id+'_'))
+            self._prune_previews()
+            self.save_manifest()
 
     @staticmethod
     def _atomic_save(data, path):
@@ -485,16 +582,26 @@ class ProjectCacheManager:
     @_locked
     def store_first_pass(self, clip_id, fingerprint, latent, frames, audio, metadata=None):
         self._manifest = self._load_manifest()
+        old = self._manifest.get('first_pass', {}).get(clip_id)
         token = uuid.uuid4().hex
         files={kind:self._clip_artifact_path(clip_id,kind,token) for kind in ('draft','draft_frames','draft_audio')}
-        self._atomic_save(portable_tree(latent),files['draft'])
-        self._atomic_save(frames.cpu(),files['draft_frames'])
-        self._atomic_save(portable_tree(audio),files['draft_audio'])
-        row={'fingerprint':fingerprint,'generation':token,'width':int(frames.shape[2]),'height':int(frames.shape[1]),
-             'updated_at':time.time(),'has_frames':True,'has_audio':True,**(metadata or {}),
-             'preview_run_id':getattr(self, '_preview_run_id', None)}
-        self._manifest.setdefault('first_pass',{})[safe_component(clip_id)]=row
-        self.save_manifest()
+        try:
+            self._atomic_save(portable_tree(latent),files['draft'])
+            self._atomic_save(frames.cpu(),files['draft_frames'])
+            self._atomic_save(portable_tree(audio),files['draft_audio'])
+            row={'fingerprint':fingerprint,'generation':token,'width':int(frames.shape[2]),'height':int(frames.shape[1]),
+                 'updated_at':time.time(),'has_frames':True,'has_audio':True,**(metadata or {}),
+                 'preview_run_id':getattr(self, '_preview_run_id', None)}
+            self._manifest.setdefault('first_pass',{})[safe_component(clip_id)]=row
+            self.save_manifest()
+        except Exception:
+            self._manifest = self._load_manifest()
+            self._prune_files(os.path.basename(path) for path in files.values())
+            raise
+        if old:
+            self._prune_files(self._result_files(clip_id, old, draft=True))
+            self._prune_previews()
+            self.save_manifest()
         return row
 
     @_locked
@@ -539,5 +646,4 @@ class ProjectCacheManager:
         self._atomic_save(portable_tree(audio),self._clip_artifact_path(clip_id,'source_audio',token))
         extra={'has_source':True,'source_width':int(frames.shape[2]),'source_height':int(frames.shape[1])}
         meta.update(extra)
-        if token in self._manifest.get('takes',{}):self._manifest['takes'][token].update(extra)
         self.save_manifest()

@@ -30,12 +30,11 @@ class PackSourceNumerical(unittest.TestCase):
             media=encode_preview('live_preview',plan['key'],folder)
             with av.open(media) as video:
                 self.assertEqual(sum(1 for _ in video.decode(video=0)),24,'Only the new one-second clip is encoded')
-            saved=create_preview_plan(state,'take',folder,take_id=old_second,run_context=context)
-            self.assertEqual(saved['clip_ids'],['two'],'Explicit Saved Take remains available')
+            with self.assertRaises(ValueError):create_preview_plan(state,'take',folder)
             idle=create_preview_plan(state,'full',folder)
             self.assertEqual(idle['clip_count'],2,'Idle project browsing retains existing full-project behavior')
 
-    def test_approval_and_fresh_run_results_preserve_latents_and_history(self):
+    def test_approval_and_fresh_run_results_preserve_current_latents(self):
         from pathlib import Path
         with tempfile.TemporaryDirectory() as folder:
             manager=ProjectCacheManager('approvals',folder)
@@ -49,12 +48,12 @@ class PackSourceNumerical(unittest.TestCase):
             manager.store_clip_results('one','new',{'samples':torch.ones((1,2))},self.audio,self.frames[:24])
             fresh=manager._manifest['clips']['one']['generation']
             self.assertNotEqual(old,fresh)
-            self.assertTrue(Path(old_latent).is_file(),'Regeneration preserves saved-take history')
+            self.assertFalse(Path(old_latent).exists(),'Regeneration removes the replaced latent')
             self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
             state['clips'][0]['invalidated_generation']=fresh
             self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
             self.assertTrue(Path(manager.get_clip_latent_path('one')).is_file(),'Unapproval does not delete latent')
-            self.assertTrue(create_preview_plan(state,'take',folder,take_id=fresh)['found'])
+            with self.assertRaises(ValueError):create_preview_plan(state,'take',folder)
             manager.begin_preview_run()
             self.assertEqual(create_preview_plan(state,'full',folder)['clip_ids'],['one','two'])
 
