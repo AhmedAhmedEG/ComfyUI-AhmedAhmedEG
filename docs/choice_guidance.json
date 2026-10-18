@@ -1,0 +1,197 @@
+{
+  "generation_mode": {
+    "Next clip": "Generate the next eligible unapproved clip while reusing available approved results.",
+    "All clips": "Process the eligible sequence, retaining reusable approved results.",
+    "Conditioning only": "Prepare model guidance for advanced use; do not expect a new rendered video."
+  },
+  "canvas_policy": {
+    "manual": "Use this stage's explicit width and height.",
+    "original": "Follow source dimensions when available, with supported alignment.",
+    "auto": "Use the Director megapixel budget and aspect policy.",
+    "follow": "Refine follows the actual first-pass aspect with its megapixel budget."
+  },
+  "decoded_output": {
+    "full": "Return a full assembled raw frame/audio batch. Uses more output storage/retention.",
+    "latest": "Return only the last output clip as raw frames/audio; keep all current cache results for preview/export."
+  },
+  "split_mode": {
+    "highres_steps": "Reserve the specified final step count for target-resolution SelfLift sampling.",
+    "transition_step": "Choose the explicit low-to-high-resolution transition point instead."
+  },
+  "sampler_mode": {
+    "euler": "Use SelfLift's supported Euler state path.",
+    "follow_director": "Follow the Director sampler only if compatible with SelfLift's checked state handling."
+  },
+  "latent_upsample": {
+    "bilinear": "Smooth spatial interpolation between latent values.",
+    "nearest": "Copy nearest latent values, preserving sharper block boundaries."
+  },
+  "mode": {
+    "refine": "Run extra diffusion at the existing resolution; target size is ignored.",
+    "upscale": "Enlarge once, then run the configured diffusion refinement passes.",
+    "latent_upscale": "Perform enlargement/preparation without additional diffusion sampling."
+  },
+  "upscale_precision": {
+    "auto": "Let the supported upscale path choose precision.",
+    "bf16": "Use bfloat16 where supported; lower memory than fp32 with a different numerical range/precision tradeoff.",
+    "fp16": "Use float16 where supported; lower memory than fp32, with reduced numerical range.",
+    "fp32": "Use float32 where supported; higher memory and numerical precision."
+  },
+  "upscale_method": {
+    "latent": "Resize compressed H3 video data, using the selected latent preparation model/interpolation.",
+    "learned_pixel": "Decode, process with a connected image upscale model, and re-encode for refinement.",
+    "RTX VSR": "Use the supported NVIDIA RTX video-super-resolution path; SDK/runtime required.",
+    "bicubic": "Ordinary smooth pixel resampling, not learned detail generation.",
+    "lanczos": "Windowed-sinc pixel resampling; compare edges for ringing."
+  },
+  "seed_policy": {
+    "legacy": "Use clip seed plus zero-based refinement pass index.",
+    "inherit": "Use the clip seed unchanged for every pass.",
+    "offset": "Start at clip seed + 1 and increment per pass.",
+    "independent": "Use the separate refine_seed, incremented by pass index."
+  },
+  "resize_method": {
+    "Stretch": "Fill the target by changing proportions.",
+    "Center Crop (Fill)": "Fill the target without stretching by cropping edges.",
+    "Letterbox (Fit)": "Keep the whole image inside the target with padding."
+  },
+  "guard_mode": {
+    "burn_direction": "Correct the learned latent burn direction only.",
+    "both": "Correct positive and negative outlier signatures in this experimental guard."
+  },
+  "seed_after_generate": {
+    "fixed": "Keep the independent refinement seed unchanged.",
+    "increment": "Increase it after successful refinement.",
+    "decrement": "Decrease it after successful refinement.",
+    "randomize": "Choose another independent refinement seed after success."
+  },
+  "canvas_mode": {
+    "manual": "Use the specified face crop canvas.",
+    "auto_capped_768": "Use the supported automatic face canvas with the 768-pixel cap."
+  },
+  "select": {
+    "largest_face": "Choose the largest detected face as the target.",
+    "centre_most": "Choose the detected face nearest the image centre."
+  },
+  "paste_region": {
+    "face_only": "Blend the supported face-region mask back into the source.",
+    "face_ellipse": "Use an elliptical face-region replacement mask.",
+    "full_crop": "Replace/blend the whole processed crop, affecting more surrounding material."
+  },
+  "seed_mode": {
+    "inherit": "Derive face processing from the clip seed without an added offset.",
+    "offset": "Use the face-refinement offset seed policy."
+  },
+  "ref_image_size": {
+    "match": "Forward the native match reference-image preparation policy for this graph group.",
+    "1024": "Request the native 1024 reference-image preparation policy.",
+    "1280": "Request the native 1280 reference-image preparation policy.",
+    "1536": "Request the native 1536 reference-image preparation policy.",
+    "max": "Forward the native max reference-image preparation policy for this graph group."
+  },
+  "codec": {
+    "Auto": "Use the encoder's default H.264 mapping.",
+    "H.264": "Broadly compatible delivery video where supported.",
+    "H.265": "More efficient compression with narrower playback/encoder support.",
+    "VP9": "A WebM-oriented delivery codec where installed.",
+    "AV1": "Modern efficient compression; software encoding can be expensive."
+  },
+  "container": {
+    "Auto": "Use the default MP4 container.",
+    "mp4": "Common delivery container; choose compatible video/audio codecs.",
+    "mkv": "Matroska container with broad stream-format support.",
+    "webm": "Web delivery container; use compatible VP9/AV1 and audio formats.",
+    "Animated WebP": "Animated image output; do not expect a normal video soundtrack.",
+    "Animated AVIF": "Animated image output requiring its encoder support; not a normal audiovisual movie."
+  },
+  "encoder_backend": {
+    "pyav": "Encode through the installed Python/libav bindings.",
+    "ffmpeg": "Use the available FFmpeg executable and supported encoders."
+  },
+  "bit_depth": {
+    "Auto": "Use the encoder's supported default pixel precision.",
+    "8-bit": "Ordinary 8-bit delivery where supported.",
+    "10-bit": "Higher pixel precision where the selected codec/backend supports it; verify playback compatibility."
+  },
+  "log_level": {
+    "Standard": "Normal encode progress and errors.",
+    "Quiet": "Reduce routine encode messages.",
+    "Verbose": "More detail for diagnosing encoding problems."
+  },
+  "audio_codec": {
+    "Auto": "Choose audio encoding appropriate to the container.",
+    "aac": "Common lossy MP4-oriented sound encoding.",
+    "opus": "Efficient sound encoding commonly used with WebM/Matroska.",
+    "mp3": "Lossy sound encoding, subject to container support.",
+    "flac": "Lossless sound compression, subject to container support."
+  },
+  "policy": {
+    "replace": "Replace the supported authored clip content with the reviewed proposal.",
+    "append": "Add the proposed clips after the existing authored sequence."
+  },
+  "lifetime": {
+    "unload_after_draft": "Release local prompt-model weights after drafting to free memory for H3.",
+    "keep_loaded": "Retain weights for faster later drafts while continuing to occupy memory."
+  },
+  "stream": {
+    "final": "Export the current final result for each chosen clip.",
+    "first_pass": "Export available current first-pass review stages.",
+    "pre_refine": "Export available current frames captured before refinement.",
+    "refine_pass": "Export the chosen current refinement pass number.",
+    "original_source": "Export available original source footage, using the live pool when required."
+  },
+  "selection": {
+    "all": "Include all available intended clips in timeline order.",
+    "clip_ids": "Include only the supplied stable clip IDs, in timeline order."
+  },
+  "playback_policy": {
+    "resample": "Preserve wall-clock duration by dropping/repeating pictures at the target FPS; this is not motion synthesis.",
+    "retime": "Keep picture count, change playback speed, and resize audio duration so its pitch also changes."
+  },
+  "corner": {
+    "bottom_right": "Place the watermark near the lower-right corner.",
+    "bottom_left": "Place it near the lower-left corner.",
+    "top_right": "Place it near the upper-right corner.",
+    "top_left": "Place it near the upper-left corner."
+  },
+  "source": {
+    "auto": "Detect a supported project format and report the conversion.",
+    "current": "Interpret this pack's supported current project format.",
+    "dasiwa": "Convert supported DaSiWa authoring data; review unmapped differences.",
+    "aimixer": "Convert supported AIMixer authoring data; review unmapped differences.",
+    "tritant": "Convert supported Tritant/Extender authoring data; review restored assets and algorithm differences."
+  },
+  "MiniMaxH3DirectorRefine.backend": {
+    "global": "Refine video while retaining the first-pass audio.",
+    "sampler": "Sample the joint audiovisual latent; audio can change as well as video."
+  },
+  "MiniMaxH3PromptForge.backend": {
+    "local": "Use the connected Local Prompt Model pipeline.",
+    "ollama": "Call the configured Ollama server/model.",
+    "compatible": "Call the intended compatible language-model API endpoint."
+  },
+  "MiniMaxH3LocalPromptModel.backend": {
+    "transformers": "Load a supported local Transformers model.",
+    "gguf": "Load a supported local GGUF model, with matching vision projection when needed."
+  },
+  "MiniMaxH3FrameInterpolation.provider": {
+    "Linear": "Blend between adjacent frames; lightweight but can ghost, and is not optical flow.",
+    "RTX": "Use the supported NVIDIA frame-generation runtime and hardware."
+  },
+  "MiniMaxH3PixelUpscale.provider": {
+    "bicubic": "Ordinary smooth pixel resize without learned enhancement.",
+    "lanczos": "Ordinary edge-preserving resampling; inspect ringing.",
+    "learned_pixel": "Run the connected learned image upscale model, then fit the target size.",
+    "RTX VSR": "Use supported NVIDIA video super resolution; SDK/runtime required.",
+    "RTX High Bitrate": "Use the supported NVIDIA high-bitrate enhancement route; SDK/runtime required."
+  },
+  "MiniMaxH3Cache.device": {
+    "auto": "Use the cache's automatic supported storage policy.",
+    "cuda": "Keep cached residual data in GPU memory; saves transfers but occupies VRAM.",
+    "cpu": "Store cached residual data on CPU; frees VRAM at a transfer cost."
+  },
+  "MiniMaxH3LocalPromptModel.device": {
+    "cpu": "Run supported local prompt inference on the CPU; lower GPU use, often slower.",
+    "cuda": "Run supported local prompt inference on the GPU; competes with H3 for memory."
+  }
+}

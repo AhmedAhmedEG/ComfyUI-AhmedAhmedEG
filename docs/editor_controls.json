@@ -1,0 +1,628 @@
+{
+  "Master timeline": [
+    [
+      "Clip type",
+      "Choose how this clip is made: text, keyframes, references, a source video, or an edit.",
+      "Choose the task first, then assign media. The picker enforces the types and counts that task accepts.",
+      "Changes model routing and reference requirements; it is not just a colour label."
+    ],
+    [
+      "Add Clip",
+      "Create a new timeline item from the grouped clip-type menu.",
+      "Add the next action beat or a separately controlled shot.",
+      "The new clip uses existing pool assets; it does not ask for another upload."
+    ],
+    [
+      "Yellow outline",
+      "Identifies the clip being edited.",
+      "Click a clip to inspect its prompt and controls.",
+      "Selection does not mean approval or generation."
+    ],
+    [
+      "Saved result indicator",
+      "Shows that a generated result or latent is available on the server.",
+      "Use it after refreshing the browser to identify clips with saved work.",
+      "Availability alone does not approve a clip for reuse."
+    ],
+    [
+      "Approval checkbox",
+      "Mark a generated result for reuse by the Master.",
+      "Approve a clip you like before Next clip or All clips.",
+      "Disabled until usable result data exists. Unapproval preserves cached data until successful replacement; continuity-dependent later approvals are invalidated."
+    ],
+    [
+      "Generating animation",
+      "Marks the currently processing clip and its generation phase.",
+      "Watch it during a multi-clip run, together with the progress text.",
+      "It should move as processing advances; the selected yellow outline can remain on another clip."
+    ],
+    [
+      "Chain symbol",
+      "Shows a continuity connection to the preceding clip.",
+      "Use it to see which clips depend on earlier results.",
+      "The tooltip describes the method and context; it is not a second continuity editor."
+    ],
+    [
+      "Right edge",
+      "Drag the clip's edge to change requested duration.",
+      "Adjust timing without opening a second duration editor.",
+      "Model frame-grid rounding still applies."
+    ],
+    [
+      "Clip body drag",
+      "Move a clip earlier or later in the timeline.",
+      "Reorder action beats.",
+      "Reordering changes which result supplies previous-clip continuity."
+    ],
+    [
+      "Delete ×",
+      "Remove this timeline item.",
+      "Use only for a clip you intend to remove from the sequence.",
+      "Removing an authored item and deleting saved results are different project operations."
+    ],
+    [
+      "Timeline Timecode",
+      "Move the playhead with seconds or HH:MM:SS:FF at 24 fps.",
+      "Inspect a specific position in the planned sequence.",
+      "It does not seek or restart model sampling."
+    ],
+    [
+      "Timeline Zoom",
+      "Change the horizontal scale of the clip ruler.",
+      "Zoom out for sequence structure or in for timing.",
+      "It does not change clip duration or output resolution."
+    ],
+    [
+      "Image / video / audio rows",
+      "Show the selected references under each prompt block.",
+      "Check what each clip actually uses.",
+      "These rows show assignments, not every asset in the upstream pool."
+    ],
+    [
+      "Shared prompt / placement",
+      "Add common text before or after each clip prompt.",
+      "Keep consistent setting, style or shared constraints across clips.",
+      "Common text participates in the effective prompt; it can change output even with the same clip prompt and seed."
+    ],
+    [
+      "Join Fade (ms)",
+      "A project-level audio join treatment on the assembled sequence.",
+      "Use a short fade to soften abrupt waveform boundaries and clicks.",
+      "This is not per-clip Audio Context, not Latent Carry seam redraw, and not a promise of continuous music or speech."
+    ],
+    [
+      "Match audio gain between clips",
+      "Level-match adjoining audio within bounded gain handling.",
+      "Try it when loudness jumps between clips.",
+      "It changes amplitude, not melody, words, rhythm or generated ambience."
+    ],
+    [
+      "Clip name / duration",
+      "Label this timeline item and request its length.",
+      "Name action beats clearly and keep each shot focused.",
+      "New footage and Extender continuity duration policies interpret the requested length differently."
+    ],
+    [
+      "Clip Audio",
+      "Generate, use the source soundtrack, or mute where that clip supports it.",
+      "Use Source for suitable source-video tasks, Generate for new sound, Mute for intentional silence.",
+      "This owns the clip's soundtrack policy; output Join Fade only treats joins after generation."
+    ],
+    [
+      "Clip Seed / dice / mode",
+      "Set an exact clip seed, draw a new one, or advance it after successful work.",
+      "Fixed supports comparisons; increment/decrement/randomize supports new attempts.",
+      "A seed is not a complete reproducibility record. Changing the model, references, schedule or continuity changes output."
+    ],
+    [
+      "Duplicate Clip",
+      "Copy the clip's authored prompt, references and settings.",
+      "Make a related shot without re-entering its setup.",
+      "It is a new timeline item, not a second historical take of the existing item."
+    ],
+    [
+      "Move Earlier / Move Later",
+      "Reorder the clip one position using arrows.",
+      "Use when dragging is inconvenient.",
+      "The first/last position disables the impossible direction; continuity sources can change."
+    ],
+    [
+      "Reference selection",
+      "Choose only the prepared pool assets for this clip.",
+      "Use one video for Existing Video, one/two keyframe pictures as required, or reference media within the native caps.",
+      "Only selected references are passed as that clip's explicit reference inputs. Continuity can additionally supply previous-result context."
+    ],
+    [
+      "Refresh pool",
+      "Re-discover upstream reference names and thumbnails from the Master.",
+      "Use if a changed loader has not appeared in this view yet.",
+      "It does not upload assets or run generation. The Reference Pack itself refreshes automatically."
+    ],
+    [
+      "Raw Prompt / Structured Prompt",
+      "Write one prompt directly or edit the available prompt sections.",
+      "Use structured sections to separate subjects, action and sound; use raw text for direct control.",
+      "Check the resolved prompt if reproducing another workflow: headings, shared text and references affect conditioning."
+    ],
+    [
+      "Picture / Video token buttons",
+      "Insert the current clip's numbered native reference token into the prompt.",
+      "Use the assigned character or action reference explicitly.",
+      "Token numbering follows this clip's reference assignment order, not an arbitrary global filename order."
+    ],
+    [
+      "Help",
+      "Show explanations inside the clip controls.",
+      "Enable when learning a control or checking its scope.",
+      "It changes editor presentation, not generation."
+    ],
+    [
+      "Model override name",
+      "Choose a named compatible branch from Model Override Pack.",
+      "Use when one clip needs an intentional alternative model.",
+      "Leave blank for normal routing. A matching name does not make an incompatible family valid."
+    ],
+    [
+      "Guide keyframes",
+      "Assign pool images at supported times inside a compatible clip.",
+      "Use for explicit visual anchors when the selected task supports them.",
+      "They become model conditioning, not just annotations for Prompt Forge."
+    ],
+    [
+      "Source Start / End",
+      "Choose the source-video interval used by an existing-video or edit task.",
+      "Use the useful action range instead of the whole recording.",
+      "End blank can mean the whole remaining pool video. A clip-level range is applied within its selected prepared source; this is separate from pool-wide preparation."
+    ],
+    [
+      "Split into equal ranges",
+      "Divide the authored source range into equal timeline items.",
+      "Build several edit/source segments without loading the same file repeatedly.",
+      "This splits actual source ranges and gives them separate clip IDs; it does not ask the model to discover shot boundaries."
+    ],
+    [
+      "Split at playhead",
+      "Create a source-range boundary at the timeline playhead.",
+      "Place a deliberate cut inside the selected source segment.",
+      "Only valid internal cuts are usable; resulting items refer to distinct parts of the same source."
+    ],
+    [
+      "Detect scene boundaries",
+      "Analyze supported source footage for candidate cuts.",
+      "Use footage with clear shot changes, then review the resulting ranges.",
+      "Detection is a heuristic, not a semantic understanding of the story."
+    ],
+    [
+      "Remove next boundary / merge",
+      "Merge adjacent compatible source ranges.",
+      "Undo an unnecessary source split.",
+      "Source compatibility and contiguous ranges matter; it is not a general dissolve between generated clips."
+    ]
+  ],
+  "Clip continuity, look and LoRAs": [
+    [
+      "Independent",
+      "Start without borrowing previous video or audio context.",
+      "Use for a scene change or a fresh shot.",
+      "Does not imply references are disabled; selected pool references still apply."
+    ],
+    [
+      "Motion Context",
+      "Use the previous sampled audiovisual latents as native guides, with decoded fallback when needed.",
+      "Try for a continuous action or camera motion across clips.",
+      "Conditions new sampling from context; it does not guarantee exact choreography or identical frames."
+    ],
+    [
+      "Latent Carry",
+      "Copy a previous latent tail into the new sampling window with tapered redraw masks.",
+      "Use when directly anchoring a seam is useful.",
+      "Different from Motion Context guidance; some source/canvas combinations require a decoded fallback."
+    ],
+    [
+      "FL2VA Tail Handoff",
+      "Use the previous ending frame as a new opening-frame handoff.",
+      "Use a simple visual endpoint continuation on the compatible family.",
+      "It does not carry a full moving audiovisual context window."
+    ],
+    [
+      "Video Context",
+      "How much preceding video context the next clip borrows.",
+      "Choose a short supported duration sufficient for the action.",
+      "Choices are displayed as seconds and frames: 5, 22, 39 or 56 frames. More context adds work and is removed from delivered new footage."
+    ],
+    [
+      "Audio Context",
+      "How much preceding sound context is borrowed, independently of video.",
+      "Use 24 frames for one second, another supported value, or Off when you want no audio carry.",
+      "Choices are 0, 5, 22, 24, 39 or 56 frames. It is not clamped to the video context length."
+    ],
+    [
+      "Duration = new footage",
+      "The requested duration describes visible new material.",
+      "Use when you want a ten-second clip to contribute approximately ten seconds of new footage.",
+      "Sampling includes additional borrowed context; final timing still follows H3 frame-grid rounding."
+    ],
+    [
+      "Duration includes context (Extender)",
+      "The requested duration includes the context sampling prefix.",
+      "Use when matching the original Extender's sampling-length interpretation.",
+      "After context is removed, delivered new footage is shorter than the requested sampling window."
+    ],
+    [
+      "Seam redraw strength",
+      "How much Latent Carry permits the seam region to change.",
+      "Use a small value to anchor it more strongly or a larger value for more freedom.",
+      "Range 0–0.95. This changes sampling masks; it is unrelated to the output audio Join Fade."
+    ],
+    [
+      "Look controls",
+      "Per-clip exposure, contrast, saturation and supported seam colour treatment.",
+      "Use for a deliberate grade or to reduce visible colour differences between joins.",
+      "These adjustments do not replace reference preparation, face refinement or prompt conditioning."
+    ],
+    [
+      "LoRA enabled / file / model strength",
+      "Add a model LoRA patch for this clip.",
+      "Use a compatible subject/style or acceleration LoRA only on the intended shot.",
+      "The enabled patch and strength affect the model used for that clip. They are separate from a globally patched input model and cannot undo its existing patches."
+    ],
+    [
+      "LoRA information / remove",
+      "Inspect a selected patch or remove that clip-local entry.",
+      "Check the filename and strength before comparing output.",
+      "Removing a clip entry does not delete the model file or unpatch a separate upstream model branch."
+    ],
+    [
+      "Exposure",
+      "Per-clip exposure adjustment after decode.",
+      "Correct the brightness of this output clip.",
+      "Zero is neutral. This does not change the original pool image or sampling noise schedule."
+    ],
+    [
+      "Contrast",
+      "Per-clip contrast adjustment after decode.",
+      "Change separation between dark and bright output values.",
+      "One is neutral. Strong contrast can lose visible detail."
+    ],
+    [
+      "Saturation",
+      "Per-clip colour saturation after decode.",
+      "Tone down or increase this clip’s colour intensity.",
+      "One is neutral. It does not change the assigned reference colours or guarantee seam colour consistency."
+    ]
+  ],
+  "Project panel": [
+    [
+      "Project Name",
+      "A human-readable project label.",
+      "Give the sequence a name you recognize.",
+      "The server cache uses project_id, so equal display names do not prove two workflows share results."
+    ],
+    [
+      "Save Project / Open Project",
+      "Save and reopen supported server project/workflow data.",
+      "Use to resume the same authored project and its cache identity.",
+      "A server cache still needs its media files; a friendly project name is not a replacement for those files."
+    ],
+    [
+      "Export Project / Include Media",
+      "Download lightweight authoring JSON or a portable archive with supported source/reference files.",
+      "Use Include Media when moving the inputs to another server.",
+      "Portable reference archives do not automatically include heavy generated latents/results."
+    ],
+    [
+      "Import Project / append or overwrite",
+      "Load supported authoring data into this timeline.",
+      "Append to add clips or overwrite when replacing the authored sequence deliberately.",
+      "Review identities, references and conversion notes; importing a workflow does not recreate missing generated media."
+    ],
+    [
+      "Restore Last Autosave",
+      "Recover the stored authored timeline state.",
+      "Use after an accidental authoring change.",
+      "This recovers settings, not deleted generated cache files."
+    ],
+    [
+      "New Project / clear timeline",
+      "Create new authoring work or reset the timeline through the named action.",
+      "Use the dedicated action rather than editing project IDs manually.",
+      "Read the confirmation: clearing authored clips, changing identity and deleting results have different scopes."
+    ],
+    [
+      "Delete Saved Results",
+      "Remove this project's managed generated cache data.",
+      "Use only when you intentionally want those results gone.",
+      "This differs from unapproving clips, which preserves their cached data until successful regeneration."
+    ]
+  ],
+  "Reference Pack asset editor": [
+    [
+      "Edit Reference",
+      "Choose the one connected asset to edit.",
+      "Switch between pictures, video and audio without a tall repeated form.",
+      "The selected form changes only that reference's preparation settings."
+    ],
+    [
+      "Name",
+      "A readable label for this reference.",
+      "Use character, wardrobe, place or action names.",
+      "Names do not change pixels or native Picture-token numbering."
+    ],
+    [
+      "Reference Roles / Role",
+      "Character, Place, Style, First Frame, Last Frame, Keyframe, Pose or Custom annotations.",
+      "Tell Prompt Forge why the reference is useful; images can carry multiple roles.",
+      "Roles guide writing. Only the clip type, assigned assets and explicit keyframe fields determine actual model endpoints/reference inputs."
+    ],
+    [
+      "Description / Instructions",
+      "A written explanation of what to preserve or borrow.",
+      "Describe identity, wardrobe, location or motion intent for prompt drafting.",
+      "It is metadata for authoring, not a guaranteed native-model control."
+    ],
+    [
+      "Character Numbers",
+      "Map people to numbered characters for the prompt writer.",
+      "Use shared numbers across several pictures of one character, or ordered numbers for several people.",
+      "Does not itself select or remove model reference images."
+    ],
+    [
+      "Edit People Boxes",
+      "Draw, move, resize and number people on an image.",
+      "Disambiguate several characters before asking the prompt writer to describe them.",
+      "Boxes use original-image normalized coordinates and are separate from image crop settings."
+    ],
+    [
+      "Vision Reader / Find People",
+      "Choose a configured vision-capable Prompt Forge provider and request proposed people boxes.",
+      "Use for a file-backed image with several people.",
+      "Review proposals before Use Detected Boxes. A configured provider and actual vision support are required."
+    ],
+    [
+      "Use / Discard Detected Boxes / Cancel Vision Request",
+      "Accept, discard or cancel a vision proposal.",
+      "Keep control over automatic annotations.",
+      "Discarding proposals keeps saved boxes unchanged. Cancellation affects the shared vision request."
+    ],
+    [
+      "Position / Retention",
+      "Describe screen order and how strongly appearance should be retained in the written prompt.",
+      "Use left/right or ordered people, and full/partial/attribute/weak intent.",
+      "These guide writing; they are not sampler masks or hard identity guarantees."
+    ],
+    [
+      "Prompt Writer Include / Ignore",
+      "Choose whether this reference contributes to the prompt-writing context.",
+      "Exclude an asset from a drafting task while keeping it in the pool.",
+      "Ignore does not unassign the reference from the video model; clip selection owns that."
+    ],
+    [
+      "Source FPS",
+      "The loader rate of an IMAGE frame batch.",
+      "Match the loader's actual rate when using decoded video frames.",
+      "Native VIDEO supplies its own timing; the pack resamples prepared references to H3's 24 fps."
+    ],
+    [
+      "Trim Start / Trim End / waveform handles",
+      "Choose the useful time range before frame picking and model use.",
+      "Remove unwanted lead-in or choose the relevant action/audio beat.",
+      "End blank means full remaining range. Empty or invalid ranges are rejected."
+    ],
+    [
+      "Use Video As: Video + Audio",
+      "Keep both the visual stream and its paired soundtrack.",
+      "Use when the footage's sound belongs with the visual reference.",
+      "IMAGE frame batches need paired audio to actually supply sound."
+    ],
+    [
+      "Use Video As: Video Only",
+      "Keep video frames without that video's soundtrack.",
+      "Use motion reference without importing unwanted music or speech.",
+      "Other explicitly assigned audio references and generated sound can still exist."
+    ],
+    [
+      "Use Video As: Audio Only",
+      "Expose only the video's soundtrack as an audio reference.",
+      "Borrow sound without using those video pictures.",
+      "Requires a real soundtrack; compatible generation still needs its required visual conditioning."
+    ],
+    [
+      "Use Video As: Single Frame / Picked Frame",
+      "Turn one frame into an image reference; time is measured after trim.",
+      "Use a pose, appearance or keyframe picture from footage.",
+      "The prepared reference follows image selection rules rather than video rules."
+    ],
+    [
+      "Exposure / Contrast / Saturation",
+      "Adjust the reference pixels before model encoding.",
+      "Correct a dark, flat or overly saturated input.",
+      "These affect the prepared reference, not just its thumbnail. They do not change the original loader file."
+    ],
+    [
+      "Scaling: Off",
+      "Keep the prepared reference size without an explicit resizing policy.",
+      "Use when its size already fits your workflow.",
+      "Large inputs may cost more memory and reference encoding time."
+    ],
+    [
+      "Scaling: Megapixels / Target MP",
+      "Resize to a pixel budget while following aspect ratio.",
+      "For video start with the 0.5 MP default and compare motion/reference quality.",
+      "Applied before the reference reaches model encoding. It changes input preparation, not output resolution."
+    ],
+    [
+      "Scaling: Target / Width / Height",
+      "Resize to explicit reference dimensions.",
+      "Use when reproducing a known input-preparation pipeline.",
+      "An incompatible aspect can change proportions; compare against fit/pad when that matters."
+    ],
+    [
+      "Scaling: Fit and pad",
+      "Fit the reference inside the target canvas with padding.",
+      "Keep the whole subject when source/target aspects differ.",
+      "Padding becomes part of the prepared reference."
+    ],
+    [
+      "Scaling: Divisible crop",
+      "Crop preparation to the selected alignment policy.",
+      "Use when a downstream reference path requires aligned dimensions.",
+      "Cropping can remove useful material at edges; inspect the preview/source framing."
+    ],
+    [
+      "Crop x / y / width / height",
+      "A normalized source rectangle, also editable by dragging on the preview.",
+      "Focus the reference on its useful subject or action.",
+      "Crop and people boxes are different edit modes; a tiny or empty crop is not a useful reference."
+    ],
+    [
+      "Reset Settings",
+      "Reset preparation for the selected asset while retaining its source connection.",
+      "Undo its trim, grading, crop or scaling edits.",
+      "This is at the bottom. Asset addition happens through connected loader nodes, not a duplicate uploader."
+    ]
+  ],
+  "Smart Preview player": [
+    [
+      "Latest clip / Full video",
+      "Choose one newest completed current clip or the available current sequence.",
+      "Latest saves bandwidth during iteration; Full checks story flow and joins.",
+      "This does not change which clips Master generates. There is no historical Saved Take selector."
+    ],
+    [
+      "Original Resolution / capped resolutions",
+      "Choose playback encoding size.",
+      "Use a lower cap for a smaller browser download.",
+      "This neither changes cached generation pixels nor re-runs the model."
+    ],
+    [
+      "Final Output / First Pass / Before Refinement / Refine Pass N",
+      "Choose an available processing stage of the current result.",
+      "Compare refinement against its source before accepting the extra processing.",
+      "A stage must exist; these choices are not earlier generations of the same clip."
+    ],
+    [
+      "Autoplay",
+      "Request automatic playback when new media loads.",
+      "Turn off when you want to watch later; media can still prebuffer.",
+      "Browser autoplay permissions and storage limits can affect playback/buffering."
+    ],
+    [
+      "Refresh",
+      "Recheck or retry the preview.",
+      "Use after a connection or playback failure.",
+      "It does not submit a generation job."
+    ],
+    [
+      "Save preview",
+      "Download the displayed scope, stage and resolution.",
+      "Save a quick review copy.",
+      "For deliberate full-quality project export use Project Video; a preview MP4 is not a latent checkpoint."
+    ]
+  ],
+  "Prompt Forge editor": [
+    [
+      "Master",
+      "Choose the timeline this prompt-writing panel operates on.",
+      "Use the intended Master when several exist in the graph.",
+      "Drafting and applying must refer to the same compatible authoring context."
+    ],
+    [
+      "Session API Key",
+      "Supply provider authentication for this editing session.",
+      "Use when your intended remote provider requires it.",
+      "Do not publish screenshots or workflow data containing credentials. A key does not install a model."
+    ],
+    [
+      "Send Reference Pictures",
+      "Include eligible supported reference pictures in a vision request.",
+      "Use a provider that actually supports visual context.",
+      "This sends drafting context, not direct H3 model conditioning. Prompt Writer Include/Ignore affects eligibility."
+    ],
+    [
+      "Cast Appearance Cards / Read Card From Pictures",
+      "Draft reusable character/place/style/pose descriptions from assigned pictures.",
+      "Use consistent character numbers and useful roles before drafting a sequence.",
+      "Requires a working vision provider; inspect the proposed description before using it."
+    ],
+    [
+      "Use Reviewed Description",
+      "Save the edited cast description for the selected card.",
+      "Keep wording you have checked for identity or wardrobe accuracy.",
+      "Descriptions guide writing; they are not hard model identity locks."
+    ],
+    [
+      "Clip instructions / Refresh Clip Instructions",
+      "Review per-shot descriptions discovered from the current timeline.",
+      "Refresh after adding or changing authored clips.",
+      "Changes the writing brief, not rendered cached media."
+    ],
+    [
+      "Continuation Clip",
+      "Choose the clip to draft using chronological context from its previous saved timeline clip.",
+      "Write a prompt that follows an already generated action.",
+      "A readable previous result is required. It is not a persistent sampler-resume control."
+    ],
+    [
+      "Create Draft / Cancel Request",
+      "Start or cancel the provider request.",
+      "Generate a proposal when the brief is ready, or stop an unwanted request.",
+      "The draft is not applied automatically and no video is generated here."
+    ],
+    [
+      "Review Draft JSON",
+      "Inspect and edit the proposed shot data.",
+      "Correct wording, assignments and action beats before applying.",
+      "Keep valid JSON and a compatible source timeline."
+    ],
+    [
+      "Draft History / Clear Draft History",
+      "Select a recent writing proposal or clear local proposal history.",
+      "Compare prompt drafts before applying one.",
+      "These are short text proposals, not historical generated video takes."
+    ],
+    [
+      "Imported Prompt History / Prepare Imported Prompt For Review",
+      "Inspect supported imported prompt material and prepare it for editing.",
+      "Use an older project’s wording as an authoring starting point.",
+      "Review conversion notes and references before applying."
+    ],
+    [
+      "Apply Policy / Apply Reviewed Draft",
+      "Append or replace using the reviewed proposal.",
+      "Apply only after checking the proposed content.",
+      "An externally owned Timeline Builder must be edited through its groups instead of being overwritten by the Master UI."
+    ],
+    [
+      "Advanced Graph Input",
+      "Expose serialized graph-owned writing inputs.",
+      "Use for scripted/typed authoring rather than ordinary panel editing.",
+      "Avoid competing authors for the same timeline fields."
+    ]
+  ],
+  "RefMod Library and export selectors": [
+    [
+      "RefMod enabled / Strength / Description",
+      "Choose installed supported reference bundles and edit their supported metadata/strength.",
+      "Prepare reusable bundles for assignment through Reference Pack.",
+      "This is reference conditioning, not a global LoRA patch. The backend validates supported bundle types."
+    ],
+    [
+      "Refresh Library",
+      "Re-read installed RefMod entries.",
+      "Use after installing a supported bundle.",
+      "Refresh does not download missing weights."
+    ],
+    [
+      "Export Master / Refresh Clips",
+      "Choose the Master and refresh the exporter’s clip checklist.",
+      "Use when the timeline changed or several projects exist in the graph.",
+      "Set selection=clip_ids for the checklist to control subset export."
+    ],
+    [
+      "Export clip checklist",
+      "Choose stable clip IDs for export.",
+      "Save selected shots without changing generation approval.",
+      "The project exporter keeps timeline order; these checks do not mark clips approved or select them for generation."
+    ]
+  ]
+}

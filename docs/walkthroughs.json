@@ -1,0 +1,158 @@
+{
+  "getting-started.html": {
+    "title": "Your first clip",
+    "eyebrow": "Start here · 01",
+    "heading": "Your first clip",
+    "description": "Get one short shot working. Add continuity, refinement or delivery processing only when you need it.",
+    "sections": [
+      {
+        "title": "Before you touch a setting",
+        "body": "<p>A workflow is a set of connected nodes. Left sockets accept data; right sockets return it. MODEL carries weights, IMAGE carries pictures, and AUDIO carries a waveform. Matching types matter.</p><p>The starter already connects the core pieces. Select installed files, author a clip and run through its connected Smart Preview. You do not run every box separately.</p><p>In the node menu, Master and Director Settings are under <b>ComfyUI-AhmedAhmedEG → Start here</b>; Reference Pack is under <b>References and prompts</b>; Smart Preview is under <b>Output</b>. The guide navigation groups tools by learning task.</p>",
+        "id": "before-you-touch-a-setting",
+        "photo": "workflow-overview"
+      },
+      {
+        "title": "1. Load the right model family",
+        "body": "<p>Keep both diffusion families connected. <b>FL2VA</b> serves compatible text, image and endpoint tasks. <b>REF2VA</b> serves reference-guided and video-editing tasks. The Master chooses the family needed by each clip.</p><p>Select the MiniMax text encoder with loader type <code>minimax</code>, the H3 video VAE and the H3 audio VAE. These files live on the ComfyUI server, not merely on your laptop.</p><p>An upstream Turbo LoRA/model switch can change the model and its expected step schedule. Keep them consistent. Clip-local LoRAs add their own patches; removing a clip entry cannot undo a patch already present on the input model.</p>",
+        "id": "models",
+        "photo": null
+      },
+      {
+        "title": "2. Choose a small first test",
+        "body": "<p>Use Director Settings for output size, initial steps, sampler and schedule. H3 sampling runs at 24 fps and uses a 32-pixel canvas grid. Both 1280 and 1344 are divisible by 32; they are different valid widths.</p><p>A 320 × 192, two-step test checks wiring quickly; it is not suitable for judging final quality. Use your intended model schedule and canvas for a quality comparison. Saved starter values can differ from a newly added node’s defaults.</p><p>Keep optional SelfLift, Refine, Face Refine, Semantic Bridge and residual Cache disconnected for a baseline. Keep decoded_output=latest for normal preview work.</p>",
+        "id": "first-test",
+        "photo": "director-settings"
+      },
+      {
+        "title": "3. Prepare inputs, then assign them",
+        "body": "<p>Connect loader outputs into Reference Pack. Edit one asset at a time with Edit Reference. Native VIDEO carries its own timing and may carry sound. An IMAGE frame batch needs its source FPS and paired audio supplied separately.</p><p>On the Master clip choose the task, then assign only the needed prepared assets. An asset’s role label helps prompt writing; it does not automatically wire an opening/ending frame.</p>",
+        "id": "assign-references",
+        "photo": "reference-image"
+      },
+      {
+        "title": "4. Write a focused shot and run",
+        "body": "<ol><li>Describe the subject, action, camera and sound. Insert the clip’s current Picture/Video tokens rather than inventing reference numbers.</li><li>Choose a short duration, a fixed seed and Independent continuity for the first clip.</li><li>Choose Next clip to generate one eligible result, or All clips for the eligible sequence.</li><li>Watch the active generation animation, then inspect Latest clip. Approve only a usable result you want reused.</li></ol>",
+        "id": "first-run",
+        "photo": "master-timeline"
+      },
+      {
+        "title": "5. Continue deliberately",
+        "body": "<p>Add or duplicate the next clip, describe its next action beat and choose a continuity method. Motion Context uses native previous audiovisual guides where compatible. Latent Carry copies a tail with tapered redraw masks. FL2VA Tail Handoff uses a final-frame opening handoff.</p><p>Video and audio context are independent: 22 frames is about 0.92 seconds, 24 frames is one second, and 56 frames is about 2.33 seconds at 24 fps. Borrowed context adds work and is removed from delivered new frames.</p><p><b>Duration = new footage</b> describes the visible addition. <b>Duration includes context (Extender)</b> describes the sampling window, so the delivered segment is shorter after prefix removal.</p>",
+        "id": "continue",
+        "photo": "clip-continuity"
+      },
+      {
+        "title": "6. Review, reuse and export",
+        "body": "<p>The yellow outline selects an editor target. A saved-result indicator means files exist. Approval asks the Master to reuse a result. Unapproving preserves its files and clears continuity-dependent later approvals; successful regeneration replaces the current result.</p><p>Smart Preview updates during the run as clips finish. Its Full video scope is separate from Director Settings decoded_output. For a full cached sequence, use Project Video. Video Combine encodes only the frames and audio you feed it.</p>",
+        "id": "review-and-export",
+        "photo": "smart-preview"
+      },
+      {
+        "title": "Words you will meet",
+        "body": "<dl class=\"glossary\"><div><dt>Clip</dt><dd>One timeline item.</dd></div><div><dt>Latent / VAE</dt><dd>Compressed working data / the encoder-decoder that converts it to and from visible or audible media.</dd></div><div><dt>Checkpoint</dt><dd>A completed cached clip here, not a paused sampler state or diffusion model file.</dd></div><div><dt>Seed</dt><dd>Starting randomness; one part of a reproducible setup.</dd></div><div><dt>Conditioning</dt><dd>Prompt, assigned references and supported continuity guidance.</dd></div><div><dt>Refine</dt><dd>Extra processing after the initial generation; it can change the result.</dd></div><div><dt>Megapixels</dt><dd>A spatial pixel budget, not duration or a frame-count limit.</dd></div><div><dt>Approval</dt><dd>Request to reuse a current available result during generation.</dd></div><div><dt>Preview stage</dt><dd>A current result’s first pass or refinement stage, not an older generation.</dd></div></dl>",
+        "id": "words-you-will-meet",
+        "photo": null
+      }
+    ]
+  },
+  "workflows.html": {
+    "title": "Practical workflows",
+    "eyebrow": "Choose the job",
+    "heading": "One change.<br>One clear purpose.",
+    "description": "Recipes that put a setting in its correct place and tell you what to inspect afterwards.",
+    "sections": [
+      {
+        "title": "Continue an action",
+        "body": "<h3>Set it up</h3><p>Keep the first clip’s settings as a baseline. On the next clip choose Motion Context, a short video context and an independent audio context. Use New footage duration for the intended visible addition.</p><h3>Check the result</h3><p>Inspect the seam, action and sound. More context adds work; it cannot guarantee exact choreography. Latent Carry is a different masked-prefix method, not a stronger setting of Motion Context.</p><p><a href=\"nodes/master-node.html\">Open the node chapter →</a></p>",
+        "id": "continue-an-action",
+        "photo": "clip-continuity"
+      },
+      {
+        "title": "Reduce reference video cost",
+        "body": "<h3>Set it up</h3><p>Select the video in Reference Pack → Resize → Megapixels. Start with 0.5 MP. Choose Video Only to exclude the soundtrack or Video + Audio when both belong in conditioning.</p><h3>Check the result</h3><p>The pack prepares pixels before native reference encoding. It follows aspect ratio and alignment without enlarging smaller sources; output canvas remains a separate Director setting.</p><p><a href=\"nodes/ref-pack.html\">Open the node chapter →</a></p>",
+        "id": "resize-a-reference",
+        "photo": "reference-video"
+      },
+      {
+        "title": "Inspect first, refine later",
+        "body": "<h3>Set it up</h3><p>Connect Refine and enable Confirm First Pass before generating. Review the first pass, approve that stage on its timeline card, then run again. Use global to retain its audio.</p><h3>Check the result</h3><p>A matching staged first pass is reused. Ten completed initial steps plus fifteen refinement steps are not a twenty-five-step initial schedule. Persistent exact sampler resume is not exposed.</p><p><a href=\"nodes/director-refine.html\">Open the node chapter →</a></p>",
+        "id": "refine-later",
+        "photo": "refine-node"
+      },
+      {
+        "title": "Compare SelfLift fairly",
+        "body": "<h3>Set it up</h3><p>Generate a baseline with SelfLift disconnected. Keep seed, prompt, assets and target canvas unchanged, then connect SelfLift with a learned H3 latent upscaler and choose the low/high-resolution split.</p><h3>Check the result</h3><p>Compare faces, hands, action, detail and runtime. A smaller early canvas changes the sampling path; it does not guarantee equivalent or better quality.</p><p><a href=\"nodes/director-self-lift.html\">Open the node chapter →</a></p>",
+        "id": "test-selflift",
+        "photo": "selflift-node"
+      },
+      {
+        "title": "Use a LoRA on one clip",
+        "body": "<h3>Set it up</h3><p>Open that clip’s LoRAs tab. Add an enabled compatible H3 patch and set its model strength. Keep other variables fixed.</p><h3>Check the result</h3><p>Check upstream model patches too. A globally patched input and a clip-local patch can both apply. Same seed alone is not a controlled comparison.</p><p><a href=\"nodes/master-node.html\">Open the node chapter →</a></p>",
+        "id": "try-a-clip-lora",
+        "photo": "clip-loras"
+      },
+      {
+        "title": "Draft several shots",
+        "body": "<h3>Set it up</h3><p>Configure a Prompt Forge provider. Request a small number of focused shots and review its proposal before append/replace.</p><h3>Check the result</h3><p>The output is text, not rendered video. Roles/cast help writing; clip asset assignment separately owns video model conditioning. External providers receive submitted context.</p><p><a href=\"nodes/prompt-forge.html\">Open the node chapter →</a></p>",
+        "id": "draft-prompts",
+        "photo": null
+      },
+      {
+        "title": "Export all current clips",
+        "body": "<h3>Set it up</h3><p>Connect Master.project_state to Project Video. Choose final, all and the correct FPS. Enable individual shot files if needed.</p><h3>Check the result</h3><p>Readable cached media can export without new diffusion. decoded_output=latest does not remove the other cached clips. Exported files remain separate from automatic cache replacement.</p><p><a href=\"nodes/project-video.html\">Open the node chapter →</a></p>",
+        "id": "export-a-project",
+        "photo": "project-export"
+      },
+      {
+        "title": "Reduce an audible join",
+        "body": "<h3>Set it up</h3><p>Inspect the generated soundtrack and per-clip Audio Context first. Use project Join Fade for waveform clicks and gain matching for loudness jumps.</p><h3>Check the result</h3><p>Fading cannot make unrelated music, changed voices or different ambience semantically continuous. Audio Context affects generation; Join Fade affects assembled output.</p><p><a href=\"nodes/master-node.html\">Open the node chapter →</a></p>",
+        "id": "reduce-audio-jumps",
+        "photo": "clip-continuity"
+      }
+    ]
+  },
+  "architecture.html": {
+    "title": "How the pieces fit",
+    "eyebrow": "Understand the flow",
+    "heading": "Each setting has a home.",
+    "description": "Prepare inputs, generate a result, review it, then export it. Change one stage at a time when explaining a difference.",
+    "sections": [
+      {
+        "title": "From assets to delivery",
+        "body": "<div class=\"pipeline\"><span>Loader nodes</span>→<span>Reference Pack<br><small>Prepare inputs</small></span>→<span>Master + Settings<br><small>Assign & sample</small></span>→<span>Current cache</span>→<span>Preview / export</span></div><p>SelfLift is inside initial sampling. Refine runs after the first pass. Face Refine follows the main result. Pixel Upscale and Frame Interpolation process decoded output. Several stages expose size or strength controls because they perform different jobs.</p>",
+        "id": "pipeline",
+        "photo": null
+      },
+      {
+        "title": "Where to change what",
+        "body": "<div class=\"table-wrap\"><table><thead><tr><th>Goal</th><th>Owner</th><th>Meaning</th></tr></thead><tbody><tr><td>Output canvas</td><td>Director Settings</td><td>Generation width/height or its source/megapixel canvas policy.</td></tr><tr><td>Reference size, crop and trim</td><td>Reference Pack</td><td>Input preparation before reference encoding.</td></tr><tr><td>Asset assignment / clip LoRAs</td><td>Master clip</td><td>Only the clip’s selected references and compatible local patches.</td></tr><tr><td>Continuity</td><td>Master clip → Continuity</td><td>Borrowed video/audio context, duration policy and seam redraw.</td></tr><tr><td>Sound joins</td><td>Master project Output Audio</td><td>Join Fade and bounded gain matching on assembled output.</td></tr><tr><td>Initial sampling</td><td>Director Settings</td><td>Steps, sampler, scheduler and video/audio shifts.</td></tr><tr><td>Extra generative processing</td><td>Refine</td><td>A separate schedule after the first pass, optionally at a larger size.</td></tr><tr><td>Browser playback</td><td>Smart Preview</td><td>Scope, stage and playback encoding resolution.</td></tr><tr><td>Full cached export</td><td>Project Video</td><td>Current results or current stages in timeline order.</td></tr></tbody></table></div>",
+        "id": "ownership",
+        "photo": null
+      },
+      {
+        "title": "Current result, approval and replacement",
+        "body": "<p>Each clip has one current generation. Its latent, audio, frames and available current stages live on the server. A replacement publishes after saving succeeds, then superseded generation artifacts are removed. Failed replacement saves retain the old usable current result.</p><p>Approval asks Master to reuse a result. Unapproval preserves files while clearing later continuity-dependent approvals. Idle preview shows current completed results without requiring approval. During a run, it follows reused results and newly finished replacements instead of presenting queued old results as fresh completions.</p>",
+        "id": "current-results",
+        "photo": null
+      },
+      {
+        "title": "Why the same seed can look different",
+        "body": "<p>Compare the actual model/LoRAs, attention patches, canvas, steps/sigmas, sampler/scheduler, shifts, effective prompt, asset order and preparation, clip type, continuity method and duration policy. Same prompt and seed alone are insufficient.</p><p>Disconnect optional modifiers for a baseline and change one feature at a time. A functional check can prove a setting reaches its processing path; it does not prove aesthetic improvement.</p>",
+        "id": "repeatability",
+        "photo": null
+      },
+      {
+        "title": "Memory and persistence",
+        "body": "<p>Current clip data is disk-backed and working resources are released between stages. decoded_output=latest avoids retaining an unnecessary full raw batch; all current results remain available to cached preview/export. Project Video exports clips in sequence. Browser prebuffering is bounded and best effort.</p><p>Workflow JSON stores authoring and links, not every generated latent. Portable reference archives, cache data and exported movies are separate artifacts. A completed checkpoint does not preserve an unfinished sampler’s full state.</p>",
+        "id": "memory",
+        "photo": null
+      },
+      {
+        "title": "Choose a clip type",
+        "body": "<div class=\"table-wrap\"><table><thead><tr><th>Task</th><th>Assignments</th><th>Purpose</th></tr></thead><tbody><tr><td>Existing Video · VIDEO</td><td>Exactly one video</td><td>Use existing frames without diffusion; later clips can continue its ending.</td></tr><tr><td>Text To Video · T2V</td><td>No explicit pool references</td><td>Generate from text; a separate continuity setting can still supply supported previous context.</td></tr><tr><td>Image To Video · I2V</td><td>One image</td><td>Opening keyframe.</td></tr><tr><td>First And Last Frame · FL2V</td><td>Two ordered images; continuity can provide the opening handoff</td><td>Opening and ending keyframes.</td></tr><tr><td>Ending Image To Video · L2V</td><td>One image</td><td>Closing keyframe.</td></tr><tr><td>Generate From References · REF2V</td><td>Up to 9 images, 3 videos, 3 audio; 12 total</td><td>New reference-guided audiovisual content. Audio needs visual conditioning.</td></tr><tr><td>Edit Video · V2V</td><td>Exactly one source video</td><td>Transform the chosen source range.</td></tr><tr><td>Edit Video With References · RV2V</td><td>First selected video is source; reference caps include it</td><td>Edit source footage with additional references.</td></tr><tr><td>Edit Still Image · IMG</td><td>Exactly one image</td><td>Return a single edited image, not a video clip.</td></tr></tbody></table></div><p>Native reference conditioning allows at most 15 seconds per video and 15 seconds of video total, plus at most 15 seconds per audio reference and 15 seconds of audio total. Audio references require visual conditioning. A large chained pool does not increase native per-clip capacity.</p>",
+        "id": "clip-types",
+        "photo": null
+      }
+    ]
+  }
+}

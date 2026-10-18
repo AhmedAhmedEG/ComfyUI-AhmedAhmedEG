@@ -1,0 +1,121 @@
+{
+  "workflow-overview": {
+    "file": "images/workflow-map.svg",
+    "width": 1000,
+    "height": 500,
+    "alt": "Wiring diagram showing model loaders, Director Settings and Reference Pack feeding Master, followed by current-result preview and export.",
+    "caption": "A schematic of the core data flow, drawn from the current node contracts. Real ComfyUI screenshots throughout the guide show the actual controls.",
+    "kind": "diagram",
+    "source": "Current node schemas and generation pipeline."
+  },
+  "master-timeline": {
+    "file": "images/master-timeline.png",
+    "width": 654,
+    "height": 437,
+    "alt": "Current Master timeline, shared prompt, project audio joins and clip header.",
+    "caption": "Selection, saved-result status and approval are separate. References appear below the prompt blocks. The clip’s own header contains duration, audio policy, seed and move/duplicate actions.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "clip-continuity": {
+    "file": "images/clip-continuity.png",
+    "width": 640,
+    "height": 484,
+    "alt": "Clip prompt and Motion Context controls with separate video and audio windows.",
+    "caption": "Motion Context on clip 2, with independently selected video/audio context and the New footage duration policy. The chain icon replaces the old overlay cards.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "clip-look": {
+    "file": "images/clip-look.png",
+    "width": 640,
+    "height": 484,
+    "alt": "Per-clip Look tab with exposure, contrast and saturation controls.",
+    "caption": "Look applies supported per-clip output grading. This is separate from preparing reference pixels in Reference Pack.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "clip-loras": {
+    "file": "images/clip-loras.png",
+    "width": 640,
+    "height": 484,
+    "alt": "Per-clip LoRAs tab with an enabled patch row, file selector and model strength.",
+    "caption": "The LoRAs tab owns clip-local model patches. Check the upstream model branch too: this list cannot undo a patch already applied before Master.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "reference-image": {
+    "file": "images/reference-image.png",
+    "width": 471,
+    "height": 668,
+    "alt": "Single-reference editor with image selection, name and multiple reference roles.",
+    "caption": "The pack edits one selected asset at a time. Image roles guide prompt writing; clip type and explicit assignments own actual model conditioning.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "reference-video": {
+    "file": "images/reference-video.png",
+    "width": 471,
+    "height": 613,
+    "alt": "Video trim, Video + Audio mode, Megapixels scaling and 0.5 MP input size.",
+    "caption": "Current video preparation: choose streams, trim and Input Size (MP) here. The 0.5 MP setting prepares the input before model reference encoding; it is not output resolution.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "director-settings": {
+    "file": "images/director-settings.png",
+    "width": 399,
+    "height": 436,
+    "alt": "Director Settings output canvas, 24 fps, initial sampling schedule and decoded output policy.",
+    "caption": "A saved workflow’s settings can differ from new-node defaults. Here decoded_output is full; latest is usually sufficient when Smart Preview and cached export own sequence review/delivery.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "smart-preview": {
+    "file": "images/smart-preview.png",
+    "width": 922,
+    "height": 617,
+    "alt": "Current Smart Preview with Full video, Original Resolution, Final Output and four completed clips.",
+    "caption": "The live player shows all four current clips. Scope, playback resolution and processing stage are independent choices. There is no historical Saved Take selector.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "selflift-node": {
+    "file": "images/selflift-node.png",
+    "width": 315,
+    "height": 443,
+    "alt": "SelfLift configuration with low-resolution scale, final high-resolution steps and learned latent upscaler.",
+    "caption": "A newly added SelfLift node, shown without running it. Only controls relevant to the selected split and tiling choices are visible.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "refine-node": {
+    "file": "images/refine-node.png",
+    "width": 308,
+    "height": 647,
+    "alt": "Refine configuration with extra steps, denoise, global backend and first-pass confirmation.",
+    "caption": "A newly added same-resolution Refine node. Enlargement-only fields appear when their mode is selected. Confirm First Pass must be enabled before generation for the review-then-refine workflow.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  },
+  "project-export": {
+    "file": "images/project-export.png",
+    "width": 818,
+    "height": 400,
+    "alt": "Cached project export node with final stream, all clips, FPS and individual shot files.",
+    "caption": "Project Video exports current cached results and available current stages. This screenshot shows declared defaults before connecting a timeline; its project ID is a fallback when timeline data already supplies one.",
+    "captured": "2026-10-18",
+    "source": "Live ComfyUI frontend, installed pack 1.7.14; separate workflow copies or newly added nodes.",
+    "kind": "screenshot"
+  }
+}

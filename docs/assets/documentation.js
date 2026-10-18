@@ -1,12 +1,14 @@
-const search=document.getElementById('nav-search');
-search.addEventListener('input',()=>{
- const query=search.value.trim().toLowerCase();let count=0;
- document.querySelectorAll('.nav-group').forEach(group=>{
-  let shown=0;group.querySelectorAll('a').forEach(link=>{
-   const match=!query||link.dataset.search.includes(query);link.hidden=!match;if(match){shown++;count++}
-  });group.hidden=shown===0;
- });document.getElementById('search-empty').hidden=count>0;
-});
-const menu=document.getElementById('menu-toggle');
-menu.addEventListener('click',()=>{const open=document.body.classList.toggle('sidebar-open');menu.setAttribute('aria-expanded',String(open));if(open)search.focus()});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('sidebar-open')){document.body.classList.remove('sidebar-open');menu.setAttribute('aria-expanded','false');menu.focus()}});
+(() => {
+'use strict';
+const search=document.getElementById('nav-search'),results=document.getElementById('search-results'),prefix=document.body.dataset.root||'';
+const words=v=>v.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').split(/\s+/).filter(Boolean);
+search.addEventListener('input',()=>{const terms=words(search.value);results.replaceChildren();results.hidden=!terms.length;document.getElementById('search-empty').hidden=true;if(!terms.length)return;const matches=(window.H3_GUIDE_INDEX||[]).map(e=>{const title=e.title.toLowerCase(),text=(e.title+' '+e.description+' '+e.text).toLowerCase();return{e,score:terms.every(t=>text.includes(t))?terms.reduce((n,t)=>n+(title.includes(t)?20:1),0):0};}).filter(x=>x.score).sort((a,b)=>b.score-a.score).slice(0,12);for(const{e}of matches){const a=document.createElement('a'),strong=document.createElement('strong'),small=document.createElement('small');a.href=prefix+e.url;strong.textContent=e.title;small.textContent=e.description;a.append(strong,small);results.append(a);}document.getElementById('search-empty').hidden=matches.length>0;});
+const menu=document.getElementById('menu-toggle');menu.addEventListener('click',()=>{const open=document.body.classList.toggle('sidebar-open');menu.setAttribute('aria-expanded',String(open));if(open)search.focus();});
+document.querySelectorAll('.option-tools').forEach(tools=>{const section=tools.closest('.chapter-section'),input=tools.querySelector('.option-search'),select=tools.querySelector('.option-filter'),cards=[...section.querySelectorAll('.option-card')];function filter(){const terms=words(input.value);let count=0;for(const c of cards){const match=(select.value==='all'||select.value===c.dataset.kind)&&terms.every(t=>c.textContent.toLowerCase().includes(t));c.hidden=!match;if(match)count++;}tools.querySelector('.option-count').textContent=count+' of '+cards.length+' controls';section.querySelector('.option-empty').hidden=count>0;}input.addEventListener('input',filter);select.addEventListener('change',filter);});
+document.querySelectorAll('.copy-wiring').forEach(button=>button.addEventListener('click',async()=>{const code=button.parentElement.querySelector('code');try{await navigator.clipboard.writeText(code.textContent);button.textContent='Copied';}catch{button.textContent='Select wiring below';const range=document.createRange();range.selectNodeContents(code);const s=window.getSelection();s.removeAllRanges();s.addRange(range);}}));
+const dialog=document.getElementById('image-dialog'),image=document.getElementById('image-full'),caption=document.getElementById('image-caption');let opener;
+document.querySelectorAll('.image-zoom').forEach(button=>button.addEventListener('click',()=>{opener=button;image.src=button.dataset.image;image.alt=button.querySelector('img').alt;caption.textContent=button.closest('figure').querySelector('figcaption').textContent;if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');}));
+function closeImage(){if(typeof dialog.close==='function')dialog.close();else dialog.removeAttribute('open');image.removeAttribute('src');opener?.focus();}document.getElementById('image-close').addEventListener('click',closeImage);dialog.addEventListener('click',e=>{if(e.target===dialog)closeImage();});dialog.addEventListener('cancel',e=>{e.preventDefault();closeImage();});
+document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);if(e.key==='/'&&!editing&&!dialog.open){e.preventDefault();document.body.classList.add('sidebar-open');menu.setAttribute('aria-expanded','true');search.focus();}if(e.key==='Escape'&&!dialog.open){search.value='';search.dispatchEvent(new Event('input'));document.body.classList.remove('sidebar-open');menu.setAttribute('aria-expanded','false');}});
+if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting)document.querySelectorAll('.toc a').forEach(a=>a.classList.toggle('active',a.hash==='#'+e.target.id));},{rootMargin:'-10% 0px -75% 0px'});document.querySelectorAll('main h2[id]').forEach(h=>observer.observe(h));}
+})();

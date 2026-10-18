@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.7.10** consolidates the MiniMax/video production features of
+Version **1.7.14** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -36,14 +36,22 @@ Interpolation and reviewed upstream Project Import are separate optional nodes.
 
 There is one public **MiniMax H3 Master Node** name. The package has 27 distinct
 user-selectable tools, organized by purpose; internal algorithms are not separate
-nodes. The two core nodes are in `ComfyUI-AhmedAhmedEG/Start here`.
+nodes. Under `ComfyUI-AhmedAhmedEG`, Master and Director Settings are in
+`Start here`, Reference Pack is in `References and prompts`, and Smart Preview
+is in `Output`.
 [NODE_GUIDE.md](NODE_GUIDE.md) explains the everyday and optional tools.
-[Open the documentation index](docs/index.html), or begin with
-[Getting Started](docs/getting-started.html). Every public node has a separate
-reference page with its behavior, connections, usage steps, exact input/control
-schema, outputs and limitations. The site works locally with no external assets;
-keep the docs folder together. The starter is downloadable from Getting Started.
-Read [Architecture and data](docs/architecture.html) for execution stages, cable types, temporal math, caching and memory. Each node page includes a detailed technical chapter, examples, dependencies and limitations, followed by its schema reference. Authored chapters live in `docs/manuals/`; rebuild the offline HTML with `python tools/build_user_guide.py`.
+[Open the illustrated user guide](docs/index.html), or begin with
+[Your first clip](docs/getting-started.html). The guide covers all 27 public nodes,
+269 declared inputs/settings, and the controls inside the timeline, reference editor,
+Prompt Forge and export panels. Each node follows the same structure: purpose,
+wiring, first use, options, practical examples, outputs and troubleshooting.
+Use [Practical workflows](docs/workflows.html) for continuity, input megapixels,
+LoRAs, refinement and export; [Timeline & reference editor](docs/editor.html) explains
+the in-node controls. Full-text search, option filters and enlarged screenshots work
+offline; keep the docs folder together. The starter download needs the adjacent
+workflows folder. Rebuild with `python tools/build_user_guide.py`; authored content
+lives in the guide JSON files under `docs/`, and the builder checks option coverage
+against the current node schemas. Former manual links redirect to current chapters.
 Saved UI workflows using the former Master Director type migrate on import.
 API prompts should use `MiniMaxH3MasterNode` as their `class_type`.
 
@@ -67,7 +75,7 @@ nodes are intentionally no longer registered. See NODE_GUIDE.md for replacements
 After `git pull`, **restart the ComfyUI process**, then reload the browser.
 Pulling files does not reload Python node registrations in a running server.
 `/minimax_director/status` reports the loaded version and installation path;
-version 1.7.2 reports 27 types and only `MiniMaxH3MasterNode` as the Master.
+version 1.7.14 reports 27 types and only `MiniMaxH3MasterNode` as the Master.
 Old wrapper-based graphs will show missing node types; use the replacement
 list in NODE_GUIDE.md or load the fresh starter. If `pyav` appears under
 `bit_depth` in an advanced exporter, reload its supplied example after restarting.
