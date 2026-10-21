@@ -2065,7 +2065,10 @@ const embeddedCSS = `
 .mmx-director-root .mmx-inspector-header { flex-wrap: wrap; }
 .mmx-empty-timeline { color: var(--descrip-text, #aaa); padding: 18px 4px; }
 
-.mmx-director-root .mmx-track-row { border-bottom: 1px solid var(--border-color,#444); gap: 0; }
+/* Separators belong above lanes: hidden trailing tracks and the playhead must
+   not leave a second bottom edge beneath the final visible lane. */
+.mmx-director-root .mmx-track-row { border-bottom: 0; gap: 0; }
+.mmx-director-root .mmx-track-row + .mmx-track-row { border-top: 1px solid var(--border-color,#444); }
 .mmx-director-root .mmx-track-header-cell { background: #26282b; font-size: 11px; color: #c2c5ca; }
 .mmx-director-root .mmx-subtrack-block { border-radius: 2px; }
 .mmx-director-root .mmx-shot-block { background: #34384a; border-color: #687094; }
@@ -2081,7 +2084,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-track-row[hidden] { display:none; }
 .mmx-director-root [hidden] { display:none!important; }
 
-.mmx-director-root .mmx-multitrack-panel { min-height:0; padding:10px 12px; border:1px solid #50565f; border-radius:7px; background:#25272b; }
+.mmx-director-root .mmx-multitrack-panel { min-height:0; padding:10px 12px 0; scrollbar-width:thin; border:1px solid #50565f; border-radius:7px; background:#25272b; }
 .mmx-director-root .mmx-shot-top-bar .mmx-clip-mode-badge { display:none; }
 .mmx-director-root .mmx-clip-val-badge { font-size:11px!important; }
 
