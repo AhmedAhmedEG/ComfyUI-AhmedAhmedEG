@@ -193,6 +193,22 @@ class RuntimeContracts(unittest.TestCase):
         shifts.assert_called_once_with(self.model,8.5,2.25)
         self.assertIs(self.sampling_calls[0]['sigmas'],sigmas)
 
+    def test_settings_node_sigma_shifts_control_the_sampled_model(self):
+        from nodes.node_settings import MiniMaxH3DirectorSettings
+        import comfy_extras.nodes_minimax_h3 as native
+        for video,audio in ((8.5,2.25),(12.,3.)):
+            config,=MiniMaxH3DirectorSettings().build_config(
+                width=32,height=32,steps=2,sampler='euler',scheduler='simple',
+                shift_video=video,shift_audio=audio)
+            config.update(project_id='regression',run_mode='full_batch')
+            shifted=SimpleNamespace(model_name='shifted-h3')
+            self.sampling_calls.clear()
+            with patch.object(native.MiniMaxH3SigmaShift,'execute',return_value=(shifted,)) as shifts:
+                self.execute(config=config)
+            shifts.assert_called_once_with(self.model,video,audio)
+            self.assertIs(self.sampling_calls[0]['model'],shifted,
+                'Sampling must receive the patched model returned by native SigmaShift')
+
     def test_approved_replay_does_not_read_model_weight_files(self):
         manager=ProjectCacheManager('regression',self.temp.name)
         manager.store_clip_results('one','saved',None,{'waveform':torch.ones((1,2,10000)),'sample_rate':48000},torch.ones((5,32,64,3)))
