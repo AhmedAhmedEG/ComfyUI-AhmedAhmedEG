@@ -38,6 +38,18 @@ def _model_configuration(model):
         'current_hooks', 'forced_hooks', 'force_cast_weights'))
 
 
+def _native_residency():
+    """Read native H3 residency; do not allocate or maintain another weight cache."""
+    try:
+        import comfy.model_management as manager
+        bases={}
+        for patcher in manager.loaded_models():
+            model=getattr(patcher,'model',None)
+            if type(model).__name__=='MiniMaxH3':bases[id(model)]=patcher
+        return {'h3_bases':len(bases),'loaded_bytes':sum(p.loaded_size() for p in bases.values())}
+    except Exception:return None
+
+
 class SamplingConfiguration:
     """A single patcher handle; all residency remains native ComfyUI's job.
 
@@ -85,12 +97,14 @@ class SamplingConfiguration:
                 self._select(model, ())
             shifts = (float(video), float(audio))
             if self.shifted is not None and self.shifts == shifts:
-                log.info('Sampling configuration reused: same model, adapters and sigma shifts')
+                log.info('Sampling configuration reused: base_id=%s configuration_id=%s native=%s',
+                    id(getattr(self.parent,'model',self.parent)),id(self.shifted),_native_residency())
                 return self.shifted
             self.shifted = None
             self.shifted, = native_outputs(MiniMaxH3SigmaShift.execute(model, *shifts))
             self.shifts = shifts
-            log.info('Sampling sigma configuration prepared: video=%s audio=%s', *shifts)
+            log.info('Sampling sigma configuration prepared: video=%s audio=%s base_id=%s configuration_id=%s native=%s',
+                *shifts,id(getattr(self.parent,'model',self.parent)),id(self.shifted),_native_residency())
             return self.shifted
 
     def trim_loras(self):
