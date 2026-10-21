@@ -51,7 +51,7 @@ try:
     from ..core.sampling import sample_latent, native_outputs
     from ..core.cache_manager import fingerprint_value
     from ..core.audio_post import fit_audio_duration
-    from ..core.loras import resolve_lora_files, apply_loras
+    from ..core.loras import resolve_lora_files
     from ..core.source_media import source_range, choose_audio
     from ..core.advanced_sampling import sample_selflift
     from ..core.project import migrate_timeline, save_autosave, export_timeline_state
@@ -60,7 +60,7 @@ except ImportError:
     from core.sampling import sample_latent, native_outputs
     from core.cache_manager import fingerprint_value
     from core.audio_post import fit_audio_duration
-    from core.loras import resolve_lora_files, apply_loras
+    from core.loras import resolve_lora_files
     from core.source_media import source_range, choose_audio
     from core.advanced_sampling import sample_selflift
     from core.project import migrate_timeline, save_autosave, export_timeline_state
@@ -400,7 +400,6 @@ class MiniMaxH3MasterDirector:
         previous_fingerprint = None
         generated_count = 0
         completed_clips = []
-        lora_state_cache = {}
         try:
             from ..core.provenance import runtime_provenance, algorithm_provenance
         except ImportError:
@@ -1092,7 +1091,7 @@ class MiniMaxH3MasterDirector:
 
             # Both fresh sampling and resumed refinement need the clip's adapters.
             # Fingerprints above describe the base model plus the effective LoRA files.
-            clip_active_model = apply_loras(clip_active_model, clip_lora_files, lora_state_cache)
+            clip_active_model = current_resources().prepare_loras(clip_active_model, clip_lora_files)
 
             if staged is not None:
                 cache_mgr.admit_first_pass(clip_id, staged['generation'])

@@ -51,6 +51,9 @@ class RuntimeContracts(unittest.TestCase):
                 timeline_data=json.dumps({"clips":[{"type":"T2VA","model_override":"missing"}]}))
 
     def setUp(self):
+        from core.run_resources import _sampling_configuration
+        _sampling_configuration.reset()
+        self.addCleanup(_sampling_configuration.reset)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.node = MiniMaxH3MasterDirector()

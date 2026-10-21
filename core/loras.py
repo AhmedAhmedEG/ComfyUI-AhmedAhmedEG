@@ -6,6 +6,20 @@ import math
 MAX_CACHED_LORAS = 8
 
 
+def lora_state_bytes(value):
+    """CPU adapter storage only; count aliases once without scanning contents."""
+    seen=set()
+    def size(item):
+        if id(item) in seen:return 0
+        seen.add(id(item))
+        if isinstance(item,dict):return sum(size(v) for v in item.values())
+        if isinstance(item,(list,tuple)):return sum(size(v) for v in item)
+        if callable(getattr(item,'numel',None)) and callable(getattr(item,'element_size',None)):
+            return item.numel()*item.element_size()
+        return 0
+    return size(value)
+
+
 def _patch_count(model):
     patches = getattr(model, "patches", None)
     if isinstance(patches, dict):
@@ -59,6 +73,8 @@ def apply_loras(model, files, state_cache):
     patched = model.clone()
     for row in files:
         key = (row["path"], row["sha256"])
+        for old in list(state_cache):
+            if old[0] == row['path'] and old != key: state_cache.pop(old)
         if key not in state_cache:
             state_cache[key] = comfy.utils.load_torch_file(row["path"], safe_load=True)
         state = state_cache.pop(key)

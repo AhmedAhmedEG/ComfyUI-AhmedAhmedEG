@@ -167,6 +167,34 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let project = getTimeline().project_id;
   let statusText='';
   let blobUrl='', warmRevision='', loadingSource='', segmentPlayer;
+  let displayedDownload,downloadController,downloadBusy=false;
+  const downloadUrls=new Map();
+  const setDownload=info=>{displayedDownload={path:`/minimax_director/preview/media?${new URLSearchParams({project_id:info.project_id,key:info.key,download:'1'})}`,
+    name:`${info.project_id}-${info.scope==='full'?'full-video':'latest-clip'}-${info.key.slice(0,8)}.mp4`};};
+  save.onclick=async event=>{
+    event.preventDefault();event.stopPropagation();
+    if(downloadBusy || disposed)return;
+    if(!displayedDownload){label.textContent='Wait for the preview to open before saving.';return;}
+    const selected={...displayedDownload};downloadBusy=true;
+    downloadController=new AbortController();save.textContent='Preparing download…';save.setAttribute('aria-busy','true');
+    try{
+      // Use ComfyUI's authenticated fetch path, including through browser tunnels.
+      // The link alone offered no progress/error feedback and could be intercepted
+      // by graph/browser navigation. Capture the displayed revision before awaiting.
+      const response=await api.fetchApi(selected.path,{signal:downloadController.signal});
+      if(!response.ok){let message=`Download failed (HTTP ${response.status}).`;try{message=(await response.json()).error || message;}catch{}throw new Error(message);}
+      const type=response.headers?.get?.('Content-Type') || '';
+      if(type && !type.includes('video/mp4') && !type.includes('application/octet-stream'))throw new Error('Server returned a non-video response. Refresh the preview and retry.');
+      save.textContent='Downloading…';const blob=await response.blob();
+      if(disposed)return;
+      if(!blob.size)throw new Error('The downloaded preview was empty.');
+      const url=URL.createObjectURL(blob),link=document.createElement('a');
+      link.href=url;link.download=selected.name;link.style.display='none';document.body.append(link);link.click();link.remove();
+      const timer=setTimeout(()=>{URL.revokeObjectURL(url);downloadUrls.delete(url);},60000);downloadUrls.set(url,timer);
+      label.textContent='Download ready · '+selected.name;
+    }catch(error){if(!disposed && error.name!=='AbortError')label.textContent='Save preview failed: '+error.message;}
+    finally{downloadBusy=false;if(!disposed){save.textContent='Save preview';save.removeAttribute('aria-busy');}}
+  };
   let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, open: !panel.hidden});
   let positionWritten=0,mediaReady=false;
@@ -192,6 +220,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     savePosition(true);mediaReady=false;
     segmentPlayer?.dispose();segmentPlayer=null;
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
+    displayedDownload=null;
     if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl='';}
     video.hidden = true; empty.hidden = false;
   };
@@ -239,7 +268,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
             if(disposed || panel.hidden || token!==request || loadingSource!==url)return;
             savePosition(true);mediaReady=false;segmentPlayer?.dispose();
             if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl='';
-            source=url;loadingSource='';video.hidden=false;empty.hidden=true;
+            source=url;setDownload(info);loadingSource='';video.hidden=false;empty.hidden=true;
             segmentPlayer=createSegmentPlayer(video,info.playback,p=>openPreviewStream(api,p),error=>{
               if(disposed || source!==url)return;
               console.warn('Smart Preview fragment playback failed:',error);
@@ -248,12 +277,12 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
             });
             label.textContent=statusText;
             void warmPlayback(info.playback,info).catch(()=>{});
-          }).catch(()=>{if(!disposed && loadingSource===url){source=url;loadingSource='';video.src=url;video.load();video.hidden=false;empty.hidden=true;}});
+          }).catch(()=>{if(!disposed && loadingSource===url){source=url;setDownload(info);loadingSource='';video.src=url;video.load();video.hidden=false;empty.hidden=true;}});
         } else void readyPreview(api,path).then(blob=>{
           if(disposed || panel.hidden || token!==request || loadingSource!==url)return;
           savePosition(true);mediaReady=false;
           const previousBlob=blobUrl;
-          source=url;loadingSource='';
+          source=url;setDownload(info);loadingSource='';
           // A completed local cache can use a blob. Otherwise let the native
           // player stream/range-load immediately; never wait for response.blob().
           blobUrl=blob?URL.createObjectURL(blob):'';
@@ -355,6 +384,6 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
         stop(); project = getTimeline().project_id; ++request; controller?.abort(); restoreOptions(); refreshPreview();
       }
     },
-    dispose() { disposed = true; clearInterval(poll);document.removeEventListener('visibilitychange',resume);globalThis.removeEventListener?.('online',resume);globalThis.removeEventListener?.('pagehide',leaving); ++request; controller?.abort(); stop(); }
+    dispose() { disposed = true;downloadController?.abort();for(const [url,timer] of downloadUrls){clearTimeout(timer);URL.revokeObjectURL(url);}downloadUrls.clear(); clearInterval(poll);document.removeEventListener('visibilitychange',resume);globalThis.removeEventListener?.('online',resume);globalThis.removeEventListener?.('pagehide',leaving); ++request; controller?.abort(); stop(); }
   };
 }

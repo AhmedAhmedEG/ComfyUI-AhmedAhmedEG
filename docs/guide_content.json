@@ -1,5 +1,5 @@
 {
-  "version": "1.7.18",
+  "version": "1.7.19",
   "reviewed": "2026-10-21",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -41,7 +41,8 @@
         "FL2VA serves text/keyframe tasks; REF2VA serves reference/video editing tasks. Keeping both connected does not force one model for every clip.",
         "Approval controls generation reuse. It does not decide which completed idle results Smart Preview may display.",
         "Saved results contain completed latents, not persistent paused sampler state. Ten completed steps plus fifteen refinement steps is not twenty-five initial steps.",
-        "The yellow outline is selection. Saved-result indicators, approval and the active generation animation have different meanings."
+        "The yellow outline is selection. Saved-result indicators, approval and the active generation animation have different meanings.",
+        "Identical reruns reuse one active sampling configuration sharing native base weights. Model, adapter or sigma changes replace it. CPU adapter file reuse is bounded to 256 MiB and eight files; oversized adapters are not kept in an extra file cache. ComfyUI still controls residency and its Free Memory control clears this handle. Prompt/seed changes do not invalidate model configuration."
       ],
       "options": {
         "video_vae": {
@@ -1398,7 +1399,8 @@
         "Browser cache cannot restore deleted server latents, and a preview MP4 is not a continuation checkpoint.",
         "Starting All clips preserves the old preview until a successful replacement. Replacing a predecessor deletes its continuity-dependent successors’ cached results; independent/source clips stop that chain. Both scopes prebuffer completed revisions with autoplay off.",
         "Playback can start while clips are still downloading. Full Video reuses the same per-clip video fragments as Latest Clip, with one joined soundtrack to preserve audio fades and gain matching. Save preview remains a separate downloadable MP4. Browsers without supported MediaSource playback fall back to ordinary MP4 streaming.",
-        "Continuity prefixes and visible PCM are resampled together before the join, avoiding separate resampler edges at the cut. This helps seam artifacts, not poor audio generated within a clip."
+        "Continuity prefixes and visible PCM are resampled together before the join, avoiding separate resampler edges at the cut. This helps seam artifacts, not poor audio generated within a clip.",
+        "Save preview explicitly downloads the displayed scope and revision through ComfyUI authentication, with progress and error feedback. A scope/revision change while downloading does not change which result that download saves."
       ],
       "options": {
         "project_state": {

@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.7.18** consolidates the MiniMax/video production features of
+Version **1.7.19** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -31,7 +31,13 @@ Connected references are encoded at Master run start and saved under the project
 encodes are reused across clips and runs; disconnected inputs lose their derived
 cache files. Preparing the pool does not condition a clip on unselected references.
 A bounded CPU working set avoids retaining reference tensors on the GPU. Native
-ComfyUI manages sampler/VAE residency between clips instead of forced full unloads.
+ComfyUI manages sampler/VAE residency across clips and reruns. One active sampling
+configuration handle survives rerolls; it shares the native base weights rather than
+keeping another GPU weight cache. Model/adapter/shift changes replace the handle.
+Reusable adapter tensors stay on CPU with a 256 MiB budget; oversized adapters
+are retained only as needed by the active patched model. Native Free Memory clears
+the handle and adapter cache too. Save preview downloads the displayed scope and
+revision with progress and explicit failure feedback.
 
 Each feature has one configuration owner. Settings controls canvas and sampling.
 Reference Pack owns media preparation; RefMod Library owns character adapter

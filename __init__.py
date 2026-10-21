@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.18"
+__version__ = "1.7.19"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -31,6 +31,21 @@ _PREVIEW_LOCKS = weakref.WeakValueDictionary()
 # Register server API routes
 if getattr(PromptServer, "instance", None) is not None:
     routes = PromptServer.instance.routes
+
+    @web.middleware
+    async def release_director_configuration(request, handler):
+        # Cooperate with ComfyUI's existing Free Memory/Unload Models controls.
+        if request.path in ('/free','/api/free') and request.method == 'POST':
+            try:
+                body = await request.json()
+                if body.get('unload_models') or body.get('free_memory'):
+                    from .core.run_resources import _sampling_configuration
+                    _sampling_configuration.reset()
+            except (ValueError, TypeError, AttributeError): pass
+        return await handler(request)
+
+    if isinstance(getattr(PromptServer.instance,'app',None),web.Application):
+        PromptServer.instance.app.middlewares.append(release_director_configuration)
 
     @routes.get("/minimax_director/status")
     async def package_status(request):

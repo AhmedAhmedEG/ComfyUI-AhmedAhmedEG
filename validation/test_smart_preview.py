@@ -202,5 +202,32 @@ class SmartPreview(unittest.TestCase):
         with patch("core.cache_manager.get_cache_root_dir", return_value=self.temp.name):
             asyncio.run(check())
 
+    def test_native_free_memory_clears_shared_configuration_and_calls_native_handler(self):
+        import ast, asyncio
+        from aiohttp import web
+        from aiohttp.test_utils import TestClient, TestServer
+        from core.run_resources import _sampling_configuration
+        tree=ast.parse((Path(__file__).resolve().parent.parent/'__init__.py').read_text(encoding='utf-8'))
+        handler=next(n for n in ast.walk(tree) if isinstance(n,ast.AsyncFunctionDef) and n.name=='release_director_configuration')
+        handler.decorator_list=[]
+        for n in ast.walk(handler):
+            if isinstance(n,ast.ImportFrom):n.level=0
+        namespace={'web':web}
+        exec(compile(ast.Module(body=[handler],type_ignores=[]),'actual_free_middleware','exec'),namespace)
+        async def check():
+            calls=[]
+            async def native(request):calls.append(await request.json());return web.json_response({'native':True})
+            app=web.Application(middlewares=[web.middleware(namespace['release_director_configuration'])]);app.router.add_post('/free',native)
+            async with TestClient(TestServer(app)) as client:
+                _sampling_configuration.parent=object()
+                response=await client.post('/free',json={'unload_models':False})
+                self.assertEqual(response.status,200);self.assertIsNotNone(_sampling_configuration.parent)
+                response=await client.post('/free',json={'unload_models':True,'free_memory':True})
+                self.assertEqual(await response.json(),{'native':True})
+                self.assertIsNone(_sampling_configuration.parent)
+                self.assertEqual(len(calls),2)
+        try:asyncio.run(check())
+        finally:_sampling_configuration.reset()
+
 
 if __name__ == "__main__": unittest.main()
