@@ -1,5 +1,5 @@
 {
-  "version": "1.7.17",
+  "version": "1.7.18",
   "reviewed": "2026-10-21",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -1397,7 +1397,8 @@
         "Original Resolution preserves generation dimensions; 540p/720p/1080p are playback caps, not model settings.",
         "Browser cache cannot restore deleted server latents, and a preview MP4 is not a continuation checkpoint.",
         "Starting All clips preserves the old preview until a successful replacement. Replacing a predecessor deletes its continuity-dependent successors’ cached results; independent/source clips stop that chain. Both scopes prebuffer completed revisions with autoplay off.",
-        "Playback can start while clips are still downloading. Full Video reuses the same per-clip video fragments as Latest Clip, with one joined soundtrack to preserve audio fades and gain matching. Save preview remains a separate downloadable MP4. Browsers without supported MediaSource playback fall back to ordinary MP4 streaming."
+        "Playback can start while clips are still downloading. Full Video reuses the same per-clip video fragments as Latest Clip, with one joined soundtrack to preserve audio fades and gain matching. Save preview remains a separate downloadable MP4. Browsers without supported MediaSource playback fall back to ordinary MP4 streaming.",
+        "Continuity prefixes and visible PCM are resampled together before the join, avoiding separate resampler edges at the cut. This helps seam artifacts, not poor audio generated within a clip."
       ],
       "options": {
         "project_state": {

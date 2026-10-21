@@ -84,8 +84,22 @@ def prepare_timeline_audio(audio_clips, fade_ms=15., enable_gain_match=True):
     elapsed = Fraction(0)
     previous_boundary = 0
     for clip in audio_clips:
-        wave = concatenate_audio_clips([clip], crossfade_ms=0,
-            enable_gain_match=False, enable_declick=False)['waveform']
+        prefix = clip.get('seam_prefix')
+        context = None
+        if (prefix and prefix['waveform'].shape[-1] and
+                prefix.get('sample_rate') == clip.get('sample_rate') and
+                prefix['waveform'].shape[:-1] == clip['waveform'].shape[:-1]):
+            # Resample the continuous decode together. Resampling the discarded
+            # prefix and visible audio separately introduces zero-padding/ringing
+            # on both sides of the cut with the native sinc resampler.
+            combined = {**clip, 'waveform':torch.cat([prefix['waveform'],clip['waveform']],-1)}
+            prepared = concatenate_audio_clips([combined], crossfade_ms=0,
+                enable_gain_match=False, enable_declick=False)['waveform']
+            split = round(prefix['waveform'].shape[-1] * 48000 / int(clip['sample_rate']))
+            context, wave = prepared[..., :split], prepared[..., split:]
+        else:
+            wave = concatenate_audio_clips([clip], crossfade_ms=0,
+                enable_gain_match=False, enable_declick=False)['waveform']
         if 'frame_count' in clip:
             count, fps = int(clip['frame_count']), Fraction(str(clip.get('fps', 24)))
             if count < 1 or fps <= 0:
@@ -106,10 +120,11 @@ def prepare_timeline_audio(audio_clips, fade_ms=15., enable_gain_match=True):
             wave = wave * gain
         if segments and fade_ms > 0:
             previous = segments[-1]
-            prefix = clip.get('seam_prefix')
             if prefix and prefix['waveform'].shape[-1]:
-                context = concatenate_audio_clips([prefix], crossfade_ms=0,
-                    enable_gain_match=False, enable_declick=False)['waveform'] * gain
+                if context is None:
+                    context = concatenate_audio_clips([prefix], crossfade_ms=0,
+                        enable_gain_match=False, enable_declick=False)['waveform']
+                context = context * gain
                 n = min(round(fade_ms / 1000 * 48000), previous.shape[-1], context.shape[-1])
                 if n:
                     # The discarded prefix ends exactly where visible audio begins.

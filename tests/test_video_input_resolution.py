@@ -1,5 +1,7 @@
 """Source input budgets are independent of output geometry and file contents."""
 import unittest
+import sys
+import types
 from unittest.mock import patch
 from tests.mock_torch import setup_mock_torch_if_needed
 torch = setup_mock_torch_if_needed()
@@ -27,7 +29,8 @@ class VideoInputResolution(unittest.TestCase):
         audio={"waveform":torch.zeros((1,2,10000)),"sample_rate":48000}
         shot={"source":{"filename":"source.mp4"},"source_start":0,"source_end":5/24,
               "video_input_resolution":{"mode":"short_edge","short_edge":64}}
-        with patch('folder_paths.get_input_directory',return_value='input',create=True), \
+        paths=types.SimpleNamespace(get_input_directory=lambda:'input')
+        with patch.dict(sys.modules,{'folder_paths':paths}), \
              patch('core.source_media.load_video',return_value=frames), \
              patch('core.source_media.load_audio',return_value=audio):
             resized=source_range(shot,{},512,288)

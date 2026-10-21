@@ -46,7 +46,7 @@ def playback_manifest(manager, plan):
                           generations={row['clip_id']:row['generation']})
         videos.append(descriptor); duration += visible/24
     audio_plan = {key:plan[key] for key in ('project_id','stream','rows','gain_match','fade_ms')}
-    audio_plan.update(kind='audio_fragment',version=1)
+    audio_plan.update(kind='audio_fragment',version=2)
     audio = _save_plan(manager, audio_plan)
     audio['generations'] = {row['clip_id']:row['generation'] for row in plan['rows']}
     return {'videos':videos,'audio':audio,'duration':duration,

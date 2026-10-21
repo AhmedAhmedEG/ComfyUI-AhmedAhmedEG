@@ -34,7 +34,9 @@ class TimelineAudioSeams(unittest.TestCase):
         right['seam_prefix'] = self.audio(.5, 320, 16000)
         joined = join_timeline_audio([left, right], 20, False)['waveform']
         self.assertEqual(joined.shape[-1], 9600)
-        self.assertAlmostEqual(joined[0, 0, 4799].item(), joined[0, 0, 4800].item(), places=5)
+        # Native sinc resampling has small phase-dependent passband ripple.
+        # Permit that (< -60 dBFS), but reject separate resampler edge transients.
+        self.assertAlmostEqual(joined[0, 0, 4799].item(), joined[0, 0, 4800].item(), delta=1e-3)
 
     def test_no_context_retains_declick_and_gain_matching(self):
         joined = join_timeline_audio([self.audio(.25), self.audio(.5)], 15, True)['waveform']
