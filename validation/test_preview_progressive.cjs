@@ -1,0 +1,20 @@
+const fs=require('fs'),assert=require('assert');
+const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
+const dom=new JSDOM('',{url:'http://localhost/',runScripts:'outside-only'}),w=dom.window;
+w.Response=Response;
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function')+'\nglobalThis.openStream=openPreviewStream;globalThis.buffer=bufferedPreview;');
+let finish,downloads=0;
+const api={apiURL:p=>p,fetchApi:async()=>{downloads++;return new Response(new ReadableStream({start(c){c.enqueue(new Uint8Array([1,2,3]));finish=()=>{c.enqueue(new Uint8Array([4,5]));c.close();};}}));}};
+(async()=>{
+  const buffering=w.buffer(api,'/clip');let complete=false;buffering.then(()=>complete=true);
+  const stream=await w.openStream(api,'/clip'),reader=stream.body.getReader();
+  assert.deepEqual([...((await reader.read()).value)],[1,2,3]);
+  assert(!complete,'Playback receives bytes before the download completes');
+  const another=await w.openStream(api,'/clip');
+  assert.equal(downloads,1,'Prebuffering and both players share the original transfer');
+  finish();assert.equal((await buffering).size,5);
+  assert.equal((await another.blob()).size,5);
+  assert.equal((await (await w.openStream(api,'/clip')).blob()).size,5);
+  assert.equal(downloads,1,'Scope changes reuse completed bytes');
+  dom.window.close();console.log('Progressive preview passed: early bytes, shared transfer, cached reuse.');
+})().catch(e=>{console.error(e);dom.window.close();process.exitCode=1;});

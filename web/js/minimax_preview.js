@@ -2,7 +2,10 @@
 // storage is best effort; the bounded session cache also works in private tabs.
 const previewMedia = new Map();
 const pendingMedia = new Map();
+const mediaStreams = new Map();
 const reloadMedia = new Set();
+const mediaEpochs = new Map();
+const observedGenerations = new Map();
 const MEDIA_LIMIT = 256 * 1024 * 1024;
 let legacyCacheCleared;
 const revisionStorage = 'minimax-preview-revisions-v2';
@@ -16,6 +19,10 @@ function rememberPreview(api, path, info) {
 }
 async function updatePreviewRevision(api, path, info) {
   const url=api.apiURL(path), generations=info.clip_generations;
+  const observed=observedGenerations.get(`${info.project_id}:${info.stream || 'final'}`);
+  if(observed && Object.entries(generations || {}).some(([clip,generation])=>observed.has(clip) && observed.get(clip)!==generation)){
+    await evictPreview(url);return;
+  }
   const invalidated=new Set(info.invalidated_clip_ids || []);
   if((!generations || !Object.keys(generations).length) && !invalidated.size)return;
   let revisions={};
@@ -34,6 +41,10 @@ async function bufferedPreview(api, path) {
   const url = api.apiURL(path);
   if (previewMedia.has(url)) {const blob=previewMedia.get(url);previewMedia.delete(url);previewMedia.set(url,blob);return blob;}
   if (pendingMedia.has(url)) return pendingMedia.get(url);
+  const epoch=mediaEpochs.get(url) || 0;
+  let streamResolve,streamReject;
+  const streamReady=new Promise((resolve,reject)=>{streamResolve=resolve;streamReject=reject;});
+  streamReady.catch(()=>{});mediaStreams.set(url,streamReady);
   const task=(async()=>{
     let cache, response;
     try {
@@ -49,21 +60,52 @@ async function bufferedPreview(api, path) {
         await response.body?.cancel?.();
         throw Object.assign(new Error('Large preview uses browser streaming.'),{stream:true});
       }
-      if(cache)try {
+    }
+    // A stable, unread branch lets playback clone a progressive stream while
+    // the same network response is being persisted. No second video download.
+    streamResolve(response.clone());
+    let storage=Promise.resolve();
+    if(cache)storage=(async()=>{try {
         await cache.put(url,response.clone());
         const keys=await cache.keys();let bytes=0;
         for(let i=keys.length-1;i>=0;i--){const item=await cache.match(keys[i]);bytes+=Number(item.headers.get('Content-Length')) || (await item.blob()).size;if(keys.length-i>32 || bytes>1024*1024*1024)await cache.delete(keys[i]);}
-      } catch {}
-    }
+      } catch {}})();
     const blob=await response.blob();
+    await storage;
+    if((mediaEpochs.get(url) || 0)!==epoch){await cache?.delete(url);return blob;}
     if(blob.size<=MEDIA_LIMIT){previewMedia.set(url,blob);let bytes=[...previewMedia.values()].reduce((n,b)=>n+b.size,0);while(previewMedia.size>8 || bytes>MEDIA_LIMIT){const key=previewMedia.keys().next().value;bytes-=previewMedia.get(key).size;previewMedia.delete(key);}}
     return blob;
   })();
   pendingMedia.set(url,task);
-  try{return await task;}finally{pendingMedia.delete(url);}
+  try{return await task;}catch(error){streamReject(error);throw error;}finally{pendingMedia.delete(url);mediaStreams.delete(url);}
+}
+
+async function openPreviewStream(api,path) {
+  const url=api.apiURL(path);
+  if(previewMedia.has(url))return new Response(previewMedia.get(url));
+  void bufferedPreview(api,path).catch(()=>{});
+  const response=await mediaStreams.get(url);
+  if(!response)return new Response(await bufferedPreview(api,path));
+  return response.clone();
+}
+
+async function readyPreview(api, path) {
+  const url=api.apiURL(path);
+  if(reloadMedia.has(url))return null;
+  if(previewMedia.has(url))return previewMedia.get(url);
+  try {
+    const response=await (await globalThis.caches?.open('minimax-preview-v2'))?.match(url);
+    if(response && Number(response.headers?.get?.('Content-Length'))<=MEDIA_LIMIT){
+      const blob=await response.blob();
+      if(blob.size<=MEDIA_LIMIT)return blob;
+    }
+  } catch {}
+  return null;
 }
 
 async function evictPreview(url) {
+  mediaEpochs.set(url,(mediaEpochs.get(url) || 0)+1);
+  if(mediaEpochs.size>256)for(const key of mediaEpochs.keys()){if(!pendingMedia.has(key)){mediaEpochs.delete(key);break;}}
   previewMedia.delete(url);
   reloadMedia.add(url);
   if(reloadMedia.size>32)reloadMedia.delete(reloadMedia.values().next().value);
@@ -124,7 +166,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let request = 0, controller, disposed = false, source = "", checking = false;
   let project = getTimeline().project_id;
   let statusText='';
-  let blobUrl='', warmRevision='', loadingSource='';
+  let blobUrl='', warmRevision='', loadingSource='', segmentPlayer;
   let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, open: !panel.hidden});
   let positionWritten=0,mediaReady=false;
@@ -148,6 +190,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const stop = () => {
     loadingSource='';
     savePosition(true);mediaReady=false;
+    segmentPlayer?.dispose();segmentPlayer=null;
     video.pause(); video.removeAttribute("src"); video.load(); source = ""; save.hidden = true;
     if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl='';}
     video.hidden = true; empty.hidden = false;
@@ -174,6 +217,12 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
         label.textContent = source ? statusText+' · Waiting for an updated result…' : info.label || "No completed clips yet. Generate a shot first.";
         return;
       }
+      const observationKey=`${info.project_id}:${info.stream || 'final'}`;
+      const observed=observedGenerations.get(observationKey) || new Map();
+      for(const clip of info.invalidated_clip_ids || [])observed.set(clip,null);
+      for(const [clip,generation] of Object.entries(info.clip_generations || {}))observed.set(clip,generation);
+      observedGenerations.set(observationKey,observed);
+      if(observedGenerations.size>32)observedGenerations.delete(observedGenerations.keys().next().value);
       const path = `/minimax_director/preview/media?${new URLSearchParams({project_id: info.project_id, key: info.key})}`;
       const url = api.apiURL(path);
       statusText = `${info.scope === "latest" ? "Latest Clip" : "Full Video"} · ${info.label}`;
@@ -183,20 +232,43 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       save.href = `${url}&download=1`; save.hidden = false;
       if (url !== source) {
         if (failedRevision !== url) {failedRevision=url;retryCount=0;}
-        recovering=false; loadingSource=url;label.textContent=statusText+' · Buffering replacement…';
-        void bufferedPreview(api,path).then(blob=>{
+        recovering=false; loadingSource=url;label.textContent=statusText+' · Opening preview…';
+        const supported=info.playback && globalThis.MediaSource && MediaSource.isTypeSupported(info.playback.video_mime) && MediaSource.isTypeSupported(info.playback.audio_mime);
+        if(supported){
+          void import('./minimax_segment_player.js').then(({createSegmentPlayer})=>{
+            if(disposed || panel.hidden || token!==request || loadingSource!==url)return;
+            savePosition(true);mediaReady=false;segmentPlayer?.dispose();
+            if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl='';
+            source=url;loadingSource='';video.hidden=false;empty.hidden=true;
+            segmentPlayer=createSegmentPlayer(video,info.playback,p=>openPreviewStream(api,p),error=>{
+              if(disposed || source!==url)return;
+              console.warn('Smart Preview fragment playback failed:',error);
+              segmentPlayer?.dispose();segmentPlayer=null;
+              video.src=url;video.load();label.textContent=statusText+' · Standard streaming';
+            });
+            label.textContent=statusText;
+            void warmPlayback(info.playback,info).catch(()=>{});
+          }).catch(()=>{if(!disposed && loadingSource===url){source=url;loadingSource='';video.src=url;video.load();video.hidden=false;empty.hidden=true;}});
+        } else void readyPreview(api,path).then(blob=>{
           if(disposed || panel.hidden || token!==request || loadingSource!==url)return;
           savePosition(true);mediaReady=false;
           const previousBlob=blobUrl;
           source=url;loadingSource='';
-          blobUrl=URL.createObjectURL(blob);video.src=blobUrl;video.load();save.hidden=false;
+          // A completed local cache can use a blob. Otherwise let the native
+          // player stream/range-load immediately; never wait for response.blob().
+          blobUrl=blob?URL.createObjectURL(blob):'';
+          video.src=blobUrl || url;video.load();save.hidden=false;
           if(previousBlob)URL.revokeObjectURL(previousBlob);
           video.hidden=false;empty.hidden=true;label.textContent=statusText;
           void rememberPreview(api,path,info);
+          if(!blob)void bufferedPreview(api,path).catch(error=>{
+            // Persistent caching is independent of playback. Do not clear a
+            // playable stream or reload it when the background transfer finishes.
+            if(!disposed && source===url && !error.stream)label.textContent=statusText+' · Streaming; background cache will retry on reopen.';
+          });
         }).catch(error=>{if(!disposed && token===request && loadingSource===url){
           loadingSource='';
-          if(error.stream){savePosition(true);mediaReady=false;source=url;video.src=url;video.load();if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl='';video.hidden=false;empty.hidden=true;label.textContent=statusText;save.hidden=false;void rememberPreview(api,path,info);}
-          else if(source){label.textContent=statusText+' · Replacement buffering failed; keeping saved result. Retrying…';}
+          if(source){label.textContent=statusText+' · Could not open replacement; keeping saved result. Retrying…';}
           else {retryMedia(url, error.message);}
         }});
       }
@@ -205,7 +277,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       if(warmRevision!==url){
         warmRevision=url;
         void api.fetchApi('/minimax_director/preview/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({timeline:getTimeline(),scope:scope.value==='latest'?'full':'latest',quality:quality.value,stream:stream.value})})
-          .then(r=>r.ok?r.json():null).then(async other=>{if(other?.found && !disposed && project===other.project_id){const path=`/minimax_director/preview/media?${new URLSearchParams({project_id:other.project_id,key:other.key})}`;await bufferedPreview(api,path);if(!disposed && warmRevision===url)await rememberPreview(api,path,other);}})
+          .then(r=>r.ok?r.json():null).then(async other=>{if(other?.found && !disposed && project===other.project_id){if(other.playback && globalThis.MediaSource)return warmPlayback(other.playback,other);const path=`/minimax_director/preview/media?${new URLSearchParams({project_id:other.project_id,key:other.key})}`;await bufferedPreview(api,path);if(!disposed && warmRevision===url)await rememberPreview(api,path,other);}})
           .catch(error=>{if(!error.stream && warmRevision===url)warmRevision='';});
       }
     } catch (error) {
@@ -216,6 +288,18 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     } finally {
       if (token === request) checking = false;
     }
+  };
+  const warmPlayback=async(playback,info)=>{
+    const parts=[playback.audio,...playback.videos];
+    // Two bounded transfers avoid launching an encoder for every clip at once.
+    let cursor=0;
+    const worker=async()=>{while(cursor<parts.length && !disposed && project===info.project_id){
+      const part=parts[cursor++],observed=observedGenerations.get(`${info.project_id}:${info.stream || 'final'}`);
+      if(Object.entries(part.generations || {}).some(([clip,generation])=>observed?.has(clip) && observed.get(clip)!==generation))continue;
+      await rememberPreview(api,part.path,{...info,clip_generations:part.generations});
+      await bufferedPreview(api,part.path);
+    }};
+    await Promise.all([worker(),worker()]);
   };
   const retryMedia = (url, message) => {
     if (!url || disposed) return;

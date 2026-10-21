@@ -89,7 +89,8 @@ class RuntimeContracts(unittest.TestCase):
         class Native:
             @classmethod
             def execute(cls, **kw):
-                owner.native_calls.append((name, kw))
+                if not getattr(kw.get('clip'), '_mmx_reference_prefill', False):
+                    owner.native_calls.append((name, kw))
                 if name == "MiniMaxH3AddGuide":
                     positive = [[emb, {**meta, "guide_used": True}] for emb, meta in kw["positive"]]
                     return NativeOutput(positive)

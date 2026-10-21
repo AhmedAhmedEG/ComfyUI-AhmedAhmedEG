@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.16"
+__version__ = "1.7.17"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -106,6 +106,21 @@ if getattr(PromptServer, "instance", None) is not None:
             return web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:
             return web.json_response({"error": str(exc)}, status=503)
+
+    @routes.get("/minimax_director/preview/segment")
+    async def smart_preview_segment(request):
+        try:
+            from .core.preview import preview_path
+            from .core.preview_segments import encode_fragment
+            project_id,key=request.query.get('project_id',''),request.query.get('key','')
+            preview_path(project_id,key)
+            lock=_PREVIEW_LOCKS.setdefault(f'segment:{project_id}:{key}',asyncio.Lock())
+            async with lock: path=await asyncio.to_thread(encode_fragment,project_id,key)
+            return web.FileResponse(path,headers={'Content-Type':'video/mp4','Cache-Control':'private, max-age=31536000, immutable'})
+        except (ValueError,FileNotFoundError) as exc:
+            return web.json_response({'error':str(exc)},status=404)
+        except Exception as exc:
+            return web.json_response({'error':str(exc)},status=503)
 
     @routes.get("/minimax_director/preview/media")
     async def smart_preview_media(request):

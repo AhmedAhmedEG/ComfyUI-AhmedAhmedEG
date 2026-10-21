@@ -154,6 +154,31 @@ def refmod_fingerprint(name: str) -> Tuple[int, int]:
     return stat.st_mtime_ns, stat.st_size
 
 
+def save_reference_latent(path, latent, metadata):
+    """Shared RefMod-style CPU safetensors representation for prepared assets."""
+    from safetensors.torch import save_file
+    import tempfile
+    fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+    os.close(fd)
+    try:
+        if metadata.get('kind') == 'audio' and latent.ndim == 3 and latent.shape[1] == 64:
+            latent = latent.reshape(latent.shape[0],32,2,latent.shape[-1])
+        save_file({'latent':latent.detach().cpu().contiguous()}, temporary,
+                  metadata={'refmod_meta':json.dumps(metadata,sort_keys=True)})
+        os.replace(temporary,path)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+
+
+def load_reference_latent(path):
+    """Read the same latent tensor/header convention used by RefMod files."""
+    with safe_open(path,framework='pt',device='cpu') as handle:
+        latent=handle.get_tensor('latent')
+        meta=json.loads((handle.metadata() or {}).get('refmod_meta','{}'))
+        if meta.get('native_encode_shape'):latent=latent.reshape(meta['native_encode_shape'])
+        return latent,meta
+
+
 def _validate_refmod_latent(latent: torch.Tensor, meta: Dict[str, Any], label: str) -> None:
     if meta.get("kind") == "audio":
         valid = getattr(latent, "ndim", 0) == 4 and tuple(latent.shape[:3]) == (1, 32, 2) and latent.shape[3] > 0

@@ -74,6 +74,32 @@ class MasterDirectorExecutor:
         # Current native H3 supports interior guides and keyframe/reference coexistence.
         # Do not replace ComfyUI global methods while executing a node.
 
+    def prepare_reference_encodes(self, assets, width, height, duration, vae, audio_vae,
+                                  ref_image_size='match'):
+        from .run_resources import current_resources
+        owner=current_resources()
+        if owner is None:return
+        cache=owner.reference_encodes
+        native=get_native_h3_node('MiniMaxH3ReferenceToVideo')
+        class ReferencePresentation:
+            _mmx_reference_prefill=True
+            def tokenize(self,*args,**kwargs):return None
+            def encode_from_tokens_scheduled(self,tokens):return [[torch.zeros((1,1,1)),{}]]
+        for asset in assets:
+            kind=asset.get('type');data=asset.get('data')
+            if kind not in ('image','video','audio') or data is None:continue
+            token=cache.source_key(kind,data,asset.get('audio'))
+            with cache.asset(token):
+                # Use native preparation, sizes, trimming, and VAE transforms.
+                # The stub avoids running Qwen or conditioning any real clip.
+                native.execute(clip=ReferencePresentation(),prompt='',width=width,height=height,
+                    length=align_frame_count(int(duration*FPS)),ref_image_size=ref_image_size,
+                    vae=cache.wrap(vae),audio_vae=cache.wrap(audio_vae),
+                    ref_images={'ref_image_1':data} if kind=='image' else {},
+                    ref_videos={'ref_video_1':data} if kind=='video' else {},
+                    ref_video_audios={'ref_video_audio_1':asset['audio']} if kind=='video' and asset.get('audio') is not None else {},
+                    ref_audios={'ref_audio_1':data} if kind=='audio' else {})
+
     def build_conditioning(
         self,
         mode: str,
@@ -204,6 +230,15 @@ class MasterDirectorExecutor:
                     return clip.encode_from_tokens_scheduled(tokens)
             ref_clip = RefClipWrapper()
 
+        from .run_resources import current_resources
+        owner = current_resources()
+        reference_vae = owner.reference_encodes.wrap(vae) if owner else vae
+        reference_audio_vae = owner.reference_encodes.wrap(audio_vae) if owner else audio_vae
+        if owner:
+            assets=[{'type':'image','data':data} for data in (ref_images or {}).values()]
+            assets += [{'type':'video','data':data,'audio':(ref_video_audios or {}).get(key)} for key,data in (ref_videos or {}).items()]
+            assets += [{'type':'audio','data':data} for data in (ref_audios or {}).values()]
+            self.prepare_reference_encodes(assets,width,height,duration,vae,audio_vae,ref_image_size)
         positive, latent = native_outputs(node_cls.execute(
             clip=ref_clip,
             prompt=prompt,
@@ -211,8 +246,8 @@ class MasterDirectorExecutor:
             height=height,
             length=frame_count,
             ref_image_size=ref_image_size,
-            vae=vae,
-            audio_vae=audio_vae,
+            vae=reference_vae,
+            audio_vae=reference_audio_vae,
             ref_images=ref_images or {},
             ref_videos=ref_videos or {},
             ref_video_audios={

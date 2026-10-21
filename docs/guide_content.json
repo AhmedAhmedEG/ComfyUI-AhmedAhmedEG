@@ -1,6 +1,6 @@
 {
-  "version": "1.7.16",
-  "reviewed": "2026-10-19",
+  "version": "1.7.17",
+  "reviewed": "2026-10-21",
   "title": "H3 Director — User Guide",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -813,7 +813,8 @@
         "No Add Pack Files or manual Refresh References button is needed: connect loader nodes; the editor watches connections and loader changes.",
         "A bigger pool does not increase one clip’s allowed reference counts.",
         "Each pack has four image, two video and two standalone audio sockets. Chain another pack for more connected media; clip limits still apply.",
-        "Native reference conditioning limits videos to 15 seconds each and 15 seconds total, and audio to 15 seconds each and 15 seconds total. Trim long sources before assignment."
+        "Native reference conditioning limits videos to 15 seconds each and 15 seconds total, and audio to 15 seconds each and 15 seconds total. Trim long sources before assignment.",
+        "At Master run start, connected image, video and audio inputs are prepared using native H3 sizing and stored as CPU RefMod-format safetensors in the project reference_latents folder. Matching encodes are reused across clips and later runs; disconnected assets lose their derived cache entries. Input content, preparation, native H3 code and VAE identity affect reuse. Unknown modified VAEs conservatively use a session identity. Preparing an input does not select it for clip conditioning."
       ],
       "options": {
         "ref_pack_optional": {
@@ -1395,7 +1396,8 @@
         "Saved Take history is removed. Regeneration replaces the current result and evicts superseded preview revisions.",
         "Original Resolution preserves generation dimensions; 540p/720p/1080p are playback caps, not model settings.",
         "Browser cache cannot restore deleted server latents, and a preview MP4 is not a continuation checkpoint.",
-        "Starting All clips preserves the old preview until a successful replacement. Replacing a predecessor deletes its continuity-dependent successors’ cached results; independent/source clips stop that chain. Both scopes prebuffer completed revisions with autoplay off."
+        "Starting All clips preserves the old preview until a successful replacement. Replacing a predecessor deletes its continuity-dependent successors’ cached results; independent/source clips stop that chain. Both scopes prebuffer completed revisions with autoplay off.",
+        "Playback can start while clips are still downloading. Full Video reuses the same per-clip video fragments as Latest Clip, with one joined soundtrack to preserve audio fades and gain matching. Save preview remains a separate downloadable MP4. Browsers without supported MediaSource playback fall back to ordinary MP4 streaming."
       ],
       "options": {
         "project_state": {

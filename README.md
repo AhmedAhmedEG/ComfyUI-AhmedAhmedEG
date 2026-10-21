@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.7.16** consolidates the MiniMax/video production features of
+Version **1.7.17** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -10,8 +10,10 @@ quality or speed benchmarks. See [REVIEW.md](REVIEW.md) for validation evidence.
 
 The separate **Smart Preview** node plays the **latest completed clip** by default.
 Switch to **Full video** to review the completed sequence. Each scope has its own
-cached H.264/AAC preview file. Playback buffers with autoplay off, retains loaded
-video during temporary status failures, and reuses browser-cached revisions.
+playback plan. Supported browsers combine reusable per-clip H.264 fragments with a
+joined AAC soundtrack, so scope changes reuse cached video bytes. Playback can start
+before buffering finishes, buffers with autoplay off, and retains loaded video during
+temporary status failures. Save preview and unsupported browsers use a regular MP4.
 Both Latest clip and Full video prebuffer as results finish, including during an active
 run. Saved results remain viewable until each successful replacement is published;
 a queued regeneration does not clear the player. Once a predecessor is replaced,
@@ -23,6 +25,13 @@ and up to 8 previews / 256 MiB in session memory. Larger media uses browser stre
 Continuity audio joins blend the successor's discarded audio prefix into its
 predecessor before the cut, preserving timeline duration. Independent clips use
 de-click fades; sound content continuity still depends on generation audio context.
+
+Connected references are encoded at Master run start and saved under the project’s
+`reference_latents/` folder as RefMod-format CPU safetensors. Matching native VAE
+encodes are reused across clips and runs; disconnected inputs lose their derived
+cache files. Preparing the pool does not condition a clip on unselected references.
+A bounded CPU working set avoids retaining reference tensors on the GPU. Native
+ComfyUI manages sampler/VAE residency between clips instead of forced full unloads.
 
 Each feature has one configuration owner. Settings controls canvas and sampling.
 Reference Pack owns media preparation; RefMod Library owns character adapter

@@ -8,7 +8,7 @@ w.HTMLMediaElement.prototype.pause=()=>{};
 w.HTMLMediaElement.prototype.play=()=>{plays++;return Promise.resolve()};
 w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 const api={apiURL:p=>p,fetchApi:async(path,request)=>{
-  if(path.includes('/preview/media?')){downloads.push(path);return {ok:true,blob:async()=>({size:100,key:new URL(path,'http://localhost').searchParams.get('key')})};}
+  if(path.includes('/preview/media?')){downloads.push(path);return {ok:true,clone(){return this;},blob:async()=>({size:100,key:new URL(path,'http://localhost').searchParams.get('key')})};}
   if(path.includes('/project/takes'))return {ok:true,json:async()=>[{take_id:'old-take',clip_id:'two',has_frames:true,updated_at:1},{take_id:'new-take',clip_id:'two',has_frames:true,updated_at:2}]};
   assert.equal(path,'/minimax_director/preview/info');
   const data=JSON.parse(request.body);calls.push(data);

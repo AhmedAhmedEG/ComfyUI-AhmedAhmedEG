@@ -53,6 +53,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             "frames": direct_frames or os.path.basename(manager._clip_artifact_path(cid, frames_kind, generation)),
             "audio": direct_audio or (os.path.basename(manager._clip_artifact_path(cid, audio_kind, generation)) if meta.get("has_audio") else None),
             "generation": generation, "updated_at": meta.get("updated_at", 0),
+            "frame_count": meta.get('frame_count') if stream == 'final' else None,
             "trim_prefix": int(meta.get("trim_prefix", 0)), "previous_trim": int(meta.get("previous_trim", 0)),
             "index": index})
     if scope == "latest":
@@ -79,7 +80,9 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             os.replace(temporary, destination)
         finally:
             if os.path.exists(temporary): os.unlink(temporary)
+    from .preview_segments import playback_manifest
     return {"found": True, "scope": scope, "key": key, "project_id": manager.project_id,
+        "playback": playback_manifest(manager, plan),
         "invalidated_clip_ids": manager._manifest.get('invalidated_clips', []),
         "stream": stream, "clip_generations": {row['clip_id']: row.get('generation') for row in rows if row.get('generation')},
         "clip_ids": [row["clip_id"] for row in rows], "clip_count": len(rows), "total_clips": len(shots),

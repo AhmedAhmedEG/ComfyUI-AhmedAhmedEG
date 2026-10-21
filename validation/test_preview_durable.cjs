@@ -15,7 +15,7 @@ function browser(storage={},properties={}) {
   let options=properties,revision=1;const calls=[];
   const api={apiURL:p=>p,fetchApi:async(path,request)=>{
     if(path.includes('/project/takes'))return {ok:true,json:async()=>['a','b'].map(take_id=>({take_id,clip_id:'one',has_frames:true,updated_at:1}))};
-    if(path.includes('/preview/media'))return {ok:true,blob:async()=>({size:10,key:new URL(path,'http://localhost').searchParams.get('key')})};
+    if(path.includes('/preview/media'))return {ok:true,clone(){return this;},blob:async()=>({size:10,key:new URL(path,'http://localhost').searchParams.get('key')})};
     const body=JSON.parse(request.body);calls.push(body);
     return {ok:true,json:async()=>({found:true,project_id:'durable',scope:body.scope,label:'Completed',key:revision+'-'+body.scope+'-'+body.stream+'-'+body.take_id})};
   }};

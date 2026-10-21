@@ -13,6 +13,8 @@ log = logging.getLogger('MiniMaxH3.memory')
 
 class RunResources:
     def __init__(self):
+        from .reference_cache import ReferenceEncodeCache
+        self.reference_encodes = ReferenceEncodeCache()
         self.models = OrderedDict()
         self.paths = []
         self.transient_models = []
@@ -35,6 +37,8 @@ class RunResources:
         return any(shifted is model for _, shifted in self.models.values())
 
     def clear(self):
+        log.info('Reference VAE reuse: %d hits, %d misses', self.reference_encodes.hits, self.reference_encodes.misses)
+        self.reference_encodes.clear()
         self.release_transients()
         for _, shifted in self.models.values():
             self._release_model(shifted)
@@ -51,10 +55,12 @@ class RunResources:
         self.transient_models.clear()
 
     def offload_sampling_models(self):
-        """End the sampling residency phase, retaining wrappers for reuse."""
+        """Release temporary wrappers; native VRAM management stages the VAE.
+
+        Retain owned shifted patchers until run end. Unloading every clone here
+        forces complete H3 reloads between clips instead of native partial eviction.
+        """
         self.release_transients()
-        for _, shifted in self.models.values():
-            self._release_model(shifted)
 
     @staticmethod
     def _release_model(model):
