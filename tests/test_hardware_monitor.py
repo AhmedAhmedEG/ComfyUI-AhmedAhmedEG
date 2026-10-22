@@ -1,0 +1,43 @@
+import subprocess
+import unittest
+from collections import namedtuple
+from unittest.mock import patch
+from core.hardware_monitor import HardwareMonitor, nvidia_stats
+
+
+Times = namedtuple('Times', 'user idle iowait guest')
+
+
+class HardwareMonitorTests(unittest.TestCase):
+    def test_cpu_deltas_shared_cache_and_idle_resume(self):
+        now=[0.];ticks=iter([Times(100,100,0,10),Times(120,110,0,10),Times(160,120,0,10)])
+        reads=[]
+        def gpu():reads.append(1);return [{'id':'gpu'}]
+        monitor=HardwareMonitor(gpu,lambda:next(ticks),lambda:now[0],lambda:1000+now[0])
+        self.assertIsNone(monitor.snapshot()['cpu_percent'])
+        now[0]=1;self.assertIs(monitor.snapshot(),monitor.cached);self.assertEqual(len(reads),1)
+        now[0]=2;self.assertAlmostEqual(monitor.snapshot()['cpu_percent'],200/3)
+        now[0]=30;self.assertIsNone(monitor.snapshot()['cpu_percent'])
+        self.assertEqual(len(reads),3)
+
+    def test_gpu_failure_backs_off_without_breaking_cpu(self):
+        now=[0.];reads=[]
+        def gpu():reads.append(1);raise subprocess.TimeoutExpired('nvidia-smi',1.5)
+        monitor=HardwareMonitor(gpu,lambda:Times(now[0],now[0],0,0),lambda:now[0])
+        self.assertEqual(monitor.snapshot()['gpus'],[])
+        now[0]=2;sample=monitor.snapshot();self.assertEqual(sample['cpu_percent'],50)
+        self.assertEqual(sample['gpu_error'],'GPU telemetry unavailable');self.assertEqual(len(reads),1)
+        now[0]=31;monitor.snapshot();self.assertEqual(len(reads),2)
+
+    def test_nvidia_query_handles_multiple_devices_and_unsupported_values(self):
+        output='0, GPU-one, NVIDIA GeForce RTX 4090, 87, 1024, 24000\n1, GPU-two, "GPU, example", [N/A], [N/A], 8192\n'
+        with patch('core.hardware_monitor.subprocess.run') as run:
+            run.return_value.stdout=output;devices=nvidia_stats()
+            self.assertEqual(run.call_args.kwargs['timeout'],1.5)
+        self.assertEqual(devices[0]['percent'],87)
+        self.assertEqual(devices[0]['memory_used'],1024*1048576)
+        self.assertEqual(devices[1]['name'],'GPU, example')
+        self.assertIsNone(devices[1]['percent']);self.assertIsNone(devices[1]['memory_used'])
+
+
+if __name__=='__main__':unittest.main()

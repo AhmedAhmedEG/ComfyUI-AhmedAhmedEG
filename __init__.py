@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.20"
+__version__ = "1.7.21"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -60,6 +60,12 @@ if getattr(PromptServer, "instance", None) is not None:
         return web.json_response(progress_snapshot(
             request.query.get("node", ""), request.query.get("project_id", ""),
             PromptServer.instance.prompt_queue), headers={'Cache-Control': 'no-store'})
+
+    @routes.get("/minimax_director/hardware")
+    async def hardware_stats(request):
+        from .core.hardware_monitor import hardware_monitor
+        return web.json_response(await asyncio.to_thread(hardware_monitor.snapshot),
+            headers={'Cache-Control': 'no-store'})
 
     @routes.post("/minimax_director/memory/release")
     async def release_vram(request):

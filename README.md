@@ -1,6 +1,6 @@
 # ComfyUI MiniMax H3 Master Director
 
-Version **1.7.20** consolidates the MiniMax/video production features of
+Version **1.7.21** consolidates the MiniMax/video production features of
 [DaSiWa](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes),
 [AIMixer](https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director), and
 [Tritant](https://github.com/tritant/ComfyUI_MiniMax_H3_Extender) into one Director.
@@ -216,3 +216,7 @@ The combined distribution is **GPL-3.0**. Selected upstream Apache/MIT notices
 are preserved in [THIRD_PARTY_NOTICE.md](THIRD_PARTY_NOTICE.md) and vendor files.
 
 Named projects: expand Project, enter Project Name and use Save Project. Open Project lists projects stored on this server and reopens their full workflow. Names and cache IDs persist inside ordinary saved workflows. Project metadata lives in output/minimax_projects; large generated tensors stay in output/minimax_cache.
+
+### Floating hardware monitor
+
+The draggable Server monitor shows CPU, GPU utilization and driver-reported VRAM for the ComfyUI server. Readings include other applications on that host. It updates every two seconds while visible, pauses when minimized or the browser tab is hidden, and remembers its position and selected GPU. Toggle it in ComfyUI Settings under MiniMax H3 > Monitor > Show hardware monitor. Unsupported GPU telemetry displays a dash; CPU monitoring remains available. No extra node or GPU memory allocation is required.
