@@ -26,17 +26,10 @@ def between_clips():
         if callable(cleanup): cleanup()
     except (ImportError, AttributeError):
         pass
-    try:
-        import comfy.memory_management as memory
-        if getattr(memory,'aimdo_enabled',False) is not True: return
-    except ImportError: return
-    for module,method in [('comfy.model_prefetch','cleanup_prefetch_queues'),
-            ('comfy.model_management','reset_cast_buffers'),('comfy_aimdo.model_vbar','vbars_reset_watermark_limits')]:
-        try:
-            import importlib
-            operation=getattr(importlib.import_module(module),method,None)
-            if callable(operation): operation()
-        except Exception as exc: log.debug('Boundary cleanup %s unavailable: %s',method,exc)
+    # A clip is not a native node execution boundary. Keep ComfyUI's reusable
+    # cast/prefetch buffers for the next clip, as Extender does. The native
+    # executor cleans them when this node returns (including on exceptions).
+    # Memory pressure may still evict weights through native model management.
 
 
 def reclaim_host_memory(required_bytes):

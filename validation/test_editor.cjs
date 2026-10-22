@@ -461,6 +461,16 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(!exportProject.disabled);w.api.fetchApi=previousFetch;
   const nameInput=editorRoot.querySelector('.mmx-project-name-field input');
   const projectFeedback=editorRoot.querySelector('.mmx-project-feedback');
+  const clearVram=button('Clear VRAM');let releaseRequest;
+  w.api.fetchApi=async(url,options)=>{releaseRequest={url,options};return {ok:true,json:async()=>({ok:true,message:'VRAM release requested. Saved clips and project files are kept.'})};};
+  await clearVram.onclick();
+  assert.equal(releaseRequest.url,'/minimax_director/memory/release');
+  assert(projectFeedback.textContent.includes('Saved clips'));
+  assert(!clearVram.disabled);assert.equal(clearVram.textContent,'Clear VRAM');
+  w.api.fetchApi=async()=>({ok:false,json:async()=>({error:'Generation is running or queued. Clear VRAM when the queue is idle.'})});
+  await clearVram.onclick();assert.equal(projectFeedback.dataset.state,'error');
+  assert(projectFeedback.textContent.includes('queue is idle'));
+  assert(!clearVram.disabled);w.api.fetchApi=previousFetch;
   nameInput.value='';await button('Save Project').onclick();
   assert(projectFeedback.textContent.includes('Enter A Project Name'));
   assert.equal(projectFeedback.dataset.state,'error');

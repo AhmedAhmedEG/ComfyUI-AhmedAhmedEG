@@ -3135,7 +3135,20 @@ function mountDirectorUI(node) {
     }catch(error){showProjectFeedback('error',`Could Not Load Projects: ${error.message}`);}finally{openProject.disabled=false;openProject.textContent='Open Project';openProject.removeAttribute('aria-busy');}
   };
   serverStatus=document.createElement('span');serverStatus.className='mmx-server-project-status';serverStatus.setAttribute('role','status');updateServerStatus();
-  library.append(nameField,saveProject,openProject,serverStatus,projectFeedback);projectTools.append(library);
+  const clearVram=document.createElement('button');clearVram.textContent='Clear VRAM';
+  clearVram.dataset.projectAction='clear-vram';
+  clearVram.title='Unload GPU models when the queue is idle. Keeps saved clips, reference latents and project files. The next generation reloads the model.';
+  clearVram.onclick=async()=>{
+    if(clearVram.disabled)return;
+    clearVram.disabled=true;clearVram.textContent='Clearing…';clearVram.setAttribute('aria-busy','true');
+    showProjectFeedback('busy','Requesting VRAM Release…');
+    try{
+      const result=await requestJson('/minimax_director/memory/release',{});
+      showProjectFeedback('success',result.message);
+    }catch(error){showProjectFeedback('error',`Could Not Clear VRAM: ${error.message}`);}
+    finally{clearVram.disabled=false;clearVram.textContent='Clear VRAM';clearVram.removeAttribute('aria-busy');}
+  };
+  library.append(nameField,saveProject,openProject,clearVram,serverStatus,projectFeedback);projectTools.append(library);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];

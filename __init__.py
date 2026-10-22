@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.19"
+__version__ = "1.7.20"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -60,6 +60,14 @@ if getattr(PromptServer, "instance", None) is not None:
         return web.json_response(progress_snapshot(
             request.query.get("node", ""), request.query.get("project_id", ""),
             PromptServer.instance.prompt_queue), headers={'Cache-Control': 'no-store'})
+
+    @routes.post("/minimax_director/memory/release")
+    async def release_vram(request):
+        from .core.memory_controls import request_vram_release
+        try:
+            return web.json_response(request_vram_release(PromptServer.instance.prompt_queue))
+        except RuntimeError as exc:
+            return web.json_response({'error': str(exc)}, status=409)
 
     @routes.post("/minimax_director/media/upload")
     async def upload_media(request):
