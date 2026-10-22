@@ -16,9 +16,13 @@ const tick=async()=>{const task=[...jobs.entries()].find(([id,j])=>j.delay===200
   assert(root.textContent.includes('43%'));assert(root.textContent.includes('10.0 / 24.0 GiB'));assert.equal(root.dataset.state,'live');
   const selector=root.querySelector('select');assert(!selector.hidden);selector.value='two';selector.onchange();assert(root.textContent.includes('1.0 / 8.0 GiB'));
   const handle=root.querySelector('.mmx-hardware-drag');const oldX=parseFloat(root.style.left);handle.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(parseFloat(root.style.left),oldX-10);
-  const expandedX=parseFloat(root.style.left);
+  root.getBoundingClientRect=()=>({width:root.dataset.minimized==='true'?150:264,height:root.dataset.minimized==='true'?36:230});
+  const expandedX=parseFloat(root.style.left),expandedY=parseFloat(root.style.top);
   root.querySelector('.mmx-hardware-collapse').click();assert(root.querySelector('.mmx-hardware-body').hidden);
-  handle.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(parseFloat(root.style.left),expandedX-10);assert(![...jobs.values()].some(j=>j.delay===2000));
+  assert.equal(parseFloat(root.style.left)+150,expandedX+264,'Collapse keeps the same right edge');
+  assert.equal(parseFloat(root.style.top),expandedY,'Collapse keeps the same top edge');
+  const compactX=parseFloat(root.style.left);
+  handle.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(parseFloat(root.style.left),compactX-10);assert(![...jobs.values()].some(j=>j.delay===2000));
   const before=calls;w.document.dispatchEvent(new w.Event('visibilitychange'));await flush();assert.equal(calls,before);
   root.querySelector('.mmx-hardware-collapse').click();await flush();assert(calls>before);
   assert.equal(parseFloat(root.style.left),expandedX,'Expansion restores the position from before minimizing');

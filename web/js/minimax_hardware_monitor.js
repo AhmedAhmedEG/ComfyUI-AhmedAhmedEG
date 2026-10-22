@@ -80,9 +80,14 @@ export function createHardwareMonitor(client, options={}) {
     function wake(){stop();if(active())poll();}
     function update(){root.hidden=!enabled;body.hidden=minimized;root.dataset.minimized=String(minimized);collapse.textContent=minimized?'+':'−';collapse.setAttribute('aria-label',minimized?'Expand hardware monitor':'Minimize hardware monitor');collapse.title=minimized?'Expand monitor':'Minimize monitor';place();wake();}
     collapse.onclick=()=>{
+        const before=root.getBoundingClientRect();
+        const shrinking=!minimized;
         if(!minimized)expandedPosition={...position};
         else if(expandedPosition)position={...expandedPosition};
-        minimized=!minimized;update();persist();
+        minimized=!minimized;update();
+        // Shrink toward the right edge, keeping the toggle under the pointer.
+        if(shrinking)place(expandedPosition.x+before.width-root.getBoundingClientRect().width,expandedPosition.y);
+        persist();
     };
     selector.onchange=()=>{selected=selector.value;if(lastData)render(lastData);};
     let drag=null;
