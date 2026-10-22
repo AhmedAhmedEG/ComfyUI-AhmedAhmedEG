@@ -8,12 +8,12 @@ from core.memory_lifecycle import between_clips
 
 
 class MemoryControls(unittest.TestCase):
-    def test_release_uses_native_worker_without_deleting_execution_cache(self):
+    def test_release_uses_native_worker_and_resets_gpu_loader_handles(self):
         queue=Mock();queue.get_current_queue.return_value=([],[])
         with patch('core.run_resources._sampling_configuration') as configuration:
             result=request_vram_release(queue)
             configuration.reset.assert_called_once_with()
-        queue.set_flag.assert_called_once_with('unload_models',True)
+        queue.set_flag.assert_called_once_with('free_memory',True)
         self.assertTrue(result['ok'])
 
     def test_busy_queue_keeps_active_configuration_and_does_not_interrupt(self):

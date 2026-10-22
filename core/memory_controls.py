@@ -5,10 +5,11 @@ def request_vram_release(queue):
     running, pending = queue.get_current_queue()
     if running or pending:
         raise RuntimeError('Generation is running or queued. Clear VRAM when the queue is idle.')
-    # Keep cached node outputs/loaders: only release the active patcher handles
-    # and ask the native worker to unload its GPU models. No project files or
-    # generated results are deleted. The worker owns CUDA synchronization.
+    # Ask the native worker to unload models AND reset execution-cache handles.
+    # Under --highvram a loader can itself hold GPU weights, so unloading the
+    # residency list alone is insufficient. Project files and saved results are
+    # untouched. The worker owns CUDA synchronization and executor reset.
     from .run_resources import _sampling_configuration
     _sampling_configuration.reset()
-    queue.set_flag('unload_models', True)
+    queue.set_flag('free_memory', True)
     return {'ok': True, 'message': 'VRAM release requested. Saved clips and project files are kept.'}
