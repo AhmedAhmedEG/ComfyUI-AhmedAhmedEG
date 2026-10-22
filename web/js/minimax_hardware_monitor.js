@@ -15,7 +15,7 @@ const css=`
 .mmx-hardware-row{margin:10px 0}.mmx-hardware-label{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px}.mmx-hardware-value{font-variant-numeric:tabular-nums;color:#dbe7fa;font-weight:600;font-size:12px}
 .mmx-hardware-track{height:4px;background:#ffffff12;border-radius:8px;overflow:hidden}.mmx-hardware-fill{height:100%;width:0;background:var(--meter-color,#88baff);border-radius:inherit;transition:width .3s}
 .mmx-hardware footer{color:#9baabd;display:flex;align-items:center;gap:6px;font-size:10px;margin-top:13px}.mmx-hardware-dot{width:6px;height:6px;border-radius:50%;background:#94a3b8}.mmx-hardware[data-state="live"] .mmx-hardware-dot{background:#79d5ad}.mmx-hardware[data-state="offline"] .mmx-hardware-dot{background:#e8ad78}.mmx-hardware[data-state="offline"] .mmx-hardware-track{opacity:.4}
-.mmx-hardware[data-minimized="true"]{width:174px}.mmx-hardware[data-minimized="true"] header{border-bottom:0}
+.mmx-hardware[data-minimized="true"]{width:max-content}.mmx-hardware[data-minimized="true"] header{border-bottom:0;padding:4px 6px}.mmx-hardware[data-minimized="true"] .mmx-hardware-drag{white-space:nowrap}
 @media(prefers-reduced-motion:reduce){.mmx-hardware-fill{transition:none}}
 `;
 
@@ -24,6 +24,7 @@ export function createHardwareMonitor(client, options={}) {
     let enabled=options.enabled!==false, minimized=saved.minimized===true, disposed=false;
     let timer=null, request=null, lastData=null, selected=typeof saved.gpu==='string'?saved.gpu:'';
     let position=Number.isFinite(saved.x)&&Number.isFinite(saved.y)?{x:saved.x,y:saved.y}:null;
+    let expandedPosition=Number.isFinite(saved.expandedPosition?.x)&&Number.isFinite(saved.expandedPosition?.y)?{...saved.expandedPosition}:null;
     const style=document.createElement('style');style.textContent=css;document.head.append(style);
     const root=document.createElement('aside');root.className='mmx-hardware';root.setAttribute('aria-label','Server hardware monitor');
     root.innerHTML=`<header><button class="mmx-hardware-drag" title="Drag to move; arrow keys also move the monitor" aria-label="Move hardware monitor">⠿ Server monitor</button><button class="mmx-hardware-collapse" title="Minimize monitor" aria-label="Minimize hardware monitor">−</button></header><div class="mmx-hardware-body"><span class="mmx-hardware-device">ComfyUI server</span><select aria-label="Monitored GPU" hidden></select><div class="mmx-hardware-meters"></div><footer><span class="mmx-hardware-dot"></span><span class="mmx-hardware-status">Connecting…</span></footer></div>`;
@@ -37,7 +38,7 @@ export function createHardwareMonitor(client, options={}) {
         root.querySelector('.mmx-hardware-meters').append(row);meters[key]={value:row.querySelector('.mmx-hardware-value'),fill:row.querySelector('.mmx-hardware-fill')};
     }
     document.body.append(root);
-    const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({...position,minimized,gpu:selected}));}catch{}};
+    const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({...position,expandedPosition,minimized,gpu:selected}));}catch{}};
     function place(x=position?.x ?? innerWidth-282,y=position?.y ?? innerHeight-252){
         const box=root.getBoundingClientRect();position={x:Math.max(8,Math.min(x,Math.max(8,innerWidth-(box.width||264)-8))),y:Math.max(8,Math.min(y,Math.max(8,innerHeight-(box.height||(minimized?42:230))-8)))};
         root.style.left=position.x+'px';root.style.top=position.y+'px';
@@ -78,7 +79,11 @@ export function createHardwareMonitor(client, options={}) {
     }
     function wake(){stop();if(active())poll();}
     function update(){root.hidden=!enabled;body.hidden=minimized;root.dataset.minimized=String(minimized);collapse.textContent=minimized?'+':'−';collapse.setAttribute('aria-label',minimized?'Expand hardware monitor':'Minimize hardware monitor');collapse.title=minimized?'Expand monitor':'Minimize monitor';place();wake();}
-    collapse.onclick=()=>{minimized=!minimized;persist();update();};
+    collapse.onclick=()=>{
+        if(!minimized)expandedPosition={...position};
+        else if(expandedPosition)position={...expandedPosition};
+        minimized=!minimized;update();persist();
+    };
     selector.onchange=()=>{selected=selector.value;if(lastData)render(lastData);};
     let drag=null;
     handle.onpointerdown=event=>{if(event.button!==0)return;event.preventDefault();drag={id:event.pointerId,x:event.clientX,y:event.clientY,start:{...position}};handle.setPointerCapture?.(event.pointerId);};
