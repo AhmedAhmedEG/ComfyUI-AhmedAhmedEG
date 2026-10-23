@@ -9,6 +9,21 @@ Times = namedtuple('Times', 'user idle iowait guest')
 
 
 class HardwareMonitorTests(unittest.TestCase):
+    def test_disk_rates_reset_after_counter_reset_failure_and_pause(self):
+        now=[0.]
+        Disk=namedtuple('Disk','read_bytes write_bytes')
+        values=iter([Disk(100,200),Disk(300,600),Disk(1,2),None,Disk(100,200),Disk(500,600)])
+        monitor=HardwareMonitor(lambda:[],lambda:Times(1,1,0,0),lambda:now[0],
+                                disk_reader=lambda:next(values))
+        self.assertIsNone(monitor.snapshot()['disk']['read_bytes_per_second'])
+        now[0]=2
+        rates=monitor.snapshot()['disk']
+        self.assertEqual(rates['read_bytes_per_second'],100)
+        self.assertEqual(rates['write_bytes_per_second'],200)
+        for value in [4,6,8,30]:
+            now[0]=value
+            self.assertIsNone(monitor.snapshot()['disk']['read_bytes_per_second'])
+
     def test_model_registry_shares_sample_cache_and_failure_is_isolated(self):
         now, reads = [0.], []
         def models():

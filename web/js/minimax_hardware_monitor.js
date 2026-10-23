@@ -32,11 +32,12 @@ export function createHardwareMonitor(client, options={}) {
     const body=root.querySelector('.mmx-hardware-body'), handle=root.querySelector('.mmx-hardware-drag'), collapse=root.querySelector('.mmx-hardware-collapse');
     const device=root.querySelector('.mmx-hardware-device'), selector=root.querySelector('select'), status=root.querySelector('.mmx-hardware-status');
     const meters={};
-    for(const [key,label,color] of [['cpu','CPU','#8fbaff'],['gpu','GPU','#ab9cf5'],['vram','VRAM','#72d5bd'],['shared','Shared GPU RAM','#e7bb7a']]){
+    let diskScale=100*1048576;
+    for(const [key,label,color] of [['cpu','CPU','#8fbaff'],['gpu','GPU','#ab9cf5'],['vram','VRAM','#72d5bd'],['shared','Shared GPU RAM','#e7bb7a'],['read','Disk Read','#91c4db'],['write','Disk Write','#d5a0cd']]){
         const row=document.createElement('div');row.className='mmx-hardware-row';row.style.setProperty('--meter-color',color);
         row.innerHTML=`<div class="mmx-hardware-label"><span>${label}</span><span class="mmx-hardware-value">—</span></div><div class="mmx-hardware-track"><div class="mmx-hardware-fill"></div></div>`;
         row.title=key==='cpu'?'CPU usage on the ComfyUI server host':key==='shared'?'System RAM resident in GPU aperture segments, read directly from WSL. Includes all applications; it is not ordinary container RAM. A dash means the driver does not expose this metric.':'Server GPU readings include other applications on that GPU';
-        root.querySelector('.mmx-hardware-meters').append(row);meters[key]={value:row.querySelector('.mmx-hardware-value'),fill:row.querySelector('.mmx-hardware-fill')};
+        root.querySelector('.mmx-hardware-meters').append(row);meters[key]={row,value:row.querySelector('.mmx-hardware-value'),fill:row.querySelector('.mmx-hardware-fill')};
     }
     const models=document.createElement('details');models.className='mmx-hardware-models';
     models.innerHTML='<summary>Retained models</summary><p class="mmx-hardware-memory"></p><div class="mmx-hardware-model-list"></div><p class="mmx-hardware-note">Native registry across all GPUs. Host buffers cover tracked weights only; pinned bytes are a subset. These figures overlap with RAM and VRAM meters.</p>';
@@ -85,7 +86,14 @@ export function createHardwareMonitor(client, options={}) {
         const sharedAvailable=valid(sharedUsed)&&valid(sharedTotal)&&sharedTotal>0;
         meter('shared',sharedAvailable?sharedUsed/sharedTotal*100:null,sharedAvailable?`${(sharedUsed/1073741824).toFixed(1)} / ${(sharedTotal/1073741824).toFixed(1)} GiB`:'—');
         renderModels(data);place();
-        root.dataset.state='live';status.textContent=data.gpu_error||(!valid(data.cpu_percent)?'Sampling CPU…':'Live · ComfyUI server');
+        const read=data.disk?.read_bytes_per_second,write=data.disk?.write_bytes_per_second;
+        diskScale=Math.max(diskScale,valid(read)?read:0,valid(write)?write:0);
+        for(const [key,value] of [['read',read],['write',write]]){
+            meter(key,valid(value)?value/diskScale*100:null,valid(value)?`${(value/1048576).toFixed(1)} MiB/s`:'—');
+            meters[key].row.title=`Transfer rate across disks visible to the ComfyUI server, including other processes. Bar scale: 0–${(diskScale/1048576).toFixed(0)} MiB/s (session peak, minimum 100 MiB/s). This is throughput, not disk utilization. Cached RAM reads do not count as disk reads.`;
+        }
+        root.dataset.state='live';status.textContent=data.gpu_error||'';
+        status.closest('footer').hidden=!data.gpu_error;
         status.title='Updates every 2 seconds while visible. GPU and VRAM use driver telemetry.';persist();
     }
     function stop(){clearTimeout(timer);timer=null;const prior=request;request=null;prior?.abort();}
@@ -102,6 +110,7 @@ export function createHardwareMonitor(client, options={}) {
         }catch{
             if(request!==controller||!active())return;
             root.dataset.state='offline';status.textContent='Disconnected · retrying';status.title='Displayed readings may be out of date';
+            status.closest('footer').hidden=false;
         }finally{
             clearTimeout(timeout);if(request===controller){request=null;if(active())timer=setTimeout(poll,2000);}
         }

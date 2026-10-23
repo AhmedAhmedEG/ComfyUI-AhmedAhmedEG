@@ -1,5 +1,12 @@
 # Retained models in Server monitor
 
+Disk Read and Disk Write show transfer rates in MiB/s across disks visible to the
+server, including other processes. Their bars share a session-peak scale with a
+minimum of 100 MiB/s; hover for the current scale. These are throughput readings,
+not utilization percentages or physical disk speed limits. Cached RAM reads do
+not count as disk reads. Sampling pauses with the rest of the minimized monitor.
+The normal live-status footer is removed; connection errors still appear.
+
 Expand **Retained models** in the floating Server monitor. The list refreshes
 every two seconds with the hardware meters and pauses when minimized or hidden.
 It covers all GPUs, independently of the selected GPU meter.

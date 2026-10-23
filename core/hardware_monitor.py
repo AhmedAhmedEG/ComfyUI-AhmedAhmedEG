@@ -65,7 +65,7 @@ def attach_shared_memory(devices, rows):
 class HardwareMonitor:
     def __init__(self, gpu_reader=nvidia_stats, cpu_reader=psutil.cpu_times,
                  clock=time.monotonic, wall_clock=time.time, shared_reader=shared_gpu_stats,
-                 model_reader=retained_models):
+                 model_reader=retained_models, disk_reader=psutil.disk_io_counters):
         self.gpu_reader, self.cpu_reader = gpu_reader, cpu_reader
         self.clock, self.wall_clock = clock, wall_clock
         self.lock = threading.Lock()
@@ -76,6 +76,8 @@ class HardwareMonitor:
         self.shared_reader = shared_reader
         self.retry_shared_at = -math.inf
         self.model_reader = model_reader
+        self.disk_reader = disk_reader
+        self.previous_disk = None
 
     def snapshot(self):
         with self.lock:
@@ -118,6 +120,23 @@ class HardwareMonitor:
             self.sampled_at = now
             self.cached = {'sampled_at': self.wall_clock(), 'cpu_percent': cpu,
                 'cpu_scope': 'server_host', 'gpus': devices, 'gpu_error': gpu_error}
+            disk = {'read_bytes_per_second': None, 'write_bytes_per_second': None,
+                    'scope': 'server_visible_disks'}
+            try:
+                counters = self.disk_reader()
+                read, write = number(counters.read_bytes), number(counters.write_bytes)
+                if read is None or write is None:
+                    raise ValueError('Disk counters unavailable')
+                if self.previous_disk is not None:
+                    old_read, old_write, old_time = self.previous_disk
+                    elapsed = now-old_time
+                    if 0 < elapsed <= 10 and read >= old_read and write >= old_write:
+                        disk.update(read_bytes_per_second=(read-old_read)/elapsed,
+                                    write_bytes_per_second=(write-old_write)/elapsed)
+                self.previous_disk = read, write, now
+            except (OSError, AttributeError, ValueError, psutil.Error):
+                self.previous_disk = None
+            self.cached['disk'] = disk
             try:
                 self.cached['retained_models'] = self.model_reader()
             except Exception:
