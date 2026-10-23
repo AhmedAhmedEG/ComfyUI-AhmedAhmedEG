@@ -12,21 +12,25 @@ from pathlib import Path
 def _input_key(value, digest):
     import torch
     if isinstance(value, torch.Tensor):
-        data = value.detach().cpu().contiguous()
-        digest.update(str((tuple(data.shape), data.dtype)).encode())
-        raw = memoryview(data.reshape(-1).view(torch.uint8).numpy()).cast('B')
-        for offset in range(0, len(raw), 1024**2):
-            digest.update(raw[offset:offset + 1024**2])
+        from .tensor_fingerprints import tensor_fingerprints
+        digest.update(str((tuple(value.shape), value.dtype)).encode())
+        def write(target):
+            data = value.detach().cpu().contiguous()
+            raw = memoryview(data.reshape(-1).view(torch.uint8).numpy()).cast('B')
+            for offset in range(0, len(raw), 1024**2):
+                target.update(raw[offset:offset + 1024**2])
+        digest = tensor_fingerprints.feed(digest, value, 'native-bytes', write)
     elif isinstance(value, dict):
         for key in sorted(value):
-            _input_key(key, digest); _input_key(value[key], digest)
+            digest = _input_key(key, digest); digest = _input_key(value[key], digest)
     elif isinstance(value, (list, tuple)):
         digest.update(str(type(value)).encode())
-        for item in value: _input_key(item, digest)
+        for item in value: digest = _input_key(item, digest)
     elif value is None or isinstance(value, (str, int, float, bool)):
         digest.update(repr(value).encode() + b'\0')
     else:
         raise TypeError('Unsupported reference encode argument')
+    return digest
 
 
 class ReferenceEncodeCache:
@@ -42,7 +46,7 @@ class ReferenceEncodeCache:
         self.vae_identities = {}
 
     def source_key(self, kind, data, audio=None):
-        digest=hashlib.sha256();_input_key((kind,data,audio),digest)
+        digest=_input_key((kind,data,audio),hashlib.sha256())
         return digest.hexdigest()
 
     def configure(self, project_dir, sources, signature='1', vaes=()):
@@ -105,7 +109,7 @@ class ReferenceEncodeCache:
         from safetensors import SafetensorError
         digest = hashlib.sha256()
         try:
-            _input_key((args, kwargs), digest)
+            digest = _input_key((args, kwargs), digest)
         except TypeError:
             return vae.encode(*args, **kwargs)
         key = (self._vae_identity(vae), digest.hexdigest())

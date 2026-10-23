@@ -1,7 +1,7 @@
 """Shot-local model LoRAs using ComfyUI's loader; patches never leak to siblings."""
 from __future__ import annotations
-import hashlib
 import math
+from .provenance import file_provenance
 
 MAX_CACHED_LORAS = 8
 
@@ -57,11 +57,7 @@ def resolve_lora_files(rows):
     files = []
     for row in rows:
         path = folder_paths.get_full_path_or_raise("loras", row["name"])
-        digest = hashlib.sha256()
-        with open(path, "rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        files.append({**row, "path": path, "sha256": digest.hexdigest()})
+        files.append({**row, "path": path, "sha256": file_provenance(path)['sha256']})
     return files
 
 

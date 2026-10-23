@@ -2,19 +2,11 @@
 import hashlib
 import os
 from pathlib import Path
-from functools import lru_cache
+from .file_fingerprints import file_fingerprints
 
 
 def file_provenance(path):
-    stat = os.stat(path)
-    return dict(_file_provenance(os.path.realpath(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
-
-
-@lru_cache(maxsize=64)
-def _file_provenance(path, size, mtime_ns, ctime_ns):
-    with open(path, "rb") as source:
-        digest = hashlib.file_digest(source, "sha256").hexdigest()
-    return {"sha256": digest, "size": size}
+    return file_fingerprints.get(path)
 
 
 def record_provenance(value, path, **options):

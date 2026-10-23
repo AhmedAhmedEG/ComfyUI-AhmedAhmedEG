@@ -80,6 +80,7 @@ def fingerprint_value(value) -> str:
     """Hash nested settings and actual media contents, preserving reference order."""
     h = hashlib.sha256()
     def visit(item):
+        nonlocal h
         if isinstance(item, dict):
             h.update(b"dict")
             for key in sorted(item, key=str):
@@ -90,11 +91,20 @@ def fingerprint_value(value) -> str:
             for child in item:
                 visit(child)
         elif isinstance(item, torch.Tensor):
-            tensor = item.detach() if hasattr(item, "detach") else item
-            tensor = tensor.cpu().contiguous() if hasattr(tensor, "contiguous") else tensor.cpu()
-            h.update(str((tuple(tensor.shape), tensor.dtype)).encode())
-            # Float conversion also supports bfloat16, which NumPy cannot represent.
-            h.update(tensor.float().numpy().tobytes() if hasattr(tensor, "numpy") else tensor.tobytes())
+            from .tensor_fingerprints import tensor_fingerprints
+            h.update(str((tuple(item.shape), item.dtype)).encode())
+            def write(digest):
+                tensor = item.detach() if hasattr(item, 'detach') else item
+                tensor = tensor.cpu().contiguous() if hasattr(tensor, 'contiguous') else tensor.cpu()
+                # Preserve the original hash representation, including bfloat16.
+                # A memoryview avoids another full-sized bytes allocation.
+                if hasattr(tensor, 'numpy'):
+                    raw = memoryview(tensor.float().numpy()).cast('B')
+                    for offset in range(0, len(raw), 1024**2):
+                        digest.update(raw[offset:offset+1024**2])
+                else:
+                    digest.update(tensor.tobytes())
+            h = tensor_fingerprints.feed(h, item, 'legacy-float32', write)
         elif item is None or isinstance(item, (str, int, float, bool)):
             h.update(json.dumps(item, ensure_ascii=False, allow_nan=False).encode())
             h.update(b"\0")
