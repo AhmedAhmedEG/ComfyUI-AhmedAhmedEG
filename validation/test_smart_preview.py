@@ -182,7 +182,7 @@ class SmartPreview(unittest.TestCase):
         handler.decorator_list = []
         for node in ast.walk(handler):
             if isinstance(node, ast.ImportFrom): node.level = 0
-        namespace = {"asyncio": asyncio, "web": web, "_PREVIEW_LOCKS": weakref.WeakValueDictionary()}
+        namespace = {"asyncio": asyncio, "web": web, "os": __import__("os"), "_PREVIEW_LOCKS": weakref.WeakValueDictionary()}
         exec(compile(ast.Module(body=[handler], type_ignores=[]), "actual_preview_route", "exec"), namespace)
         plan = self.plan()
         async def check():
@@ -199,7 +199,7 @@ class SmartPreview(unittest.TestCase):
                 self.assertIn("attachment", response.headers["Content-Disposition"])
                 response = await client.get("/media", params={**query, "key": "../outside"})
                 self.assertEqual(response.status, 404)
-        with patch("core.cache_manager.get_cache_root_dir", return_value=self.temp.name):
+        with patch("core.cache_manager.get_cache_root_dir", return_value=self.temp.name), patch("core.progress.master_preview_input", return_value=self.state):
             asyncio.run(check())
 
     def test_native_free_memory_clears_shared_configuration_and_calls_native_handler(self):

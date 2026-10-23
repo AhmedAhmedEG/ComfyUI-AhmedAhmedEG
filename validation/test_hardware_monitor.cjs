@@ -6,14 +6,14 @@ const jobs=new Map();let timerId=0;
 w.setTimeout=(fn,delay)=>{jobs.set(++timerId,{fn,delay});return timerId;};w.clearTimeout=id=>jobs.delete(id);
 Object.defineProperty(w.document,'hidden',{configurable:true,value:false});
 w.app={registerExtension:e=>extension=e};
-const sample={cpu_percent:43,gpus:[{id:'one',name:'NVIDIA GeForce RTX 4090',percent:89,memory_used:10*1073741824,memory_total:24*1073741824},{id:'two',name:'Second GPU',percent:12,memory_used:1073741824,memory_total:8*1073741824}]};
+const sample={cpu_percent:43,gpus:[{id:'one',name:'NVIDIA GeForce RTX 4090',percent:89,shared_memory_used:3*1073741824,shared_memory_total:100*1073741824,memory_used:10*1073741824,memory_total:24*1073741824},{id:'two',name:'Second GPU',percent:12,memory_used:1073741824,memory_total:8*1073741824}]};
 w.api={fetchApi:async(path,options)=>{assert.equal(path,'/minimax_director/hardware');calls++;if(reject)throw Error('offline');if(pending)return new Promise(resolve=>{resolveRequest=resolve;});return {ok:true,json:async()=>sample};}};
 w.eval(fs.readFileSync('web/js/minimax_hardware_monitor.js','utf8').replace(/^import .*;\r?\n/gm,'').replace('export function','function'));
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const tick=async()=>{const task=[...jobs.entries()].find(([id,j])=>j.delay===2000);assert(task,'Polling timer exists');jobs.delete(task[0]);task[1].fn();await flush();};
 (async()=>{
   extension.setup();await flush();const root=w.document.querySelector('.mmx-hardware');
-  assert(root.textContent.includes('43%'));assert(root.textContent.includes('10.0 / 24.0 GiB'));assert.equal(root.dataset.state,'live');
+  assert(root.textContent.includes('3.0 / 100.0 GiB'));assert(root.textContent.includes('43%'));assert(root.textContent.includes('10.0 / 24.0 GiB'));assert.equal(root.dataset.state,'live');
   const selector=root.querySelector('select');assert(!selector.hidden);selector.value='two';selector.onchange();assert(root.textContent.includes('1.0 / 8.0 GiB'));
   const handle=root.querySelector('.mmx-hardware-drag');const oldX=parseFloat(root.style.left);handle.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(parseFloat(root.style.left),oldX-10);
   root.getBoundingClientRect=()=>({width:root.dataset.minimized==='true'?150:264,height:root.dataset.minimized==='true'?36:230});

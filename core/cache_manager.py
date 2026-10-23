@@ -116,7 +116,7 @@ def fingerprint_value(value) -> str:
     return h.hexdigest()
 
 
-def get_cache_root_dir() -> str:
+def get_cache_root_dir(create=True) -> str:
     """Resolve ComfyUI output cache directory."""
     try:
         import folder_paths
@@ -125,7 +125,8 @@ def get_cache_root_dir() -> str:
         output_dir = "output"
 
     cache_dir = os.path.join(output_dir, "minimax_cache")
-    os.makedirs(cache_dir, exist_ok=True)
+    if create:
+        os.makedirs(cache_dir, exist_ok=True)
     return cache_dir
 
 

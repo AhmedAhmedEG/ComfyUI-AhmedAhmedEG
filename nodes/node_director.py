@@ -416,8 +416,7 @@ class MiniMaxH3MasterDirector:
                     item['validated'] = False
                     item['refine_approved'] = False
                     item['refine_pending'] = False
-        if kwargs.get("timeline") is not None:
-            shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
+        shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
         algorithm_signature = algorithm_provenance(selflift, refine, semantic_bridge) if execution_mode != "Conditioning Guide Output" else []
         if execution_mode != "Conditioning Guide Output":
             seen_assets=set();prepared_assets=[]

@@ -31,10 +31,10 @@ export function createHardwareMonitor(client, options={}) {
     const body=root.querySelector('.mmx-hardware-body'), handle=root.querySelector('.mmx-hardware-drag'), collapse=root.querySelector('.mmx-hardware-collapse');
     const device=root.querySelector('.mmx-hardware-device'), selector=root.querySelector('select'), status=root.querySelector('.mmx-hardware-status');
     const meters={};
-    for(const [key,label,color] of [['cpu','CPU','#8fbaff'],['gpu','GPU','#ab9cf5'],['vram','VRAM','#72d5bd']]){
+    for(const [key,label,color] of [['cpu','CPU','#8fbaff'],['gpu','GPU','#ab9cf5'],['vram','VRAM','#72d5bd'],['shared','Shared GPU RAM','#e7bb7a']]){
         const row=document.createElement('div');row.className='mmx-hardware-row';row.style.setProperty('--meter-color',color);
         row.innerHTML=`<div class="mmx-hardware-label"><span>${label}</span><span class="mmx-hardware-value">—</span></div><div class="mmx-hardware-track"><div class="mmx-hardware-fill"></div></div>`;
-        row.title=key==='cpu'?'CPU usage on the ComfyUI server host':'Server GPU readings include other applications on that GPU';
+        row.title=key==='cpu'?'CPU usage on the ComfyUI server host':key==='shared'?'System RAM resident in GPU aperture segments, read directly from WSL. Includes all applications; it is not ordinary container RAM. A dash means the driver does not expose this metric.':'Server GPU readings include other applications on that GPU';
         root.querySelector('.mmx-hardware-meters').append(row);meters[key]={value:row.querySelector('.mmx-hardware-value'),fill:row.querySelector('.mmx-hardware-fill')};
     }
     document.body.append(root);
@@ -56,6 +56,9 @@ export function createHardwareMonitor(client, options={}) {
         meter('gpu',gpu?.percent,valid(gpu?.percent)?`${Math.round(gpu.percent)}%`:'—');
         const used=gpu?.memory_used,total=gpu?.memory_total,available=valid(used)&&valid(total)&&total>0;
         meter('vram',available?used/total*100:null,available?`${(used/1073741824).toFixed(1)} / ${(total/1073741824).toFixed(1)} GiB`:'—');
+        const sharedUsed=gpu?.shared_memory_used,sharedTotal=gpu?.shared_memory_total;
+        const sharedAvailable=valid(sharedUsed)&&valid(sharedTotal)&&sharedTotal>0;
+        meter('shared',sharedAvailable?sharedUsed/sharedTotal*100:null,sharedAvailable?`${(sharedUsed/1073741824).toFixed(1)} / ${(sharedTotal/1073741824).toFixed(1)} GiB`:'—');
         root.dataset.state='live';status.textContent=data.gpu_error||(!valid(data.cpu_percent)?'Sampling CPU…':'Live · ComfyUI server');
         status.title='Updates every 2 seconds while visible. GPU and VRAM use driver telemetry.';persist();
     }

@@ -1,6 +1,6 @@
 {
-  "version": "1.7.21",
-  "reviewed": "2026-10-22",
+  "version": "1.7.22",
+  "reviewed": "2026-10-23",
   "title": "H3 Director — User Guide",
   "nodes": {
     "MiniMaxH3MasterNode": {
@@ -39,12 +39,12 @@
       ],
       "notes": [
         "FL2VA serves text/keyframe tasks; REF2VA serves reference/video editing tasks. Keeping both connected does not force one model for every clip.",
-        "Approval controls generation reuse. It does not decide which completed idle results Smart Preview may display.",
+        "Approval controls generation reuse. It does not decide which completed idle results Smart Preview may display. Before actual Master execution input arrives, Smart Preview can restore existing encoded media read-only; it cannot create, update or delete browser/server preview caches. Draft timeline widgets are not execution input.",
         "Saved results contain completed latents, not persistent paused sampler state. Ten completed steps plus fifteen refinement steps is not twenty-five initial steps.",
         "The yellow outline is selection. Saved-result indicators, approval and the active generation animation have different meanings.",
         "Identical reruns reuse one active sampling configuration sharing native base weights. Model, adapter or sigma changes replace it. CPU adapter file reuse is bounded to 256 MiB and eight files; oversized adapters are not kept in an extra file cache. ComfyUI still controls residency and its Free Memory control clears this handle. Prompt/seed changes do not invalidate model configuration.",
-        "Project → Clear VRAM requests native GPU model unloading when the queue is idle. Saved clips, encoded references and project files remain. The next generation loads the model again. Clip boundaries preserve native reusable weight buffers; ComfyUI still owns end-of-node cleanup and memory-pressure eviction.",
-        "The floating Server monitor shows server CPU, GPU utilization and VRAM. Drag its header to move it; minimize to pause readings. Toggle it in ComfyUI Settings → MiniMax H3 → Monitor. Position and GPU choice persist in this browser; GPU readings include other applications on the server."
+        "Clear VRAM in the always-visible Project header requests native GPU model unloading when the queue is idle. Saved clips, encoded references and project files remain. The next generation loads the model again. Clip boundaries preserve native reusable weight buffers; ComfyUI still owns end-of-node cleanup and memory-pressure eviction.",
+        "The floating Server monitor shows server CPU, GPU utilization and VRAM. Drag its header to move it; minimize to pause readings. Toggle it in ComfyUI Settings → MiniMax H3 → Monitor. Position and GPU choice persist in this browser; GPU readings include other applications on the server. Shared GPU RAM is resident GPU-accessible system memory read directly through WSL, when supported; a dash means unavailable. No SSH dependency is used."
       ],
       "options": {
         "video_vae": {

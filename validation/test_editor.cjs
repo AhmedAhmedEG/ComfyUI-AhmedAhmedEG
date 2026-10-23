@@ -462,6 +462,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const nameInput=editorRoot.querySelector('.mmx-project-name-field input');
   const projectFeedback=editorRoot.querySelector('.mmx-project-feedback');
   const clearVram=button('Clear VRAM');let releaseRequest;
+  assert(clearVram.closest('summary'),'Clear VRAM stays visible while Project is collapsed');
+  assert.equal(editorRoot.querySelectorAll('[data-project-action="clear-vram"]').length,1,'Only one clear control exists');
   w.api.fetchApi=async(url,options)=>{releaseRequest={url,options};return {ok:true,json:async()=>({ok:true,message:'VRAM release requested. Saved clips and project files are kept.'})};};
   await clearVram.onclick();
   assert.equal(releaseRequest.url,'/minimax_director/memory/release');

@@ -7,6 +7,24 @@ from collections import OrderedDict
 _states = OrderedDict()
 _lock = threading.Lock()
 _sequence = 0
+_preview_inputs = OrderedDict()
+
+
+def accept_preview_input(state):
+    """Only Master execution or its wired output sink publishes preview state."""
+    if not isinstance(state, dict) or not state.get('project_id') or not isinstance(state.get('clips'), list):
+        raise ValueError('Preview input needs an executed Master project state.')
+    snapshot = json.loads(json.dumps(state))
+    with _lock:
+        _preview_inputs[str(state['project_id'])] = snapshot
+        _preview_inputs.move_to_end(str(state['project_id']))
+        while len(_preview_inputs) > 64: _preview_inputs.popitem(last=False)
+
+
+def master_preview_input(project_id):
+    with _lock:
+        state = _preview_inputs.get(str(project_id))
+        return json.loads(json.dumps(state)) if state else None
 
 
 def current_clip_progress(node_id, project_id):
@@ -52,6 +70,8 @@ def preview_run_context(project_id, shots, queue, stream='final'):
 
 def shot_event(node_id, project_id, clip_id, phase, **data):
     global _sequence
+    if phase == 'timeline_ready' and isinstance(data.get('timeline'), dict):
+        accept_preview_input(data['timeline'])
     prompt_id = None
     try:
         from server import PromptServer

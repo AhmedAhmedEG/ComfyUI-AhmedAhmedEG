@@ -4,8 +4,11 @@ import io
 import math
 import os
 import subprocess
+import sys
 import threading
 import time
+import json
+from pathlib import Path
 
 import psutil
 
@@ -36,9 +39,31 @@ def nvidia_stats():
     return devices
 
 
+def shared_gpu_stats():
+    if not sys.platform.startswith('linux') or not Path('/usr/lib/wsl/lib/libdxcore.so').is_file():
+        return []
+    result = subprocess.run([sys.executable, str(Path(__file__).with_name('wsl_gpu_memory.py'))],
+        capture_output=True, text=True, timeout=1.5, check=True)
+    rows = json.loads(result.stdout)
+    return rows if isinstance(rows, list) else []
+
+
+def attach_shared_memory(devices, rows):
+    # DXCore names can be ambiguous with identical cards; never assign another
+    # adapter's system-memory usage to the selected GPU.
+    for device in devices:
+        matches = [row for row in rows if row.get('name') == device.get('name')]
+        if len(matches) == 1 and sum(d.get('name') == device.get('name') for d in devices) == 1:
+            row = matches[0]
+            used, total = number(row.get('shared_memory_used')), number(row.get('shared_memory_total'))
+            if used is not None and total is not None and total > 0:
+                device.update(shared_memory_used=used, shared_memory_total=total,
+                    shared_memory_source=row.get('shared_memory_source'))
+
+
 class HardwareMonitor:
     def __init__(self, gpu_reader=nvidia_stats, cpu_reader=psutil.cpu_times,
-                 clock=time.monotonic, wall_clock=time.time):
+                 clock=time.monotonic, wall_clock=time.time, shared_reader=shared_gpu_stats):
         self.gpu_reader, self.cpu_reader = gpu_reader, cpu_reader
         self.clock, self.wall_clock = clock, wall_clock
         self.lock = threading.Lock()
@@ -46,6 +71,8 @@ class HardwareMonitor:
         self.sampled_at = -math.inf
         self.previous_cpu = None
         self.retry_gpu_at = -math.inf
+        self.shared_reader = shared_reader
+        self.retry_shared_at = -math.inf
 
     def snapshot(self):
         with self.lock:
@@ -77,6 +104,14 @@ class HardwareMonitor:
                     gpu_error = 'GPU telemetry unavailable'
             else:
                 gpu_error = 'GPU telemetry unavailable'
+            if devices and now >= self.retry_shared_at:
+                try:
+                    shared = self.shared_reader()
+                    attach_shared_memory(devices, shared)
+                    if not shared:
+                        self.retry_shared_at = now + 30
+                except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+                    self.retry_shared_at = now + 30
             self.sampled_at = now
             self.cached = {'sampled_at': self.wall_clock(), 'cpu_percent': cpu,
                 'cpu_scope': 'server_host', 'gpus': devices, 'gpu_error': gpu_error}

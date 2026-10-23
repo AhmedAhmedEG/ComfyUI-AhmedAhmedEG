@@ -2237,6 +2237,8 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-workspace > summary::after { content:'+';margin-left:auto;font-size:20px;color:#a9c5db; }
 .mmx-director-root .mmx-project-workspace[open] > summary::after { content:'−'; }
 .mmx-director-root .mmx-project-workspace > summary span { font-size:12px;font-weight:400;color:#b4c2cf; }
+.mmx-director-root .mmx-project-workspace > summary [data-project-action="clear-vram"] { margin-left:auto;flex-shrink:0;width:auto;min-height:30px;padding:5px 10px; }
+.mmx-director-root .mmx-project-workspace > summary:has([data-project-action="clear-vram"])::after { margin-left:0; }
 .mmx-director-root .mmx-project-workspace > .mmx-section-body { display:grid;grid-template-columns:1fr;gap:16px;padding:16px;border-top:1px solid #414e5a; }
 .mmx-director-root .mmx-project-workspace > .mmx-section-body > details { grid-column:1/-1;align-self:start;margin:0;border:0;border-top:1px solid #414e5a;border-radius:0;background:transparent; }
 .mmx-director-root .mmx-timeline-audio { display:flex !important;flex-direction:row !important;align-items:center;flex-wrap:wrap;gap:20px !important;margin:10px 0 14px;padding:12px;border:1px solid #414e5a;border-radius:6px;background:var(--mmx-soft,#242a30); }
@@ -3138,17 +3140,19 @@ function mountDirectorUI(node) {
   const clearVram=document.createElement('button');clearVram.textContent='Clear VRAM';
   clearVram.dataset.projectAction='clear-vram';
   clearVram.title='Unload GPU models when the queue is idle. Keeps saved clips, reference latents and project files. The next generation reloads the model.';
-  clearVram.onclick=async()=>{
+  clearVram.onclick=async(event)=>{
+    event?.preventDefault();event?.stopPropagation();
     if(clearVram.disabled)return;
     clearVram.disabled=true;clearVram.textContent='Clearing…';clearVram.setAttribute('aria-busy','true');
     showProjectFeedback('busy','Requesting VRAM Release…');
     try{
       const result=await requestJson('/minimax_director/memory/release',{});
       showProjectFeedback('success',result.message);
-    }catch(error){showProjectFeedback('error',`Could Not Clear VRAM: ${error.message}`);}
+    }catch(error){projectTools.open=true;showProjectFeedback('error',`Could Not Clear VRAM: ${error.message}`);}
     finally{clearVram.disabled=false;clearVram.textContent='Clear VRAM';clearVram.removeAttribute('aria-busy');}
   };
-  library.append(nameField,saveProject,openProject,clearVram,serverStatus,projectFeedback);projectTools.append(library);
+  projectHeading.append(clearVram);
+  library.append(nameField,saveProject,openProject,serverStatus,projectFeedback);projectTools.append(library);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];

@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.21"
+__version__ = "1.7.22"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -122,13 +122,19 @@ if getattr(PromptServer, "instance", None) is not None:
     @routes.post("/minimax_director/preview/info")
     async def smart_preview_info(request):
         try:
-            from .core.preview import create_preview_plan
-            from .core.progress import preview_run_context
+            from .core.preview import create_preview_plan, cached_preview_plan
+            from .core.progress import preview_run_context, master_preview_input
             body = await request.json()
             timeline = body['timeline']
+            master_state = master_preview_input(timeline['project_id']) if body.get('master_input', False) else None
+            if master_state is None:
+                result = await asyncio.to_thread(cached_preview_plan, timeline['project_id'],
+                    body.get('scope','latest'), quality=body.get('quality','original'),stream=body.get('stream','final'))
+                return web.json_response(result, headers={'Cache-Control':'no-store'})
+            timeline = master_state
             context = preview_run_context(timeline['project_id'], timeline.get('clips', []),
                 PromptServer.instance.prompt_queue, body.get('stream', 'final'))
-            result = await asyncio.to_thread(create_preview_plan, body["timeline"], body.get("scope", "latest"),
+            result = await asyncio.to_thread(create_preview_plan, timeline, body.get("scope", "latest"),
                 quality=body.get("quality", "original"),stream=body.get("stream","final"), run_context=context)
             return web.json_response(result)
         except (ValueError, KeyError, TypeError) as exc:
@@ -142,6 +148,14 @@ if getattr(PromptServer, "instance", None) is not None:
             from .core.preview import preview_path
             from .core.preview_segments import encode_fragment
             project_id,key=request.query.get('project_id',''),request.query.get('key','')
+            from .core.progress import master_preview_input
+            if request.query.get('read_only') == '1' or master_preview_input(project_id) is None:
+                from .core.cache_manager import get_cache_root_dir, safe_component
+                import re
+                if not re.fullmatch(r'[0-9a-f]{64}',key): raise ValueError('Invalid preview revision.')
+                path=os.path.join(get_cache_root_dir(create=False),safe_component(project_id),'previews',key+'.mp4')
+                if not os.path.isfile(path): raise FileNotFoundError('Cached preview is unavailable; waiting for Master output.')
+                return web.FileResponse(path,headers={'Content-Type':'video/mp4','Cache-Control':'no-store'})
             preview_path(project_id,key)
             lock=_PREVIEW_LOCKS.setdefault(f'segment:{project_id}:{key}',asyncio.Lock())
             async with lock: path=await asyncio.to_thread(encode_fragment,project_id,key)
@@ -156,6 +170,16 @@ if getattr(PromptServer, "instance", None) is not None:
         try:
             from .core.preview import encode_preview, preview_path
             project_id, key = request.query.get("project_id", ""), request.query.get("key", "")
+            from .core.progress import master_preview_input
+            if request.query.get('read_only') == '1' or master_preview_input(project_id) is None:
+                from .core.cache_manager import get_cache_root_dir, safe_component
+                import re
+                if not re.fullmatch(r'[0-9a-f]{64}',key): raise ValueError('Invalid preview revision.')
+                path=os.path.join(get_cache_root_dir(create=False),safe_component(project_id),'previews',key+'.mp4')
+                if not os.path.isfile(path): raise FileNotFoundError('Cached preview is unavailable; waiting for Master output.')
+                headers={'Content-Type':'video/mp4','Cache-Control':'no-store'}
+                if request.query.get('download')=='1': headers['Content-Disposition']='attachment; filename="minimax-preview.mp4"'
+                return web.FileResponse(path,headers=headers)
             preview_path(project_id, key)  # Validate before using identifiers as lock keys.
             lock = _PREVIEW_LOCKS.setdefault(f"{project_id}:{key}", asyncio.Lock())
             async with lock:

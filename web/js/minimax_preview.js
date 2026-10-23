@@ -112,7 +112,7 @@ async function evictPreview(url) {
   try {const cache=await globalThis.caches?.open('minimax-preview-v2');await cache?.delete(url);} catch {}
 }
 
-export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions, standalone = false}) {
+export function installSmartPreview({root, toolbar, timelinePanel, inspector, node, api, getTimeline, getOptions, saveOptions, standalone = false, hasMasterInput=()=>true}) {
   const nodeOptions=getOptions, writeNodeOptions=saveOptions;
   const storageKey=kind=>getTimeline().project_id ? `minimax-preview-${kind}-v1:${getTimeline().project_id}:${node.id ?? 'player'}` : null;
   const readStored=kind=>{try{const value=JSON.parse(globalThis.localStorage?.getItem(storageKey(kind)) || '{}');return value && typeof value==='object' && !Array.isArray(value)?value:{};}catch{return {};}};
@@ -169,7 +169,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let blobUrl='', warmRevision='', loadingSource='', segmentPlayer;
   let displayedDownload,downloadController,downloadBusy=false;
   const downloadUrls=new Map();
-  const setDownload=info=>{displayedDownload={path:`/minimax_director/preview/media?${new URLSearchParams({project_id:info.project_id,key:info.key,download:'1'})}`,
+  const setDownload=info=>{displayedDownload={path:`/minimax_director/preview/media?${new URLSearchParams({project_id:info.project_id,key:info.key,download:'1',...(info.cache_read_only?{read_only:'1'}:{})})}`,
     name:`${info.project_id}-${info.scope==='full'?'full-video':'latest-clip'}-${info.key.slice(0,8)}.mp4`};};
   save.onclick=async event=>{
     event.preventDefault();event.stopPropagation();
@@ -199,6 +199,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, open: !panel.hidden});
   let positionWritten=0,mediaReady=false;
   const savePosition = (force=false) => {
+    if(!hasMasterInput())return;
     if(!mediaReady || !source || !Number.isFinite(video.currentTime) || !force && Date.now()-positionWritten<2000)return;
     positionWritten=Date.now();
     try{
@@ -237,7 +238,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     try {
       const response = await api.fetchApi("/minimax_director/preview/info", {method: "POST",
         headers: {"Content-Type": "application/json"}, signal: controller.signal,
-        body: JSON.stringify({timeline: getTimeline(), scope: scope.value, quality:quality.value,stream:stream.value})});
+        body: JSON.stringify({timeline: getTimeline(), scope: scope.value, quality:quality.value,stream:stream.value,master_input:hasMasterInput()})});
       const info = await response.json();
       if (disposed || token !== request || panel.hidden) return;
       if (!response.ok) throw new Error(info.error || "Preview unavailable.");
@@ -246,13 +247,16 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
         label.textContent = source ? statusText+' · Waiting for an updated result…' : info.label || "No completed clips yet. Generate a shot first.";
         return;
       }
+      const readOnly=!!info.cache_read_only || !hasMasterInput();
       const observationKey=`${info.project_id}:${info.stream || 'final'}`;
       const observed=observedGenerations.get(observationKey) || new Map();
-      for(const clip of info.invalidated_clip_ids || [])observed.set(clip,null);
-      for(const [clip,generation] of Object.entries(info.clip_generations || {}))observed.set(clip,generation);
-      observedGenerations.set(observationKey,observed);
+      if(!readOnly){
+        for(const clip of info.invalidated_clip_ids || [])observed.set(clip,null);
+        for(const [clip,generation] of Object.entries(info.clip_generations || {}))observed.set(clip,generation);
+        observedGenerations.set(observationKey,observed);
+      }
       if(observedGenerations.size>32)observedGenerations.delete(observedGenerations.keys().next().value);
-      const path = `/minimax_director/preview/media?${new URLSearchParams({project_id: info.project_id, key: info.key})}`;
+      const path = `/minimax_director/preview/media?${new URLSearchParams({project_id: info.project_id, key: info.key,...(readOnly?{read_only:'1'}:{})})}`;
       const url = api.apiURL(path);
       statusText = `${info.scope === "latest" ? "Latest Clip" : "Full Video"} · ${info.label}`;
       if(info.run_active)statusText+=' · Generation running';
@@ -269,16 +273,16 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
             savePosition(true);mediaReady=false;segmentPlayer?.dispose();
             if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl='';
             source=url;setDownload(info);loadingSource='';video.hidden=false;empty.hidden=true;
-            segmentPlayer=createSegmentPlayer(video,info.playback,p=>openPreviewStream(api,p),error=>{
+            segmentPlayer=createSegmentPlayer(video,info.playback,p=>readOnly?api.fetchApi(p,{cache:'no-store'}):openPreviewStream(api,p),error=>{
               if(disposed || source!==url)return;
               console.warn('Smart Preview fragment playback failed:',error);
               segmentPlayer?.dispose();segmentPlayer=null;
               video.src=url;video.load();label.textContent=statusText+' · Standard streaming';
             });
             label.textContent=statusText;
-            void warmPlayback(info.playback,info).catch(()=>{});
+            if(!readOnly)void warmPlayback(info.playback,info).catch(()=>{});
           }).catch(()=>{if(!disposed && loadingSource===url){source=url;setDownload(info);loadingSource='';video.src=url;video.load();video.hidden=false;empty.hidden=true;}});
-        } else void readyPreview(api,path).then(blob=>{
+        } else void (readOnly?Promise.resolve(null):readyPreview(api,path)).then(blob=>{
           if(disposed || panel.hidden || token!==request || loadingSource!==url)return;
           savePosition(true);mediaReady=false;
           const previousBlob=blobUrl;
@@ -289,8 +293,8 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
           video.src=blobUrl || url;video.load();save.hidden=false;
           if(previousBlob)URL.revokeObjectURL(previousBlob);
           video.hidden=false;empty.hidden=true;label.textContent=statusText;
-          void rememberPreview(api,path,info);
-          if(!blob)void bufferedPreview(api,path).catch(error=>{
+          if(!readOnly)void rememberPreview(api,path,info);
+          if(!blob && !readOnly)void bufferedPreview(api,path).catch(error=>{
             // Persistent caching is independent of playback. Do not clear a
             // playable stream or reload it when the background transfer finishes.
             if(!disposed && source===url && !error.stream)label.textContent=statusText+' · Streaming; background cache will retry on reopen.';
@@ -303,9 +307,9 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       }
       // Prebuffer both scopes after each completion, including during a run.
       // Revision URLs deduplicate transfers; autoplay never gates buffering.
-      if(warmRevision!==url){
+      if(!readOnly && warmRevision!==url){
         warmRevision=url;
-        void api.fetchApi('/minimax_director/preview/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({timeline:getTimeline(),scope:scope.value==='latest'?'full':'latest',quality:quality.value,stream:stream.value})})
+        void api.fetchApi('/minimax_director/preview/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({timeline:getTimeline(),scope:scope.value==='latest'?'full':'latest',quality:quality.value,stream:stream.value,master_input:hasMasterInput()})})
           .then(r=>r.ok?r.json():null).then(async other=>{if(other?.found && !disposed && project===other.project_id){if(other.playback && globalThis.MediaSource)return warmPlayback(other.playback,other);const path=`/minimax_director/preview/media?${new URLSearchParams({project_id:other.project_id,key:other.key})}`;await bufferedPreview(api,path);if(!disposed && warmRevision===url)await rememberPreview(api,path,other);}})
           .catch(error=>{if(!error.stream && warmRevision===url)warmRevision='';});
       }
@@ -322,7 +326,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     const parts=[playback.audio,...playback.videos];
     // Two bounded transfers avoid launching an encoder for every clip at once.
     let cursor=0;
-    const worker=async()=>{while(cursor<parts.length && !disposed && project===info.project_id){
+    const worker=async()=>{while(cursor<parts.length && !disposed && hasMasterInput() && project===info.project_id){
       const part=parts[cursor++],observed=observedGenerations.get(`${info.project_id}:${info.stream || 'final'}`);
       if(Object.entries(part.generations || {}).some(([clip,generation])=>observed?.has(clip) && observed.get(clip)!==generation))continue;
       await rememberPreview(api,part.path,{...info,clip_generations:part.generations});
@@ -334,7 +338,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     if (!url || disposed) return;
     if (failedRevision !== url) {failedRevision=url;retryCount=0;}
     retryCount++; recovering=true; retryAt=Date.now()+2000*Math.pow(2,retryCount-1);
-    eviction=evictPreview(url);
+    if(hasMasterInput())eviction=evictPreview(url);
     stop();
     label.textContent=retryCount<=3 ? message+' Retrying…' : message+' Use Refresh to try again.';
   };
@@ -380,9 +384,11 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     completed() { preview.textContent = panel.hidden ? "Preview • New clip" : "Preview"; refreshPreview(); },
     refresh: () => refreshPreview(),
     contextChanged() {
+      ++request;controller?.abort();checking=false;warmRevision='';
       if (project !== getTimeline().project_id) {
-        stop(); project = getTimeline().project_id; ++request; controller?.abort(); restoreOptions(); refreshPreview();
+        stop(); project = getTimeline().project_id;restoreOptions();
       }
+      refreshPreview();
     },
     dispose() { disposed = true;downloadController?.abort();for(const [url,timer] of downloadUrls){clearTimeout(timer);URL.revokeObjectURL(url);}downloadUrls.clear(); clearInterval(poll);document.removeEventListener('visibilitychange',resume);globalThis.removeEventListener?.('online',resume);globalThis.removeEventListener?.('pagehide',leaving); ++request; controller?.abort(); stop(); }
   };

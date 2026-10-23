@@ -10,6 +10,36 @@ from .cache_manager import ProjectCacheManager, safe_component, load_frame_tenso
 from .media_io import resolve_input_path
 
 
+def cached_preview_plan(project_id, scope='latest', base_dir=None, quality='original', stream='final'):
+    """Restore only existing encodes. Opening a viewer must not create cache files."""
+    from types import SimpleNamespace
+    from .cache_manager import get_cache_root_dir
+    from .preview_segments import playback_manifest
+    project_id = safe_component(project_id)
+    folder = Path(base_dir or get_cache_root_dir(create=False)) / project_id / 'previews'
+    candidates = sorted(folder.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True) if folder.is_dir() else []
+    manager = SimpleNamespace(project_id=project_id, project_dir=str(folder.parent))
+    for path in candidates:
+        try:
+            plan = json.loads(path.read_text(encoding='utf-8'))
+            if any(plan.get(k) != v for k,v in [('project_id',project_id),('scope',scope),('quality',quality),('stream',stream)]):
+                continue
+            playback = None
+            try: playback = playback_manifest(manager, plan, read_only=True)
+            except (FileNotFoundError, ValueError, KeyError): pass
+            if playback is None and not path.with_suffix('.mp4').is_file():
+                continue
+            rows = plan.get('rows', [])
+            return {'found':True, 'cache_read_only':True, 'project_id':project_id,
+                'scope':scope, 'stream':stream, 'key':path.stem, 'playback':playback,
+                'clip_ids':[row['clip_id'] for row in rows], 'clip_count':len(rows),
+                'label':'Saved preview · waiting for Master output'}
+        except (OSError, ValueError, TypeError, KeyError):
+            continue
+    return {'found':False, 'cache_read_only':True, 'scope':scope,
+        'label':'Waiting for Master output. Existing preview caches are kept.'}
+
+
 def create_preview_plan(state, scope="latest", base_dir=None, quality="original", stream="final", run_context=None):
     if scope not in ("latest", "full"):
         raise ValueError("Preview scope must be latest or full.")

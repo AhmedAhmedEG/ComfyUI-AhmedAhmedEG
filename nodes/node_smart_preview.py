@@ -17,4 +17,9 @@ class MiniMaxH3SmartPreview:
         state = json.loads(project_state)
         if not isinstance(state, dict) or not state.get("project_id") or not isinstance(state.get("clips"), list):
             raise ValueError("Smart Preview needs the Master's project_state output.")
+        try:
+            from ..core.progress import accept_preview_input
+        except ImportError:
+            from core.progress import accept_preview_input
+        accept_preview_input(state)
         return {"ui": {"mmx_project": [json.dumps(state, ensure_ascii=False)]}, "result": ()}

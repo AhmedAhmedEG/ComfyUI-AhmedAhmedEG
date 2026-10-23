@@ -8,20 +8,24 @@ import tempfile
 from urllib.parse import urlencode
 
 
-def _save_plan(manager, plan):
+def _save_plan(manager, plan, read_only=False):
     key = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     path = Path(manager.project_dir) / 'previews' / (key + '.json')
-    if not path.exists():
+    if read_only and not path.with_suffix('.mp4').is_file():
+        raise FileNotFoundError('This playback fragment has not been encoded yet.')
+    if not read_only and not path.exists():
         fd, temporary = tempfile.mkstemp(dir=path.parent, suffix='.tmp')
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as output: json.dump(plan, output)
             os.replace(temporary, path)
         finally:
             if os.path.exists(temporary): os.unlink(temporary)
-    return {'key': key, 'path': '/minimax_director/preview/segment?' + urlencode({'project_id':manager.project_id,'key':key})}
+    query={'project_id':manager.project_id,'key':key}
+    if read_only: query['read_only']='1'
+    return {'key': key, 'path': '/minimax_director/preview/segment?' + urlencode(query)}
 
 
-def playback_manifest(manager, plan):
+def playback_manifest(manager, plan, read_only=False):
     from .cache_manager import load_frame_tensor
     from .media_io import resolve_input_path
     if any(row.get('source') for row in plan['rows']): return None
@@ -31,6 +35,7 @@ def playback_manifest(manager, plan):
         # the predecessor's handoff with MediaSource's append window.
         frame_count=row.get('frame_count')
         if frame_count is None:
+            if read_only: return None
             frames = load_frame_tensor(resolve_input_path(row['frames'], manager.project_dir))
             frame_count=int(frames.shape[0]);del frames
         count = int(frame_count) - int(row.get('trim_prefix', 0))
@@ -41,13 +46,13 @@ def playback_manifest(manager, plan):
                       'stream':plan['stream'],'quality':plan['quality'],'rows':[canonical]}
         # Names/order/update timestamps do not alter the encoded pixels.
         for field in ('name','updated_at','audio'): video_plan['rows'][0].pop(field, None)
-        descriptor = _save_plan(manager, video_plan)
+        descriptor = _save_plan(manager, video_plan, read_only)
         descriptor.update(duration=visible/24, clip_id=row['clip_id'],
                           generations={row['clip_id']:row['generation']})
         videos.append(descriptor); duration += visible/24
     audio_plan = {key:plan[key] for key in ('project_id','stream','rows','gain_match','fade_ms')}
     audio_plan.update(kind='audio_fragment',version=2)
-    audio = _save_plan(manager, audio_plan)
+    audio = _save_plan(manager, audio_plan, read_only)
     audio['generations'] = {row['clip_id']:row['generation'] for row in plan['rows']}
     return {'videos':videos,'audio':audio,'duration':duration,
             'video_mime':'video/mp4; codecs="avc1.640033"',

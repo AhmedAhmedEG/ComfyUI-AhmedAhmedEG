@@ -1,0 +1,14 @@
+const fs=require('fs'),assert=require('assert');
+const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
+const dom=new JSDOM('<body><div id="root"></div>',{url:'http://localhost',runScripts:'outside-only'}),w=dom.window;
+w.HTMLMediaElement.prototype.pause=()=>{};w.HTMLMediaElement.prototype.load=()=>{};
+let cacheOperations=0,accepted=false;const calls=[];
+w.caches={open:async()=>{cacheOperations++;throw Error('Cache writes/creation are forbidden before Master input');},delete:async()=>{cacheOperations++;}};
+w.localStorage.setItem('minimax-preview-revisions-v2','{"old":{"project":"gate","generations":{"one":"old"}}}');
+const before=w.localStorage.getItem('minimax-preview-revisions-v2');
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
+const root=w.document.querySelector('#root');
+const api={apiURL:p=>p,fetchApi:async(path,options)=>{calls.push({path,body:options?.body&&JSON.parse(options.body)});return {ok:true,json:async()=>({found:true,cache_read_only:true,project_id:'gate',scope:'latest',key:'saved',label:'Saved preview',invalidated_clip_ids:['one'],clip_generations:{one:'different'}})};}};
+const player=w.installSmartPreview({root,toolbar:w.document.createElement('div'),timelinePanel:w.document.createElement('div'),inspector:w.document.createElement('div'),node:{id:17},api,standalone:true,hasMasterInput:()=>accepted,getTimeline:()=>({project_id:'gate',clips:[]}),getOptions:()=>({}),saveOptions:()=>{}});
+const tick=()=>new Promise(r=>setTimeout(r,0));
+(async()=>{await tick();await tick();assert.equal(calls.length,1,'No alternate-scope prebuffer before Master input');assert.equal(calls[0].body.master_input,false);assert(root.querySelector('video').src.includes('read_only=1'));assert.equal(cacheOperations,0);assert.equal(w.localStorage.getItem('minimax-preview-revisions-v2'),before);root.querySelector('video').onerror();await tick();assert.equal(cacheOperations,0,'Playback error cannot evict cached previews before input');assert.equal(w.localStorage.getItem('minimax-preview-revisions-v2'),before);player.dispose();dom.window.close();console.log('Read-only preview restore preserves browser cache, revisions and server read-only URLs.');})().catch(e=>{console.error(e);dom.window.close();process.exitCode=1;});
