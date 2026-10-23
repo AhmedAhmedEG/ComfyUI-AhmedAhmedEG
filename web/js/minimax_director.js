@@ -5322,7 +5322,13 @@ app.registerExtension({
         const legacy = [...base,"control_after_generate","execution_mode","prompt_mode","run_mode","continuity_mode","context_length","preview_mode"];
         const sampling = [...base,"control_after_generate"];
         const count = node.widgets_values.length;
-        if (count === 14 && ["manual","original","auto"].includes(node.widgets_values[11])) continue;
+        // Seed-free Settings already use the new positional layout.
+        if (["manual","original","auto"].includes(node.widgets_values[9])) continue;
+        if (["manual","original","auto"].includes(node.widgets_values[11])) {
+          const fields=[...sampling,'canvas_policy','canvas_megapixels','canvas_aspect','decoded_output'];
+          node.widgets_values_named={...Object.fromEntries(fields.slice(0,count).map((key,index)=>[key,node.widgets_values[index]])),...node.widgets_values_named};
+          continue;
+        }
         const fields = count === 17 ? legacy : count === 16 ? legacy.filter(key=>key!=="control_after_generate")
           : count === 14 ? current : count === 13 ? current.filter(key=>key!=="control_after_generate") : count === 11 ? sampling : null;
         if (fields) {
@@ -5366,7 +5372,8 @@ app.registerExtension({
           configNode.widgets_values=[...configNode.widgets_values.slice(0,11),resolution.mode || 'manual',resolution.megapixels ?? 1,resolution.aspect || '16:9'];
           delete state.resolution;
         }
-        for (const clip of state.clips || []) {
+        for (const [index,clip] of (state.clips || []).entries()) {
+          if(clip.seed==null && old.seed!=null)clip.seed=String(BigInt.asUintN(64,BigInt(old.seed)+BigInt(index)*1000n));
           clip.continuity_mode ||= clip.continuity===false?'Independent (No Continuity)':old.continuity_mode || 'Independent (No Continuity)';
           clip.context_length ??= Number(old.context_length || 22);
           clip.audio_context_length ??= clip.context_length;
@@ -5377,6 +5384,14 @@ app.registerExtension({
         (master.widgets_values_named ||= {}).timeline_data=serialized;
         master.widgets_values_named.generation_mode ||= ({"Next shot":"Next clip","All shots":"All clips"})[state.generation_mode] || state.generation_mode;
       } catch (error) { console.warn('[DirectorUI] Could not migrate timeline controls',error); }
+    }
+    // Retired global seed and its workflow-only randomization widget must not
+    // shift canvas/output fields when saved workflows load into seed-free Settings.
+    for(const node of graphData?.nodes || [])if(node.type==='MiniMaxH3DirectorSettings' && Array.isArray(node.widgets_values)){
+      const values=node.widgets_values;
+      if(typeof values[9]==='number' || typeof values[9]==='string' && /^\d+$/.test(values[9])){
+        values.splice(9,['fixed','randomize','increment','decrement'].includes(values[10])?2:1);
+      }
     }
   },
 

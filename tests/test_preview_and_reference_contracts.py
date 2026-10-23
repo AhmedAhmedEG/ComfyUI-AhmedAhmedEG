@@ -8,6 +8,15 @@ from nodes.node_settings import MiniMaxH3DirectorSettings
 
 
 class PreviewReferenceContracts(unittest.TestCase):
+    def test_settings_seed_is_legacy_only(self):
+        inputs=MiniMaxH3DirectorSettings.INPUT_TYPES()
+        self.assertNotIn('seed',inputs['required'])
+        self.assertNotIn('seed',inputs['optional'])
+        config,=MiniMaxH3DirectorSettings().build_config()
+        self.assertNotIn('seed',config)
+        legacy,=MiniMaxH3DirectorSettings().build_config(seed=123)
+        self.assertEqual(legacy['seed'],123)
+
     def test_preview_is_only_a_state_sink(self):
         state={'project_id':'demo','clips':[{'id':'one'}]}
         result=MiniMaxH3SmartPreview().preview(json.dumps(state))

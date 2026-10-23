@@ -40,7 +40,6 @@ class MiniMaxH3DirectorSettings:
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "simple", "tooltip": "Noise schedule type."}),
                 "shift_video": ("FLOAT", {"default": 12.0, "min": 0.1, "max": 100.0, "step": 0.1, "tooltip": "Sigma shift exponent for video stream."}),
                 "shift_audio": ("FLOAT", {"default": 3.0, "min": 0.1, "max": 100.0, "step": 0.1, "tooltip": "Sigma shift exponent for audio stream."}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "Base random seed."}),
 
             },
             "optional": {
@@ -69,7 +68,7 @@ class MiniMaxH3DirectorSettings:
         scheduler: str = "simple",
         shift_video: float = 12.0,
         shift_audio: float = 3.0,
-        seed: int = 0,
+        seed: int = None,
         generation_mode: str = None,
         execution_mode: str = "All-in-One Generation",
         prompt_mode: str = "structured",
@@ -104,7 +103,6 @@ class MiniMaxH3DirectorSettings:
             "scheduler": str(scheduler),
             "shift_video": float(shift_video),
             "shift_audio": float(shift_audio),
-            "seed": int(seed),
             "execution_mode": str(execution_mode),
             "prompt_mode": str(prompt_mode),
             "run_mode": str(run_mode),
@@ -112,6 +110,11 @@ class MiniMaxH3DirectorSettings:
             "context_length": str(context_length),
             "preview_mode": str(preview_mode),
         }
+
+        # Legacy API callers can still supply a fallback. New UI workflows own
+        # seeds exclusively on their clips, rather than exposing a second seed.
+        if seed is not None:
+            cfg_dict['seed'] = int(seed)
 
         # Merge with optional chained settings (incoming settings take precedence unless overridden)
         if settings_optional is not None and isinstance(settings_optional, dict):
