@@ -261,7 +261,9 @@ class RuntimeContracts(unittest.TestCase):
         clips[0]['validated']=True
         with patch('core.progress.shot_event') as events:
             self.execute(clips,generation_mode='Next clip',unique_id='42')
-        stages=[call.args[2:4] for call in events.call_args_list]
+        self.assertEqual(events.call_args_list[0].args[2:4],('','timeline_ready'))
+        self.assertEqual(events.call_args_list[0].kwargs['timeline']['project_id'],'regression')
+        stages=[call.args[2:4] for call in events.call_args_list if call.args[2]]
         self.assertEqual(stages,[('two','preparing'),('two','sampling'),('two','decoding'),('two','completed')])
         self.assertTrue(all(call.args[:2]==('42','regression') for call in events.call_args_list))
 
@@ -269,7 +271,8 @@ class RuntimeContracts(unittest.TestCase):
         clips=[{'id':'first','type':'T2VA','duration':1},{'id':'second','type':'T2VA','duration':1}]
         with patch('core.progress.shot_event') as events:
             self.execute(clips,generation_mode='All clips',unique_id='42')
-        self.assertEqual([call.args[2:4] for call in events.call_args_list],
+        self.assertEqual(events.call_args_list[0].args[2:4],('','timeline_ready'))
+        self.assertEqual([call.args[2:4] for call in events.call_args_list if call.args[2]],
                          [(clip,phase) for clip in ('first','second')
                           for phase in ('preparing','sampling','decoding','completed')])
 

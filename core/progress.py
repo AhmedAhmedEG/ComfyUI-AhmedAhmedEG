@@ -14,7 +14,11 @@ def accept_preview_input(state):
     """Only Master execution or its wired output sink publishes preview state."""
     if not isinstance(state, dict) or not state.get('project_id') or not isinstance(state.get('clips'), list):
         raise ValueError('Preview input needs an executed Master project state.')
-    snapshot = json.loads(json.dumps(state))
+    preview_fields=('project_id','width','height','resolution','audio_gain_match','audio_fade_ms')
+    snapshot={key:state[key] for key in preview_fields if key in state}
+    snapshot['clips']=[{key:shot[key] for key in ('id','name','locked','source','duration','source_start','source_end') if key in shot}
+        for shot in state['clips']]
+    snapshot = json.loads(json.dumps(snapshot))
     with _lock:
         _preview_inputs[str(state['project_id'])] = snapshot
         _preview_inputs.move_to_end(str(state['project_id']))
@@ -70,8 +74,8 @@ def preview_run_context(project_id, shots, queue, stream='final'):
 
 def shot_event(node_id, project_id, clip_id, phase, **data):
     global _sequence
-    if phase == 'timeline_ready' and isinstance(data.get('timeline'), dict):
-        accept_preview_input(data['timeline'])
+    if phase == 'timeline_ready' and isinstance(data.get('timeline'), dict) and isinstance(data['timeline'].get('clips'), list):
+        accept_preview_input({**data['timeline'], 'project_id': str(project_id)})
     prompt_id = None
     try:
         from server import PromptServer
