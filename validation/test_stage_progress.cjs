@@ -1,7 +1,7 @@
 const fs=require('fs'),assert=require('assert');
 const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
 const dom=new JSDOM('<!doctype html><head></head><body></body>',{url:'http://localhost',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
-let extension;w.app={registerExtension:e=>extension=e};w.api=new w.EventTarget();
+let extension;w.app={registerExtension:e=>extension=e,graph:{getNodeById:()=>({widgets:[{name:'timeline_data',value:JSON.stringify({clips:[{id:'two',name:'Opening fight'}]})}]})}};w.api=new w.EventTarget();
 const bar=w.document.createElement('rgthree-progress-bar');
 bar.attachShadow({mode:'open'});bar.progressTextEl=w.document.createElement('span');bar.progressTextEl.setAttribute('part','text');
 bar.progressTextEl.textContent='(1) 91% - MiniMax H3 Master Node';bar.shadowRoot.append(bar.progressTextEl);bar.currentNodeId='12';w.document.body.append(bar);
@@ -13,7 +13,7 @@ const flush=()=>new Promise(r=>setImmediate(r));
  assert(!w.document.querySelector('.mmx-stage-progress'),'No separate loading UI');
  send({node:'12',active:true,index:2,total:4,label:'Text encoder · loading as needed',clip_id:'two'});
  assert(bar.progressTextEl.textContent.includes('(1) 91%'));
- assert(bar.progressTextEl.textContent.includes('Clip 2/4'));assert(bar.progressTextEl.textContent.includes('Text encoder'));
+ assert(bar.progressTextEl.textContent.includes('Opening fight'));assert(!bar.progressTextEl.textContent.includes('Clip 2/4'));assert(bar.progressTextEl.textContent.includes('Text encoder'));
  bar.progressTextEl.textContent='(1) 92% - MiniMax H3 Master Node (25%)';await flush();
  assert(bar.progressTextEl.textContent.includes('(25%)'));assert(bar.progressTextEl.textContent.includes('Text encoder'),'Suffix survives native updates');
  assert.equal(bar.progressTextEl.querySelectorAll('.mmx-stage-detail').length,1);

@@ -27,7 +27,7 @@ export function createStageProgress(client){
         const activeNode=bar.currentNodeId;
         const ours=String(current.node).split(':').at(-1);
         if(bar.currentPromptExecution?.errorDetails || activeNode!=null && String(activeNode).split(':').at(-1)!==ours){detail.remove();return;}
-        const clip=current.index?`Clip ${current.index}${current.total?'/'+current.total:''} · `:'';
+        const clip=current.clipName?`${current.clipName} · `:'';
         const steps=Number.isFinite(current.step)?` · Step ${current.step}/${current.steps}`:'';
         const text=`· ${clip}${current.label}${steps} · ${Math.floor((Date.now()-started)/1000)}s`;
         if(detail.textContent!==text){detail.textContent=text;detail.title=text;}
@@ -39,7 +39,17 @@ export function createStageProgress(client){
         if(!value || typeof value.label!=='string' || !value.node)return;
         if(!value.active){if(current?.node===value.node)clear();return;}
         if(!current || current.node!==value.node || current.label!==value.label || current.clip_id!==value.clip_id)started=Date.now();
-        current=value;draw();timer ||= setInterval(draw,1000);
+        let clipName=value.clip_name || '';
+        if(!clipName && value.clip_id){
+            if(current?.node===value.node && current.clip_id===value.clip_id)clipName=current.clipName || '';
+            if(!clipName)try{
+                const node=app.graph?.getNodeById(String(value.node).split(':').at(-1));
+                const raw=node?.widgets?.find(widget=>widget.name==='timeline_data')?.value;
+                const timeline=typeof raw==='string'?JSON.parse(raw):raw;
+                clipName=timeline?.clips?.find(clip=>String(clip.id)===String(value.clip_id))?.name || '';
+            }catch{}
+        }
+        current={...value,clipName};draw();timer ||= setInterval(draw,1000);
     }
     function executing(event){if(event.detail===null || event.detail?.node===null)clear();}
     client.addEventListener('minimax_director/stage',update);
