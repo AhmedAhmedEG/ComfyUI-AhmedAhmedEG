@@ -4,27 +4,30 @@ import {api} from "../../scripts/api.js";
 // Extend the existing rgthree green bar, without replacing its text, percentages,
 // rendering method or prompt-service state. No standalone progress UI is created.
 function shortStage(label){
-    if(/video\s*vae/i.test(label))return 'VideoVAE';
-    if(/audio\s*vae/i.test(label))return 'AudioVAE';
-    if(/^Text encoder/i.test(label))return 'Text Encoder';
-    if(/^Text conditioning/i.test(label))return 'Conditioning';
-    if(/^Preparing reference /i.test(label))return label.split(' · ')[0].replace('Preparing reference','Reference');
+    if(/video\s*vae/i.test(label))return /decod/i.test(label)?'Decoding Video':'Encoding References';
+    if(/audio\s*vae/i.test(label))return /decod/i.test(label)?'Decoding Audio':'Encoding References';
+    if(/^Text encoder/i.test(label))return 'Text Conditioning';
+    if(/^Text conditioning/i.test(label))return 'Text Conditioning';
+    if(/^Preparing reference /i.test(label))return 'Checking Cache';
     const names={
-        'Reading project and settings':'Project',
-        'Preparing clip and references':'References',
-        'Checking model and asset fingerprints':'Model / Asset Checks',
-        'Preparing H3 model and clip LoRA configuration':'MiniMax H3 / LoRAs',
-        'Preparing H3 model for sampling':'MiniMax H3',
-        'H3 model · loading as needed and initializing sampler':'MiniMax H3',
-        'Preparing latent and sampling noise':'Latent / Noise',
+        'Checking reference cache':'Checking Cache',
+        'Loading cached reference encodings':'Loading References',
+        'Saved clip reused':'Reusing Saved Clip',
+        'Reading project and settings':'Reading Project',
+        'Preparing clip and references':'Checking Cache',
+        'Checking model and asset fingerprints':'Checking Cache',
+        'Preparing H3 model and clip LoRA configuration':'Preparing MiniMax H3',
+        'Preparing H3 model for sampling':'Preparing MiniMax H3',
+        'H3 model · loading as needed and initializing sampler':'Preparing MiniMax H3',
+        'Preparing latent and sampling noise':'Preparing Sampling',
         'Sampling H3':'Sampling',
-        'Refining clip':'Refine',
-        'Decoding generated video and audio':'Decode',
-        'Refining faces':'Face Refine',
+        'Refining clip':'Refining',
+        'Decoding generated video and audio':'Decoding Video / Audio',
+        'Refining faces':'Refining Faces',
         'Clip saved':'Saved',
         'First pass saved — waiting for approval':'Awaiting Approval',
-        'Saving clip latents, audio and frames':'Saving',
-        'Assembling output video and joining audio':'Output',
+        'Saving clip latents, audio and frames':'Saving Clip',
+        'Assembling output video and joining audio':'Assembling Video',
         'Releasing temporary buffers':'Cleanup'
     };
     return names[label] || label.split(' · ')[0];

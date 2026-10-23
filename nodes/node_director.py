@@ -431,28 +431,17 @@ class MiniMaxH3MasterDirector:
         shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
         algorithm_signature = algorithm_provenance(selflift, refine, semantic_bridge) if execution_mode != "Conditioning Guide Output" else []
         if execution_mode != "Conditioning Guide Output":
-            seen_assets=set();prepared_assets=[]
-            for rid,asset in ref_pool.items():
-                identity=asset.get('id',rid)
-                if identity in seen_assets:continue
-                seen_assets.add(identity)
-                if asset.get('file_reference'):
-                    import folder_paths
-                    loaded=load_reference(asset,folder_paths.get_input_directory(),width,height)
-                    file_reference_cache[rid]=loaded
-                    prepared_assets.extend(loaded)
-                elif asset.get('type') in ('image','video','audio') and asset.get('data') is not None:
-                    prepared_assets.append(asset)
-            if prepared_assets:
-                target=next((c for c in clips if not c.get('validated') and not c.get('locked')),clips[0])
-                shot_event(unique_id,project_id,target['id'],'preparing',index=clips.index(target)+1,total=len(clips))
-                record_graph_provenance(kwargs.get('prompt'),unique_id,video_vae=video_vae,audio_vae=audio_vae)
+            # Register cheap stable ownership without reading media. Encoding is
+            # demand-driven by clips, while disconnected inputs can still be pruned.
+            stage('Checking reference cache')
             ref_cache=current_resources().reference_encodes
-            source_keys=[ref_cache.source_key(a['type'],a['data'],a.get('audio')) for a in prepared_assets]
+            owners=set()
+            for rid,asset in ref_pool.items():
+                owner='asset:'+str(asset.get('id',rid))
+                owners.add(owner)
+                ref_cache.register_source(owner,asset.get('type'),asset.get('data'))
             with cache_mgr._lock:
-                ref_cache.configure(cache_mgr.project_dir,source_keys,runtime_signature.get('native_h3','1'),(video_vae,audio_vae))
-            if prepared_assets:
-                executor.prepare_reference_encodes(prepared_assets,width,height,max(float(c.get('duration',duration)) for c in clips),video_vae,audio_vae)
+                ref_cache.configure(cache_mgr.project_dir,owners,runtime_signature.get('native_h3','1'))
         low_carry = None
         previous_av = None
         if latent_checkpoint is not None:
@@ -697,6 +686,7 @@ class MiniMaxH3MasterDirector:
                         file_reference_cache[rid] = load_reference(robj, folder_paths.get_input_directory(), width, height)
                     loaded = file_reference_cache[rid]
                     for entry in loaded:
+                        current_resources().reference_encodes.register_source('asset:'+str(robj.get('id',rid)),entry['type'],entry.get('data'))
                         if entry["type"] == "image": local_imgs.append(entry["data"])
                         elif entry["type"] == "video": local_vids.append(entry["data"])
                         elif entry["type"] == "audio":

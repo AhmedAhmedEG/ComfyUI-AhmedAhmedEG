@@ -44,10 +44,64 @@ class ReferenceEncodeCache:
         self.owner = None
         self.active = set()
         self.vae_identities = {}
+        self.sources = {}
+        self.preparations = {}
+        self.capture = None
 
     def source_key(self, kind, data, audio=None):
         digest=_input_key((kind,data,audio),hashlib.sha256())
         return digest.hexdigest()
+
+    def register_source(self, owner, kind, data):
+        if data is not None:self.sources[(kind,id(data))]=(data,owner)
+
+    def source_owner(self,kind,data):
+        row=self.sources.get((kind,id(data)))
+        return row[1] if row is not None and row[0] is data else None
+
+    def preparation_key(self,asset,width,height,duration,ref_size,vaes):
+        payload=(self.signature,self.source_key(asset['type'],asset['data'],asset.get('audio')),
+                 width,height,duration,ref_size,[self._vae_identity(v) for v in vaes if v is not None])
+        return hashlib.sha256(repr(payload).encode()).hexdigest()
+
+    def preparation_ready(self,key,owner=None):
+        tokens=self.preparations.get(key)
+        ready=isinstance(tokens,list) and bool(tokens) and all(token in self.index and
+            (self.folder/(token+'.safetensors')).is_file() and not (self.folder/(token+'.safetensors')).is_symlink()
+            for token in tokens if isinstance(token,str)) and all(isinstance(t,str) for t in tokens)
+        from .stage_progress import cache_event
+        cache_event('Reference preparation','hit' if ready else 'miss')
+        if ready and owner in self.active:
+            changed=False
+            for token in tokens:
+                if owner not in self.index[token]['owners']:
+                    self.index[token]['owners'].append(owner);changed=True
+            if changed:self._save_index()
+        return ready
+
+    @contextmanager
+    def preparing(self,key):
+        old=self.capture;self.capture=[]
+        try:
+            yield
+            if self.capture and all(token in self.index for token in self.capture):
+                self.preparations.pop(key,None);self.preparations[key]=list(self.capture)
+                while len(self.preparations)>128:self.preparations.pop(next(iter(self.preparations)))
+                self._save_preparations()
+        finally:self.capture=old
+
+    def _save_preparations(self):
+        target=self.folder/'preparations.json'
+        payload=json.dumps(self.preparations)
+        try:
+            if target.is_file() and target.read_text(encoding='utf-8')==payload:return
+        except OSError:pass
+        fd,path=tempfile.mkstemp(dir=self.folder,suffix='.tmp')
+        try:
+            with os.fdopen(fd,'w',encoding='utf-8') as out:out.write(payload)
+            os.replace(path,target)
+        finally:
+            if os.path.exists(path):os.unlink(path)
 
     def configure(self, project_dir, sources, signature='1', vaes=()):
         self.folder=Path(project_dir)/'reference_latents'
@@ -67,12 +121,22 @@ class ReferenceEncodeCache:
         # Delete only our content-addressed safetensors, never original inputs.
         for path in self.folder.iterdir():
             if re.fullmatch(r'[0-9a-f]{64}\.safetensors',path.name) and path.stem not in self.index and not path.is_symlink(): path.unlink(missing_ok=True)
+        try:self.preparations=json.loads((self.folder/'preparations.json').read_text(encoding='utf-8'))
+        except (OSError,ValueError):self.preparations={}
+        if not isinstance(self.preparations,dict):self.preparations={}
+        self.preparations={key:tokens for key,tokens in self.preparations.items() if isinstance(tokens,list)
+            and tokens and all(isinstance(t,str) and t in self.index for t in tokens)}
 
     def _save_index(self):
+        target=self.folder/'index.json'
+        payload=json.dumps(self.index)
+        try:
+            if target.is_file() and target.read_text(encoding='utf-8')==payload:return
+        except OSError:pass
         fd,path=tempfile.mkstemp(dir=self.folder,suffix='.tmp')
         try:
-            with os.fdopen(fd,'w',encoding='utf-8') as out:json.dump(self.index,out)
-            os.replace(path,self.folder/'index.json')
+            with os.fdopen(fd,'w',encoding='utf-8') as out:out.write(payload)
+            os.replace(path,target)
         finally:
             if os.path.exists(path):os.unlink(path)
 
@@ -114,6 +178,9 @@ class ReferenceEncodeCache:
             return vae.encode(*args, **kwargs)
         key = (self._vae_identity(vae), digest.hexdigest())
         token=hashlib.sha256(repr((getattr(self,'signature','1'),key)).encode()).hexdigest()
+        owners=set(self.index.get(token,{}).get('owners',[])) & self.active
+        if self.owner:owners.add(self.owner)
+        if self.capture is not None:self.capture.append(token)
         if key in self.entries:
             from .stage_progress import cache_event
             cache_event('Reference latents','hit')
@@ -125,6 +192,8 @@ class ReferenceEncodeCache:
         path=self.folder/(token+'.safetensors') if self.folder else None
         if path and token in self.index and path.is_file() and not path.is_symlink():
             try:
+                from .stage_progress import stage
+                stage('Loading cached reference encodings')
                 from .refmod import load_reference_latent
                 data,meta=load_reference_latent(str(path))
                 if meta.get('cache_key')!=token:raise ValueError('Mismatched reference cache entry')
@@ -146,12 +215,12 @@ class ReferenceEncodeCache:
         result = vae.encode(*args, **kwargs)
         if isinstance(result, torch.Tensor):
             self._retain(key,result,result.device)
-            if path and self.owner:
+            if path and owners:
                 from .refmod import save_reference_latent
                 meta={'kind':'audio' if result.ndim<5 else 'image' if result.shape[2]==1 else 'video',
                       'cache_key':token,'native_encode_shape':list(result.shape)}
                 save_reference_latent(str(path),result,meta)
-                self.index[token]={'owners':sorted({self.owner,*self.index.get(token,{}).get('owners',[])}),
+                self.index[token]={'owners':sorted(owners),
                                    'signature':self.signature,'vae':self._vae_identity(vae)}
                 self._save_index()
         return result
@@ -164,7 +233,7 @@ class ReferenceEncodeCache:
         self.entries[key]=(result.detach().cpu().clone(),device);self.bytes+=size
 
     def clear(self):
-        self.entries.clear(); self.proxies.clear(); self.bytes = 0
+        self.entries.clear(); self.proxies.clear(); self.sources.clear(); self.bytes = 0
 
 
 class _ReferenceVAE:

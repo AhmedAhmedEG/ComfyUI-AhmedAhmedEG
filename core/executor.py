@@ -83,17 +83,20 @@ class MasterDirectorExecutor:
         owner=current_resources()
         if owner is None:return
         cache=owner.reference_encodes
+        if cache.folder is None:return
         native=get_native_h3_node('MiniMaxH3ReferenceToVideo')
         class ReferencePresentation:
             _mmx_reference_prefill=True
             def tokenize(self,*args,**kwargs):return None
             def encode_from_tokens_scheduled(self,tokens):return [[torch.zeros((1,1,1)),{}]]
         for index, asset in enumerate(assets):
-            stage(f'Preparing reference {index+1}/{len(assets)} · checking encoded cache')
+            stage('Checking reference cache')
             kind=asset.get('type');data=asset.get('data')
             if kind not in ('image','video','audio') or data is None:continue
-            token=cache.source_key(kind,data,asset.get('audio'))
-            with cache.asset(token):
+            request=cache.preparation_key(asset,width,height,duration,ref_image_size,(vae,audio_vae))
+            token=cache.source_owner(kind,data)
+            if cache.preparation_ready(request,token):continue
+            with cache.asset(token),cache.preparing(request):
                 # Use native preparation, sizes, trimming, and VAE transforms.
                 # The stub avoids running Qwen or conditioning any real clip.
                 native.execute(clip=ReferencePresentation(),prompt='',width=width,height=height,

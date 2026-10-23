@@ -12,14 +12,15 @@ from .provenance import file_provenance
 from .stage_progress import cache_event
 
 
-def supported(value):
+def supported(value,key=False,path='inputs'):
     import torch
     if isinstance(value,torch.Tensor) or value is None or isinstance(value,(str,int,float,bool)):return
+    if key and isinstance(value,(torch.dtype,torch.device)):return
     if isinstance(value,dict):
-        for key,item in value.items():supported(key);supported(item)
+        for name,item in value.items():supported(name,key,path);supported(item,key,path+'.'+str(name))
     elif isinstance(value,(list,tuple)):
-        for item in value:supported(item)
-    else:raise TypeError('Unsupported conditioning data')
+        for index,item in enumerate(value):supported(item,key,path+'['+str(index)+']')
+    else:raise TypeError('Unsupported '+type(value).__name__+' at '+path)
 
 
 def cpu_copy(value):
@@ -35,7 +36,9 @@ def cpu_copy(value):
 def framed_key(value,digest):
     """Frame nesting as well as values so different token structures cannot alias."""
     import torch
-    if isinstance(value,dict):
+    if isinstance(value,(torch.dtype,torch.device)):
+        digest.update((type(value).__name__+':'+str(value)+'\0').encode())
+    elif isinstance(value,dict):
         digest.update(f'dict:{len(value)}:'.encode())
         for key in sorted(value,key=lambda item:(type(item).__name__,repr(item))):
             digest=framed_key(key,digest);digest=framed_key(value[key],digest)
@@ -60,7 +63,9 @@ class TextConditioningCache:
             raise TypeError('Scheduled hooks require live encoding')
         options={key:getattr(encoder,key,None) for key in ('layer_idx','use_clip_schedule','tokenizer_options')}
         options['patcher']={key:getattr(patcher,key,None) for key in ('patches','object_patches','model_options')}
-        supported((args,kwargs,options))
+        if getattr(encoder,'apply_hooks_to_conds',None) is not None:
+            raise TypeError('Conditioning hooks require live encoding')
+        supported((args,kwargs,options),key=True)
         sources=set()
         for value in (encoder,getattr(encoder,'cond_stage_model',None)):
             if value is None:continue
@@ -75,8 +80,10 @@ class TextConditioningCache:
     def encode(self,encoder,args,kwargs):
         import torch
         try:key=self.key(encoder,args,kwargs)
-        except (TypeError,ValueError,OSError,RuntimeError):
+        except (TypeError,ValueError,OSError,RuntimeError) as error:
             cache_event('Text conditioning','bypass')
+            from .stage_progress import cache_reason
+            cache_reason('Text conditioning',str(error))
             return encoder.encode_from_tokens_scheduled(*args,**kwargs)
         if self.folder.is_symlink():raise ValueError('Conditioning cache must stay inside its project')
         path=self.folder/(key+'.pt')

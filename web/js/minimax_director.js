@@ -2101,7 +2101,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-clip-vid-cell video { width:100%;height:100%;object-fit:contain; background:#151515; }
 .mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block, .mmx-director-root .mmx-aud-block { height:52px; }
 .mmx-cache-button{font-size:9px;padding:1px 4px;border:1px solid #516779;border-radius:4px;background:#25343e;color:#a8d7cc;white-space:nowrap;cursor:pointer}
-.mmx-cache-dialog{background:#222b32;color:#e1e8ee;border:1px solid #556573;border-radius:8px;padding:18px;max-width:560px;font:13px system-ui}
+.mmx-cache-dialog{background:#222b32;color:#e1e8ee;border:1px solid #556573;border-radius:8px;padding:18px;max-width:560px;max-height:80vh;overflow:auto;font:13px system-ui}
 .mmx-cache-dialog table{border-collapse:collapse;width:100%;margin:12px 0}.mmx-cache-dialog td,.mmx-cache-dialog th{padding:6px 10px;text-align:left;border-bottom:1px solid #ffffff18}.mmx-cache-dialog p{font-size:11px;color:#a9b7c4;max-width:480px}
 .mmx-director-root .mmx-clip-img-cell .mmx-ref-type-label { display:none; }
 
@@ -3927,15 +3927,47 @@ function mountDirectorUI(node) {
           e.stopPropagation();node.__mmxCacheDialog?.remove();
           const dialog=document.createElement('dialog');dialog.className='mmx-cache-dialog';node.__mmxCacheDialog=dialog;
           const heading=document.createElement('strong');heading.textContent=`${clip.name || 'Clip'} · Cache report`;dialog.append(heading);
-          const tableFor=(rows,title)=>{
-            if(!Object.keys(rows || {}).length)return;
-            const label=document.createElement('h4');label.textContent=title;dialog.append(label);
-            const table=document.createElement('table');const head=document.createElement('tr');
-            for(const text of ['Cache','Reused','Built / Read','Bypassed']){const cell=document.createElement('th');cell.textContent=text;head.append(cell);}table.append(head);
-            for(const [name,count] of Object.entries(rows)){const row=document.createElement('tr');for(const text of [name,count.hit || 0,count.miss || 0,count.bypass || 0]){const cell=document.createElement('td');cell.textContent=String(text);row.append(cell);}table.append(row);}dialog.append(table);
+          const explanations={
+            'Reference preparation':['Reference preparation','Checks whether the same references and encoding settings were prepared before. Reuse skips the extra preparation pass.'],
+            'Reference latents':['Encoded references','Images, video and audio converted into model inputs. Reuse avoids running the VAE again.'],
+            'Saved clip':['Generated clip','The saved generation for this timeline clip. Approval controls whether it can be reused.'],
+            'Text conditioning':['Prompt understanding','The text encoder’s interpretation of your prompt and visual references. Reuse avoids encoding them again.'],
+            'Model setup':['Model configuration','The selected model’s LoRA and sampling configuration. This does not store another copy of the model.'],
+            'LoRA weights':['LoRA files','Recently used adapter weights kept in a bounded CPU cache.']
           };
-          tableFor(clip.cache_report.stats,'This clip');tableFor(clip.cache_report.run_preparation,'Shared run preparation');
-          const note=document.createElement('p');note.textContent='Counts describe cache lookups in the reported run. Bypassed means a fresh check was required. Model setup reuse does not guarantee that weights stayed in VRAM. No entry means that cache was not consulted.';dialog.append(note);
+          const report=clip.cache_report;
+          const describe=(name,count)=>{
+            const messages=[];
+            if(count.hit)messages.push(name==='Saved clip'?'Reused the saved generation':'Reused saved data');
+            if(count.miss)messages.push(name==='Saved clip'?'Needed a new generation':'Prepared fresh');
+            if(count.bypass)messages.push('Calculated fresh; reuse was unavailable');
+            return messages.join(' · ');
+          };
+          const intro=document.createElement('p');intro.textContent='Results from this clip’s latest run. Reuse can come from earlier runs, including runs before the Cache button was added. Counts are lookups, not numbers of assets.';dialog.append(intro);
+          const tableFor=(rows,title)=>{
+            const visible=Object.entries(rows || {}).filter(([name])=>explanations[name]);
+            if(!visible.length)return;
+            const label=document.createElement('h4');label.textContent=title;dialog.append(label);
+            for(const [name,count] of visible){
+              const row=document.createElement('div');row.style.cssText='margin:12px 0';
+              const heading=document.createElement('strong');heading.textContent=explanations[name][0];row.append(heading);
+              const outcome=document.createElement('div');outcome.textContent=describe(name,count);row.append(outcome);
+              const help=document.createElement('p');help.style.margin='4px 0';help.textContent=explanations[name][1];row.append(help);dialog.append(row);
+            }
+          };
+          tableFor(report.stats,'This clip');tableFor(report.run_preparation,'Shared run preparation');
+          const technical=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Technical checks and lookup counts';technical.append(summary);
+          const why=document.createElement('p');why.textContent='File fingerprints are small saved identity hashes. Tensor fingerprints check in-memory data; when a tensor has no reliable change counter it must be read again. These checks do not cache additional copies of your media.';technical.append(why);
+          for(const [scope,rows] of [['This clip',report.stats],['Shared run preparation',report.run_preparation]]){
+            if(!Object.keys(rows || {}).length)continue;
+            const label=document.createElement('h4');label.textContent=scope;technical.append(label);
+            const table=document.createElement('table'),head=document.createElement('tr');
+            for(const text of ['Cache / Check','Reused','Fresh','Not reusable']){const cell=document.createElement('th');cell.textContent=text;head.append(cell);}table.append(head);
+            for(const [name,count] of Object.entries(rows)){const row=document.createElement('tr');for(const text of [name,count.hit || 0,count.miss || 0,count.bypass || 0]){const cell=document.createElement('td');cell.textContent=String(text);row.append(cell);}table.append(row);}technical.append(table);
+          }
+          for(const [name,reason] of Object.entries(report.reasons || {})){const text=document.createElement('p');text.textContent=`${name}: ${reason}`;technical.append(text);}
+          dialog.append(technical);
+          const note=document.createElement('p');note.textContent='Model configuration reuse does not guarantee that weights stayed in VRAM. Missing rows mean that part of the cache was not consulted.';dialog.append(note);
           const close=document.createElement('button');close.textContent='Close';close.onclick=()=>dialog.remove();dialog.append(close);
           dialog.onclose=()=>dialog.remove();document.body.append(dialog);if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
         };shotTopBar.append(cache);

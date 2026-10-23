@@ -27,6 +27,7 @@ class StageProgress:
         self.cache_stats={}
         self.cache_revision=0
         self.cache_updated=0
+        self.cache_reasons={}
 
     def report(self, label, *, step=None, steps=None, active=True):
         if self.node is None:
@@ -55,7 +56,13 @@ def cache_report():
     if reporter is None:return None
     return {'run_id':reporter.run_id,'revision':reporter.cache_revision,'updated_at':reporter.cache_updated,
         'stats':{name:dict(row) for name,row in reporter.cache_stats.get(reporter.clip,{}).items()},
-        'run_preparation':{name:dict(row) for name,row in reporter.cache_stats.get('',{}).items()}}
+        'run_preparation':{name:dict(row) for name,row in reporter.cache_stats.get('',{}).items()},
+        'reasons':dict(reporter.cache_reasons.get(reporter.clip,{}))}
+
+
+def cache_reason(name,reason):
+    reporter=_current.get()
+    if reporter is not None:reporter.cache_reasons.setdefault(reporter.clip,{})[name]=reason[:300]
 
 
 def cache_clip(clip_id,index,total):

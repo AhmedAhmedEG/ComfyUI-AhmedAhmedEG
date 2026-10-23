@@ -76,6 +76,15 @@ class TextConditioningTests(unittest.TestCase):
         self.assertNotEqual(self.cache.key(self.encoder,({'x':[]},),{}),
                             self.cache.key(self.encoder,(['x'],),{}))
 
+    def test_native_dtype_and_device_options_are_cacheable(self):
+        self.encoder.patcher.model_options={'model_compute_dtype':torch.float32,'device':torch.device('cpu')}
+        self.cache.encode(self.encoder,({'text':'same'},),{})
+        self.cache.encode(self.encoder,({'text':'same'},),{})
+        self.assertEqual(self.encoder.calls,1)
+        self.encoder.patcher.model_options['model_compute_dtype']=torch.float16
+        self.cache.encode(self.encoder,({'text':'same'},),{})
+        self.assertEqual(self.encoder.calls,2)
+
     def test_corrupt_files_recompute_and_entry_limit(self):
         self.cache.limit_entries=2
         args=({'text':'a'},)

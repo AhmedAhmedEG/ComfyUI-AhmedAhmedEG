@@ -117,6 +117,9 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   cacheButton.click();const cacheDialog=w.document.querySelector('.mmx-cache-dialog');
   assert(cacheDialog.textContent.includes('Text conditioning'));assert(cacheDialog.textContent.includes('File fingerprints'));
   assert(cacheDialog.textContent.includes('does not guarantee'));
+  assert(cacheDialog.textContent.includes('Prompt understanding'),'Cache report explains what the cached data means');
+  assert(cacheDialog.textContent.includes('Counts are lookups'));
+  assert.strictEqual(cacheDialog.querySelector('details').open,false,'Technical counters are collapsed by default');
   assert.equal(JSON.parse(timeline.value).clips[0].cache_report.run_id,'cache-test','Report persists with timeline state');
   cacheDialog.querySelector('button').click();assert(!w.document.querySelector('.mmx-cache-dialog'));
   const writingPanel=w.document.querySelector('.mmx-edit-main');

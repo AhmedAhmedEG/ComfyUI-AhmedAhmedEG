@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 import torch
 from safetensors import safe_open
@@ -78,5 +79,48 @@ class ReferenceCacheTests(unittest.TestCase):
         cache,key=self.cache(limit=4)
         self.assertTrue(torch.equal(self.encode(cache,key),expected))
         self.assertEqual(self.vae.calls,2)
+
+    def test_preparation_record_skips_native_prepass_after_restart(self):
+        from core.executor import MasterDirectorExecutor
+        from core.run_resources import _current
+        cache=ReferenceEncodeCache();cache.register_source('asset:one','image',self.data)
+        cache.configure(self.root,['asset:one'],'native-v1',[self.vae])
+        calls=[]
+        class Native:
+            @staticmethod
+            def execute(**options):
+                calls.append(options)
+                options['vae'].encode(options['ref_images']['ref_image_1']+1)
+        executor=MasterDirectorExecutor.__new__(MasterDirectorExecutor)
+        asset={'type':'image','data':self.data}
+        def prepare(cache,duration=1,ref_size='match'):
+            token=_current.set(SimpleNamespace(reference_encodes=cache))
+            try:
+                with patch('core.executor.get_native_h3_node',return_value=Native):
+                    executor.prepare_reference_encodes([asset],32,32,duration,self.vae,None,ref_size)
+            finally:_current.reset(token)
+        prepare(cache);self.assertEqual(len(calls),1)
+        cache=ReferenceEncodeCache();cache.register_source('asset:one','image',self.data)
+        cache.configure(self.root,['asset:one'],'native-v1',[self.vae])
+        prepare(cache);self.assertEqual(len(calls),1,'Warm run skips native prepass')
+        prepare(cache,duration=2);self.assertEqual(len(calls),2,'Duration participates in native preparation')
+        self.data.add_(1)
+        prepare(cache);self.assertEqual(len(calls),3,'Changed input cannot reuse a preparation record')
+        path=next((self.root/'reference_latents').glob('*.safetensors'));path.unlink()
+        self.assertFalse(cache.preparation_ready(next(iter(cache.preparations))))
+
+    def test_unchanged_index_is_not_rewritten(self):
+        cache,key=self.cache();self.encode(cache,key)
+        path=self.root/'reference_latents'/'index.json';before=path.stat().st_mtime_ns
+        cache.configure(self.root,[key],'native-v1',[self.vae])
+        self.assertEqual(path.stat().st_mtime_ns,before)
+
+    def test_stable_owner_prunes_disconnected_inputs_without_reading_tensors(self):
+        cache=ReferenceEncodeCache();cache.configure(self.root,['asset:one'],'native-v1',[self.vae])
+        with cache.asset('asset:one'):cache.wrap(self.vae).encode(self.data)
+        with patch('core.reference_cache._input_key',side_effect=AssertionError('No media hashing during cleanup')):
+            cache.configure(self.root,[],'native-v1',[self.vae])
+        self.assertEqual(cache.index,{})
+        self.assertFalse(list((self.root/'reference_latents').glob('*.safetensors')))
 
 if __name__=='__main__':unittest.main()

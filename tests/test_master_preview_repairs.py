@@ -26,6 +26,13 @@ def master():
 
 
 class MasterPreviewRepairs(unittest.TestCase):
+    def test_unused_pool_assets_are_not_hashed_or_prepared_on_startup(self):
+        with master() as case:
+            from core.reference_cache import ReferenceEncodeCache
+            refs={'refs':[{'id':'unused','type':'video','data':torch.zeros((5,16,16,3))}]}
+            with patch.object(ReferenceEncodeCache,'source_key',side_effect=AssertionError('Unused source was scanned')):
+                case.execute([{'id':'one','type':'T2V','duration':1}],ref_pack=refs)
+
     def test_first_pass_approval_is_bound_to_the_reviewed_draft(self):
         with master() as case:
             options={'enabled':True,'mode':'refine','confirm_first_pass':True,'skip_fl2v':False}
