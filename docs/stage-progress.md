@@ -1,8 +1,9 @@
 # Master execution status
 
-A slim status strip at the top of ComfyUI shows the Master clip number, current
-operation and time spent in that operation. Native sampler percentages and live
-previews continue to work. No extra node or setting is required.
+The existing green rgthree progress bar shows the Master clip number, current
+operation and time spent in that operation beside its original text. Native
+percentages and live previews continue to work. No separate status strip, extra
+node or setting is added. If rgthree's bar is absent, no replacement UI is created.
 
 Updates cover project/settings, reference-cache checks, uncached reference VAE
 encoding, model/asset fingerprints, prompt tokenization and text encoding, LoRA
