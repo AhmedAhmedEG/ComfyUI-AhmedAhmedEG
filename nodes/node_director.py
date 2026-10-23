@@ -538,7 +538,12 @@ class MiniMaxH3MasterDirector:
                 continue
 
             if not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
-                shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1, total=len(clips))
+                invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length)
+                if invalidated:
+                    cache_mgr.discard_clip_results(invalidated)
+                    clear_dependent_approvals(invalidated)
+                shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1,
+                    total=len(clips), invalidated_clip_ids=invalidated)
             # Content hashing can read tens of gigabytes on the first run.
             # Announce the active clip first, and never hash loader weights just
             # to replay an approved take or pass through source footage.

@@ -9,6 +9,22 @@ Times = namedtuple('Times', 'user idle iowait guest')
 
 
 class HardwareMonitorTests(unittest.TestCase):
+    def test_model_registry_shares_sample_cache_and_failure_is_isolated(self):
+        now, reads = [0.], []
+        def models():
+            reads.append(1)
+            if len(reads) > 1: raise RuntimeError('Registry changed')
+            return {'available': True, 'models': [{'name': 'MiniMaxH3'}]}
+        monitor = HardwareMonitor(lambda: [], lambda: Times(1, 1, 0, 0),
+                                  lambda: now[0], model_reader=models)
+        first = monitor.snapshot()
+        self.assertEqual(first['retained_models']['models'][0]['name'], 'MiniMaxH3')
+        self.assertGreater(first['process_memory']['rss_bytes'], 0)
+        self.assertIs(first, monitor.snapshot())
+        self.assertEqual(len(reads), 1)
+        now[0] = 3
+        self.assertFalse(monitor.snapshot()['retained_models']['available'])
+
     def test_cpu_deltas_shared_cache_and_idle_resume(self):
         now=[0.];ticks=iter([Times(100,100,0,10),Times(120,110,0,10),Times(160,120,0,10)])
         reads=[]

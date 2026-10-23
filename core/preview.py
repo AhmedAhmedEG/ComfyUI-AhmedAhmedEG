@@ -90,6 +90,8 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         rows = [max(rows, key=lambda row: row["updated_at"])] if rows else []
     if not rows:
         return {"found": False, "scope": scope, "run_active": live is not None,
+                "project_id": manager.project_id, "stream": stream,
+                "invalidated_clip_ids": manager._manifest.get('invalidated_clips', []),
                 "label": "No completed clips yet. Generate a shot first."}
     # Trim a predecessor's handoff only when its immediate successor is present.
     for left, right in zip(rows, rows[1:]):

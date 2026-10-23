@@ -7,6 +7,8 @@ w.setTimeout=(fn,delay)=>{jobs.set(++timerId,{fn,delay});return timerId;};w.clea
 Object.defineProperty(w.document,'hidden',{configurable:true,value:false});
 w.app={registerExtension:e=>extension=e};
 const sample={cpu_percent:43,gpus:[{id:'one',name:'NVIDIA GeForce RTX 4090',percent:89,shared_memory_used:3*1073741824,shared_memory_total:100*1073741824,memory_used:10*1073741824,memory_total:24*1073741824},{id:'two',name:'Second GPU',percent:12,memory_used:1073741824,memory_total:8*1073741824}]};
+sample.retained_models={available:true,models:[{name:'MiniMaxH3',device:'cuda:0',dynamic:true,model_bytes:20*1073741824,device_bytes:2*1073741824,host_buffer_bytes:18*1073741824,pinned_bytes:10*1073741824}]};
+sample.process_memory={rss_bytes:37*1073741824,swap_bytes:4*1073741824};
 w.api={fetchApi:async(path,options)=>{assert.equal(path,'/minimax_director/hardware');calls++;if(reject)throw Error('offline');if(pending)return new Promise(resolve=>{resolveRequest=resolve;});return {ok:true,json:async()=>sample};}};
 w.eval(fs.readFileSync('web/js/minimax_hardware_monitor.js','utf8').replace(/^import .*;\r?\n/gm,'').replace('export function','function'));
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -14,6 +16,10 @@ const tick=async()=>{const task=[...jobs.entries()].find(([id,j])=>j.delay===200
 (async()=>{
   extension.setup();await flush();const root=w.document.querySelector('.mmx-hardware');
   assert(root.textContent.includes('3.0 / 100.0 GiB'));assert(root.textContent.includes('43%'));assert(root.textContent.includes('10.0 / 24.0 GiB'));assert.equal(root.dataset.state,'live');
+  assert(root.textContent.includes('Retained models · 1'));assert(root.textContent.includes('MiniMaxH3'));assert(root.textContent.includes('18.00 GiB'));assert(root.textContent.includes('Process RAM 37.00 GiB · Swap 4.00 GiB'));
+  root.querySelector('details').open=true;
+  sample.retained_models.models=[];await tick();assert(root.textContent.includes('No models in ComfyUI'));assert(!root.textContent.includes('MiniMaxH3'));assert(root.querySelector('details').open,'Polling preserves expanded state');
+  sample.retained_models={available:false,models:[]};await tick();assert(root.textContent.includes('Retained models · unavailable'));
   const selector=root.querySelector('select');assert(!selector.hidden);selector.value='two';selector.onchange();assert(root.textContent.includes('1.0 / 8.0 GiB'));
   const handle=root.querySelector('.mmx-hardware-drag');const oldX=parseFloat(root.style.left);handle.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(parseFloat(root.style.left),oldX-10);
   root.getBoundingClientRect=()=>({width:root.dataset.minimized==='true'?150:264,height:root.dataset.minimized==='true'?36:230});

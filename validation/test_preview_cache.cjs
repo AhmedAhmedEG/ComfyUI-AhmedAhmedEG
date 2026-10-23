@@ -4,7 +4,7 @@ const dom=new JSDOM('',{url:'http://localhost/',runScripts:'outside-only'}),w=do
 const stored=new Map();let downloads=0,fail=false,lastOptions;
 const response=key=>({ok:true,headers:{get:()=> '100'},blob:async()=>({size:100,key}),clone(){return response(key);}});
 w.caches={open:async()=>({match:async k=>stored.get(String(k)),put:async(k,r)=>stored.set(String(k),r),keys:async()=>[...stored.keys()],delete:async k=>stored.delete(String(k))})};
-w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function')+'\nglobalThis.fetchPreview=bufferedPreview;globalThis.clearSession=()=>previewMedia.clear();globalThis.evictPreviewForTest=evictPreview;globalThis.rememberForTest=rememberPreview;');
+w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function')+'\nglobalThis.fetchPreview=bufferedPreview;globalThis.clearSession=()=>previewMedia.clear();globalThis.evictPreviewForTest=evictPreview;globalThis.rememberForTest=rememberPreview;globalThis.discardForTest=discardInvalidatedPreviews;');
 const api={apiURL:p=>'http://localhost'+p,fetchApi:async (p,options)=>{lastOptions=options;downloads++;if(fail)throw Error('offline');return response(p);}};
 (async()=>{
   await Promise.all([w.fetchPreview(api,'/one'),w.fetchPreview(api,'/one')]);
@@ -33,6 +33,12 @@ const api={apiURL:p=>'http://localhost'+p,fetchApi:async (p,options)=>{lastOptio
   await w.rememberForTest(api,'/dependent-draft',{project_id:'chain',stream:'first_pass',clip_generations:{two:'draft'}});
   await w.rememberForTest(api,'/new-parent',{project_id:'chain',stream:'final',clip_generations:{one:'new'},invalidated_clip_ids:['two']});
   assert(!stored.has('http://localhost/dependent-final') && !stored.has('http://localhost/dependent-draft'),'Parent replacement evicts dependent browser media across stages');
+  await w.fetchPreview(api,'/stale-chain');await w.fetchPreview(api,'/independent');
+  await w.rememberForTest(api,'/stale-chain',{project_id:'restart',stream:'final',clip_generations:{two:'old'}});
+  await w.rememberForTest(api,'/independent',{project_id:'restart',stream:'final',clip_generations:{three:'old'}});
+  await w.discardForTest({project_id:'restart',invalidated_clip_ids:['two']});
+  assert(!stored.has('http://localhost/stale-chain'),'Regeneration start evicts dependencies before any replacement exists');
+  assert(stored.has('http://localhost/independent'),'Independent clips remain buffered');
   for(let i=0;i<35;i++)await w.fetchPreview(api,'/take'+i);
   assert.equal(stored.size,32,'Persistent cache has a bounded take count');
   dom.window.close();console.log('Preview cache passed: shared downloads, persistent reuse, failure recovery, bounded storage.');

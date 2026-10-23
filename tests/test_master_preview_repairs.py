@@ -26,6 +26,28 @@ def master():
 
 
 class MasterPreviewRepairs(unittest.TestCase):
+    def test_unvalidated_dependents_deleted_before_parent_sampling_even_if_sampling_fails(self):
+        with master() as case:
+            shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},
+                   {'id':'two','type':'T2V','duration':1,'continuity_mode':'Motion Context (Chained)',
+                    'context_length':5,'audio_context_length':5},
+                   {'id':'three','type':'T2V','duration':1,'continuity':False}]
+            state=json.loads(case.execute(shots)[-1])
+            for shot in state['clips']: shot['validated']=False
+            manager=ProjectCacheManager('regression',case.temp.name)
+            old=manager._manifest['clips']['two']['generation']
+            def fail(*args, **kwargs):
+                current=ProjectCacheManager('regression',case.temp.name)
+                self.assertNotIn('two', current._manifest['clips'])
+                self.assertIn('one', current._manifest['clips'])
+                self.assertIn('three', current._manifest['clips'])
+                self.assertFalse(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+                raise RuntimeError('Intentional sampler failure')
+            with patch('comfy.sample.sample', side_effect=fail):
+                with self.assertRaisesRegex(RuntimeError,'Intentional sampler failure'):
+                    case.execute(timeline_data=json.dumps(state),
+                        config={'project_id':'regression','run_mode':'clip_by_clip'})
+
     def test_replacing_parent_removes_dependent_cache_and_approval_before_reuse(self):
         with master() as case:
             shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},

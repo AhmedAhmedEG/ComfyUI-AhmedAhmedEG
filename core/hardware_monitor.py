@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import psutil
+from .model_telemetry import retained_models
 
 
 def number(value):
@@ -63,7 +64,8 @@ def attach_shared_memory(devices, rows):
 
 class HardwareMonitor:
     def __init__(self, gpu_reader=nvidia_stats, cpu_reader=psutil.cpu_times,
-                 clock=time.monotonic, wall_clock=time.time, shared_reader=shared_gpu_stats):
+                 clock=time.monotonic, wall_clock=time.time, shared_reader=shared_gpu_stats,
+                 model_reader=retained_models):
         self.gpu_reader, self.cpu_reader = gpu_reader, cpu_reader
         self.clock, self.wall_clock = clock, wall_clock
         self.lock = threading.Lock()
@@ -73,6 +75,7 @@ class HardwareMonitor:
         self.retry_gpu_at = -math.inf
         self.shared_reader = shared_reader
         self.retry_shared_at = -math.inf
+        self.model_reader = model_reader
 
     def snapshot(self):
         with self.lock:
@@ -115,6 +118,22 @@ class HardwareMonitor:
             self.sampled_at = now
             self.cached = {'sampled_at': self.wall_clock(), 'cpu_percent': cpu,
                 'cpu_scope': 'server_host', 'gpus': devices, 'gpu_error': gpu_error}
+            try:
+                self.cached['retained_models'] = self.model_reader()
+            except Exception:
+                self.cached['retained_models'] = {'available': False, 'models': []}
+            try:
+                memory = psutil.Process().memory_info()
+                self.cached['process_memory'] = {'rss_bytes': memory.rss,
+                    'swap_bytes': getattr(memory, 'swap', None)}
+                # Linux exposes swap in the process status, not memory_info().
+                if sys.platform.startswith('linux'):
+                    for line in Path('/proc/self/status').read_text().splitlines():
+                        if line.startswith('VmSwap:'):
+                            self.cached['process_memory']['swap_bytes'] = int(line.split()[1]) * 1024
+                            break
+            except (OSError, ValueError, psutil.Error):
+                pass
             return self.cached
 
 

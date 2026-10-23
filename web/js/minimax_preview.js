@@ -10,6 +10,20 @@ const MEDIA_LIMIT = 256 * 1024 * 1024;
 let legacyCacheCleared;
 const revisionStorage = 'minimax-preview-revisions-v2';
 let revisionUpdates = Promise.resolve();
+function discardInvalidatedPreviews(info) {
+  const invalidated=new Set(info.invalidated_clip_ids || []);
+  if(!invalidated.size)return Promise.resolve();
+  const update=revisionUpdates.then(async()=>{
+    let revisions={};
+    try{revisions=JSON.parse(globalThis.localStorage?.getItem(revisionStorage) || '{}');}catch{}
+    for(const [url,entry] of Object.entries(revisions)){
+      if(entry.project!==info.project_id || !Object.keys(entry.generations || {}).some(clip=>invalidated.has(clip)))continue;
+      await evictPreview(url);delete revisions[url];
+    }
+    try{globalThis.localStorage?.setItem(revisionStorage,JSON.stringify(revisions));}catch{}
+  });
+  revisionUpdates=update.catch(()=>{});return update;
+}
 function rememberPreview(api, path, info) {
   // Both scopes/players can finish buffering together. Serialize the shared
   // read/evict/write so one completion cannot lose the other's revision entry.
@@ -170,6 +184,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   let displayedDownload,downloadController,downloadBusy=false;
   const downloadUrls=new Map();
   const setDownload=info=>{displayedDownload={path:`/minimax_director/preview/media?${new URLSearchParams({project_id:info.project_id,key:info.key,download:'1',...(info.cache_read_only?{read_only:'1'}:{})})}`,
+    generations:info.clip_generations || {},
     name:`${info.project_id}-${info.scope==='full'?'full-video':'latest-clip'}-${info.key.slice(0,8)}.mp4`};};
   save.onclick=async event=>{
     event.preventDefault();event.stopPropagation();
@@ -242,6 +257,17 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
       const info = await response.json();
       if (disposed || token !== request || panel.hidden) return;
       if (!response.ok) throw new Error(info.error || "Preview unavailable.");
+      if(!info.cache_read_only && hasMasterInput() && info.invalidated_clip_ids?.length){
+        const invalidated=new Set(info.invalidated_clip_ids);
+        for(const streamName of ['final','first_pass']){
+          const key=`${info.project_id}:${streamName}`,observed=observedGenerations.get(key) || new Map();
+          for(const clip of invalidated)observed.set(clip,null);
+          observedGenerations.set(key,observed);
+        }
+        await discardInvalidatedPreviews(info);
+        if(disposed || token!==request || panel.hidden)return;
+        if(Object.keys(displayedDownload?.generations || {}).some(clip=>invalidated.has(clip)))stop();
+      }
       if (!info.found) {
         // A transient empty manifest/run response must not erase playable media.
         label.textContent = source ? statusText+' · Waiting for an updated result…' : info.label || "No completed clips yet. Generate a shot first.";

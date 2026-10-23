@@ -10,7 +10,8 @@ const css=`
 .mmx-hardware button{color:inherit;background:transparent;border:0;border-radius:5px;font:inherit;cursor:pointer;padding:4px 6px;min-height:26px}
 .mmx-hardware button:hover{background:#ffffff12}.mmx-hardware button:focus-visible,.mmx-hardware select:focus-visible{outline:2px solid #8fc7ff;outline-offset:-1px}
 .mmx-hardware .mmx-hardware-drag{flex:1;text-align:left;font-weight:650;cursor:grab;touch-action:none;user-select:none}.mmx-hardware-drag:active{cursor:grabbing}
-.mmx-hardware-body{padding:11px 14px 12px}.mmx-hardware-device{display:block;width:100%;color:#aab9ce;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;margin-bottom:12px}
+.mmx-hardware-body{padding:11px 14px 12px;max-height:calc(100vh - 70px);overflow:auto}.mmx-hardware-device{display:block;width:100%;color:#aab9ce;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;margin-bottom:12px}
+.mmx-hardware-models{border-top:1px solid #ffffff18;margin-top:12px;padding-top:10px}.mmx-hardware-models summary{cursor:pointer;color:#dbe7fa;font-weight:600;min-height:24px}.mmx-hardware-model-list{max-height:250px;overflow:auto}.mmx-hardware-model{padding:8px 0;border-bottom:1px solid #ffffff12}.mmx-hardware-model strong{display:block;overflow-wrap:anywhere;font-size:11px}.mmx-hardware-model p,.mmx-hardware-memory,.mmx-hardware-note{font-size:10px;color:#aab9ce;line-height:1.5;margin:4px 0}.mmx-hardware-note{color:#96a5b8}.mmx-hardware-model dl{display:grid;grid-template-columns:1fr auto;gap:3px 8px;font-size:10px;margin:6px 0 0}.mmx-hardware-model dt{color:#aab9ce}.mmx-hardware-model dd{margin:0;font-variant-numeric:tabular-nums}
 .mmx-hardware select{width:100%;background:#252e3b;color:#dbe5f4;border:1px solid #485366;border-radius:5px;margin-bottom:10px;padding:4px;font:inherit}
 .mmx-hardware-row{margin:10px 0}.mmx-hardware-label{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px}.mmx-hardware-value{font-variant-numeric:tabular-nums;color:#dbe7fa;font-weight:600;font-size:12px}
 .mmx-hardware-track{height:4px;background:#ffffff12;border-radius:8px;overflow:hidden}.mmx-hardware-fill{height:100%;width:0;background:var(--meter-color,#88baff);border-radius:inherit;transition:width .3s}
@@ -37,6 +38,10 @@ export function createHardwareMonitor(client, options={}) {
         row.title=key==='cpu'?'CPU usage on the ComfyUI server host':key==='shared'?'System RAM resident in GPU aperture segments, read directly from WSL. Includes all applications; it is not ordinary container RAM. A dash means the driver does not expose this metric.':'Server GPU readings include other applications on that GPU';
         root.querySelector('.mmx-hardware-meters').append(row);meters[key]={value:row.querySelector('.mmx-hardware-value'),fill:row.querySelector('.mmx-hardware-fill')};
     }
+    const models=document.createElement('details');models.className='mmx-hardware-models';
+    models.innerHTML='<summary>Retained models</summary><p class="mmx-hardware-memory"></p><div class="mmx-hardware-model-list"></div><p class="mmx-hardware-note">Native registry across all GPUs. Host buffers cover tracked weights only; pinned bytes are a subset. These figures overlap with RAM and VRAM meters.</p>';
+    body.insertBefore(models,body.querySelector('footer'));
+    const modelSummary=models.querySelector('summary'),modelList=models.querySelector('.mmx-hardware-model-list'),processMemory=models.querySelector('.mmx-hardware-memory');
     document.body.append(root);
     const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({...position,expandedPosition,minimized,gpu:selected}));}catch{}};
     function place(x=position?.x ?? innerWidth-282,y=position?.y ?? innerHeight-252){
@@ -46,6 +51,26 @@ export function createHardwareMonitor(client, options={}) {
     const active=()=>enabled&&!minimized&&!document.hidden&&!disposed;
     const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
     function meter(key,value,text){meters[key].value.textContent=text;meters[key].fill.style.width=(valid(value)?Math.min(100,value):0)+'%';}
+    const bytes=n=>valid(n)?`${(n/1073741824).toFixed(2)} GiB`:'—';
+    function renderModels(data){
+        const registry=data.retained_models, rows=Array.isArray(registry?.models)?registry.models:[];
+        modelSummary.textContent=registry?.available?`Retained models · ${rows.length}`:'Retained models · unavailable';
+        const memory=data.process_memory;
+        processMemory.textContent=memory?`Process RAM ${bytes(memory.rss_bytes)} · Swap ${bytes(memory.swap_bytes)}`:'';
+        processMemory.title='ComfyUI process resident RAM and swap. Includes models and other allocations; do not add these to the GPU counters.';
+        modelList.replaceChildren();
+        if(!rows.length){const empty=document.createElement('p');empty.className='mmx-hardware-note';empty.textContent=registry?.available?'No models in ComfyUI’s loaded registry. Other execution caches are not enumerated.':'Model telemetry is unavailable. The server may need the updated node pack loaded.';modelList.append(empty);}
+        for(const row of rows){
+            const card=document.createElement('div');card.className='mmx-hardware-model';
+            const name=document.createElement('strong');name.textContent=row.name||'Model';
+            const mode=document.createElement('p');mode.textContent=`${row.device||'Unknown device'} · ${row.dynamic?'Dynamic VRAM':'Standard loading'}`;
+            const stats=document.createElement('dl');
+            for(const [label,value] of [['Model size',row.model_bytes],['On device',row.device_bytes],['Host weight buffers',row.host_buffer_bytes],['Pinned host weights',row.pinned_bytes]]){
+                const term=document.createElement('dt'),amount=document.createElement('dd');term.textContent=label;amount.textContent=bytes(value);stats.append(term,amount);
+            }
+            card.append(name,mode,stats);modelList.append(card);
+        }
+    }
     function render(data){
         const gpus=Array.isArray(data.gpus)?data.gpus:[];
         const gpu=gpus.find(g=>g.id===selected)||gpus[0];if(gpu)selected=gpu.id;
@@ -59,6 +84,7 @@ export function createHardwareMonitor(client, options={}) {
         const sharedUsed=gpu?.shared_memory_used,sharedTotal=gpu?.shared_memory_total;
         const sharedAvailable=valid(sharedUsed)&&valid(sharedTotal)&&sharedTotal>0;
         meter('shared',sharedAvailable?sharedUsed/sharedTotal*100:null,sharedAvailable?`${(sharedUsed/1073741824).toFixed(1)} / ${(sharedTotal/1073741824).toFixed(1)} GiB`:'—');
+        renderModels(data);place();
         root.dataset.state='live';status.textContent=data.gpu_error||(!valid(data.cpu_percent)?'Sampling CPU…':'Live · ComfyUI server');
         status.title='Updates every 2 seconds while visible. GPU and VRAM use driver telemetry.';persist();
     }
@@ -99,6 +125,7 @@ export function createHardwareMonitor(client, options={}) {
     const finishDrag=()=>{if(!drag)return;drag=null;persist();};handle.onpointerup=finishDrag;handle.onpointercancel=finishDrag;handle.onlostpointercapture=finishDrag;
     handle.onkeydown=event=>{const delta={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[event.key];if(!delta)return;event.preventDefault();event.stopPropagation();place(position.x+delta[0],position.y+delta[1]);persist();};
     const resized=()=>{place();persist();};
+    models.ontoggle=()=>place();
     document.addEventListener('visibilitychange',wake);window.addEventListener('resize',resized);
     root.addEventListener('pointerdown',event=>event.stopPropagation());root.addEventListener('wheel',event=>event.stopPropagation());
     update();

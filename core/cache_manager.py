@@ -493,6 +493,24 @@ class ProjectCacheManager:
                 os.unlink(temporary)
 
     @_locked
+    def discard_clip_results(self, clip_ids):
+        """Delete stale dependent results when their upstream regeneration starts."""
+        self._manifest = self._load_manifest()
+        invalidated = {safe_component(cid) for cid in clip_ids}
+        obsolete = set()
+        for cid in invalidated:
+            old = self._manifest.get('clips', {}).pop(cid, None)
+            if old: obsolete.update(self._result_files(cid, old))
+            draft = self._manifest.get('first_pass', {}).pop(cid, None)
+            if draft: obsolete.update(self._result_files(cid, draft, draft=True))
+        self._manifest['invalidated_clips'] = sorted(
+            set(self._manifest.get('invalidated_clips', [])) | invalidated)
+        self.save_manifest()
+        self._prune_files(obsolete)
+        self._prune_previews()
+        self.save_manifest()
+
+    @_locked
     def invalidate_downstream(self, changed_clip_index: int, all_clip_ids: List[str]):
         """Invalidate the changed clip and all subsequent clips in the timeline."""
         self._manifest = self._load_manifest()
