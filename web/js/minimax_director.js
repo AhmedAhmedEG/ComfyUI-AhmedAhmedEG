@@ -3912,10 +3912,9 @@ function mountDirectorUI(node) {
       const savedResult=cachedClipResults[clip.id];
       if(savedResult?.has_latent){
         const saved=document.createElement('span');saved.className='mmx-saved-badge';
-        const previous=clip.id===generatingClipId || Boolean(clip.invalidated_generation && clip.invalidated_generation===savedResult.generation);
-        saved.textContent=previous?'◆ Previous':'◆ Saved';
-        saved.title=previous?'Previous saved latent; generate a replacement for the current clip settings.':'Generated latent saved on the server. Review this take and approve it to reuse it.';
-        saved.setAttribute('aria-label',previous?'Previous saved latent available':'Saved generated latent available');
+        saved.textContent='◆ Saved';
+        saved.title='Generated latent saved on the server. Approval controls whether it is reused; Cache shows reuse details from the latest run.';
+        saved.setAttribute('aria-label','Saved generated latent available');
         shotTopBar.append(saved);
       }
       if(clip.refine_pending) {const review=document.createElement('span');review.textContent=clip.refine_approved?'Ready To Refine':'Review First Pass';review.className='mmx-generating-badge';shotTopBar.append(review);}
