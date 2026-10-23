@@ -4566,16 +4566,16 @@ function mountDirectorUI(node) {
     }
     if ([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) {
       const policy=document.createElement("select");policy.className="mmx-shot-continuity-duration-policy";
-      for (const [value,label] of [["new","Duration = new footage"],["total","Duration includes context (Extender)"]]) {
+      for (const [value,label] of [["new","Keep full clip length"],["total","Shorten by reused frames"]]) {
         const option=document.createElement("option");option.value=value;option.textContent=label;policy.append(option);
       }
       policy.value=activeClip.continuity_duration_policy || "new";
       policy.onchange=()=>{activeClip.continuity_duration_policy=policy.value;commitContinuity();};
-      continuityPanel.append(field("Duration",policy,"New footage preserves the requested visible length. Extender includes the borrowed context, so the delivered clip is shorter. Frame counts snap to H3's temporal grid."));
+      continuityPanel.append(field("Clip length",policy,"Keep full clip length: add the previous clip's reused frames before generating the requested length. Shorten by reused frames: fit them inside the requested length, producing a shorter clip with less processing. Actual lengths round to supported frame counts."));
     }
     if (continuityMode.value===continuityModes[2]){
       const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="0.95";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
-      redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Seam redraw strength",redraw,"Tapered redraw near the seam: 0 holds the seam most strongly; higher values allow more redraw (maximum 0.95)."));
+      redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Transition flexibility",redraw,"0 keeps the join closest to the previous clip. Higher values let the model change more near the join. Affects video only; it does not change the previous saved clip."));
     }
     if(continuityMode.value===continuityModes[0]) {
       const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);

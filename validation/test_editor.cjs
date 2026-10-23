@@ -279,11 +279,11 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const audioOff=editorRoot.querySelector('.mmx-shot-audio_context_length');audioOff.value='0';audioOff.onchange();
   assert(!editorRoot.querySelector('.mmx-continuity-overlay.audio'),'Off removes the audio context card');
   const pinned=editorRoot.querySelector('.mmx-shot-continuity-mode');pinned.value='Latent Carry (Pinned)';pinned.onchange();
-  assert(editorRoot.textContent.includes('Seam redraw strength'),'Pinned carry exposes its mask control');
+  assert(editorRoot.textContent.includes('Transition flexibility'),'Pinned carry exposes its mask control');
   const handoff=editorRoot.querySelector('.mmx-shot-continuity-mode');handoff.value='FL2VA Tail Handoff';handoff.onchange();
   assert(!editorRoot.querySelector('.mmx-shot-context_length'));
   assert(!editorRoot.querySelector('.mmx-shot-audio_context_length'));
-  assert(!editorRoot.textContent.includes('Seam redraw strength'));
+  assert(!editorRoot.textContent.includes('Transition flexibility'));
   assert(!editorRoot.querySelector('.mmx-continue-video'));
   assert.equal(editorRoot.querySelector('.mmx-continuity-link').dataset.videoFrames,'1');
   assert(editorRoot.querySelector('.mmx-continuity-link').title.includes('Video 0.04s'));
