@@ -106,8 +106,9 @@ class ReferenceCacheTests(unittest.TestCase):
         prepare(cache,duration=2);self.assertEqual(len(calls),2,'Duration participates in native preparation')
         self.data.add_(1)
         prepare(cache);self.assertEqual(len(calls),3,'Changed input cannot reuse a preparation record')
-        path=next((self.root/'reference_latents').glob('*.safetensors'));path.unlink()
-        self.assertFalse(cache.preparation_ready(next(iter(cache.preparations))))
+        request=next(iter(cache.preparations))
+        path=self.root/'reference_latents'/(cache.preparations[request][0]+'.safetensors');path.unlink()
+        self.assertFalse(cache.preparation_ready(request))
 
     def test_unchanged_index_is_not_rewritten(self):
         cache,key=self.cache();self.encode(cache,key)
