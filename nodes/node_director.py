@@ -267,6 +267,11 @@ class MiniMaxH3MasterDirector:
 
         project_id = str(timeline.get("project_id") or cfg_dict.get("project_id") or unique_id or "default_director")
         timeline["project_id"] = project_id
+        try:
+            from ..core.stage_progress import bind, stage
+        except ImportError:
+            from core.stage_progress import bind, stage
+        bind(unique_id, project_id)
         executor = MasterDirectorExecutor(project_id=project_id)
 
         # Check for RefMods from timeline or ref_pack
@@ -548,6 +553,7 @@ class MiniMaxH3MasterDirector:
             # Announce the active clip first, and never hash loader weights just
             # to replay an approved take or pass through source footage.
             if not clip_item.get("locked"):
+                stage('Checking model and asset fingerprints')
                 record_graph_provenance(kwargs.get("prompt"), unique_id,
                     model=model, fl2va_model=fl2va_model, ref2va_model=ref2va_model,
                     clip=clip, video_vae=video_vae, audio_vae=audio_vae)
@@ -1095,6 +1101,7 @@ class MiniMaxH3MasterDirector:
 
             # Both fresh sampling and resumed refinement need the clip's adapters.
             # Fingerprints above describe the base model plus the effective LoRA files.
+            stage('Preparing H3 model and clip LoRA configuration')
             clip_active_model = current_resources().prepare_loras(clip_active_model, clip_lora_files)
 
             if staged is not None:
@@ -1294,6 +1301,7 @@ class MiniMaxH3MasterDirector:
 
             # Store result in cache manager
             cache_error = None
+            stage('Saving clip latents, audio and frames')
             try:
                 before_frames = None
                 if refine_enabled:
@@ -1393,6 +1401,7 @@ class MiniMaxH3MasterDirector:
             return (dummy_img, dummy_aud, None, last_positive, last_latent, last_prompt, float(frame_rate), int(total_frames), status_str, json.dumps(timeline, ensure_ascii=False))
 
         # Filter outputs based on preview_mode
+        stage('Assembling output video and joining audio')
         output_frames = all_decoded_frames
         output_audios = all_decoded_audios
         clips = completed_clips

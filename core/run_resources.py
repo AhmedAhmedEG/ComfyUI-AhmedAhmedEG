@@ -199,14 +199,22 @@ class RunResources:
 def execution_resources(function):
     @wraps(function)
     def call(*args, **kwargs):
+        from .stage_progress import _current as stage_current, StageProgress
+        reporter = StageProgress()
+        stage_token = stage_current.set(reporter)
         owner = RunResources()
         token = _current.set(owner)
         try:
             return function(*args, **kwargs)
         finally:
-            owner.clear()
-            owner.release_spills()
-            _current.reset(token)
+            try:
+                reporter.report('Releasing temporary buffers')
+                owner.clear()
+                owner.release_spills()
+            finally:
+                reporter.report('Finished', active=False)
+                stage_current.reset(stage_token)
+                _current.reset(token)
     return call
 
 

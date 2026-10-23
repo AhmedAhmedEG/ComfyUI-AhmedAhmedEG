@@ -8,6 +8,8 @@ def sample_latent(model, latent, steps, cfg, sampler_name, scheduler,
                   disable_noise=False, start_step=None, last_step=None,
                   force_full_denoise=False):
     import comfy.sample
+    from .stage_progress import stage
+    stage('Preparing latent and sampling noise')
 
     if steps < 1:
         raise ValueError("Sampling steps must be positive.")
@@ -29,6 +31,12 @@ def sample_latent(model, latent, steps, cfg, sampler_name, scheduler,
         callback = latent_preview.prepare_callback(model, steps)
     except ImportError:
         callback = None
+    native_callback = callback
+    def callback(step, x0, x, total_steps):
+        stage('Sampling H3', step=step+1, steps=total_steps)
+        if native_callback is not None:
+            native_callback(step, x0, x, total_steps)
+    stage('H3 model · loading as needed and initializing sampler')
     result = comfy.sample.sample(
         model, noise, steps, cfg, sampler_name, scheduler, positive, negative,
         samples, denoise=denoise, disable_noise=disable_noise,

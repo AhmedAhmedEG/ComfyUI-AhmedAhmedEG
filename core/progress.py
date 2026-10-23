@@ -73,6 +73,8 @@ def preview_run_context(project_id, shots, queue, stream='final'):
 
 
 def shot_event(node_id, project_id, clip_id, phase, **data):
+    from .stage_progress import clip_stage
+    clip_stage(node_id, project_id, clip_id, phase, **data)
     global _sequence
     if phase == 'timeline_ready' and isinstance(data.get('timeline'), dict) and isinstance(data['timeline'].get('clips'), list):
         accept_preview_input({**data['timeline'], 'project_id': str(project_id)})

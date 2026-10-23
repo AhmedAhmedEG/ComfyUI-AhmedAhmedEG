@@ -12,6 +12,7 @@ from .task_modes import MODE_T2VA, MODE_I2VA, MODE_FL2VA, MODE_L2VA, MODE_INPAIN
 from .refmod import get_cached_visual_item, set_cached_visual_item, refmod_fingerprint
 from .cache_manager import ProjectCacheManager
 from .sampling import native_outputs
+from .stage_progress import stage, ProgressEncoder
 
 log = logging.getLogger("MiniMaxH3MasterDirector.executor")
 
@@ -30,6 +31,7 @@ def get_native_h3_node(class_name: str):
 
 def decode_video_latent(vae, latent_tensor: torch.Tensor) -> torch.Tensor:
     """Decode a video latent tensor [1, C, T, H, W] to IMAGE batch [T, H, W, 3]."""
+    stage('Video VAE · loading as needed and decoding frames')
     images = vae.decode(latent_tensor)
     if images.ndim == 5:
         # [B, T, H, W, C] -> [B*T, H, W, C]
@@ -40,6 +42,7 @@ def decode_video_latent(vae, latent_tensor: torch.Tensor) -> torch.Tensor:
 
 def decode_audio_latent(audio_vae, audio_latent_tensor: torch.Tensor) -> Dict[str, Any]:
     """Decode an audio latent tensor to standard ComfyUI audio dict."""
+    stage('Audio VAE · loading as needed and decoding sound')
     audio = audio_vae.decode(audio_latent_tensor)
     if audio.ndim == 3 and audio.shape[-1] <= 2 and audio.shape[1] > 2:
         audio = audio.movedim(-1, 1)
@@ -85,7 +88,8 @@ class MasterDirectorExecutor:
             _mmx_reference_prefill=True
             def tokenize(self,*args,**kwargs):return None
             def encode_from_tokens_scheduled(self,tokens):return [[torch.zeros((1,1,1)),{}]]
-        for asset in assets:
+        for index, asset in enumerate(assets):
+            stage(f'Preparing reference {index+1}/{len(assets)} · checking encoded cache')
             kind=asset.get('type');data=asset.get('data')
             if kind not in ('image','video','audio') or data is None:continue
             token=cache.source_key(kind,data,asset.get('audio'))
@@ -122,6 +126,7 @@ class MasterDirectorExecutor:
     ) -> Tuple[Any, Any, str]:
         """Generate positive conditioning and empty AV latent using official H3 native nodes."""
         canon = normalize_mode(mode)
+        clip = ProgressEncoder(clip)
         frame_count = align_frame_count(int(duration * FPS))
 
         if canon in (MODE_T2VA, MODE_I2VA, MODE_FL2VA, MODE_L2VA, MODE_INPAINT):

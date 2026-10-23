@@ -131,6 +131,8 @@ class ReferenceEncodeCache:
                 if isinstance(error, torch.OutOfMemoryError): raise
                 self.index.pop(token,None)
         self.misses += 1
+        from .stage_progress import stage
+        stage(f'{type(getattr(vae, "first_stage_model", vae)).__name__} · loading as needed and encoding reference')
         result = vae.encode(*args, **kwargs)
         if isinstance(result, torch.Tensor):
             self._retain(key,result,result.device)

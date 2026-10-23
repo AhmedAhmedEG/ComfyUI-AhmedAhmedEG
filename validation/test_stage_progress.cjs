@@ -1,0 +1,16 @@
+const fs=require('fs'),assert=require('assert');
+const {JSDOM}=require('../.validation/ui/node_modules/jsdom');
+const dom=new JSDOM('<!doctype html><head></head><body></body>',{url:'http://localhost',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+let extension;w.app={registerExtension:e=>extension=e};w.api=new w.EventTarget();
+w.eval(fs.readFileSync('web/js/minimax_stage_progress.js','utf8').replace(/^import .*;\r?\n/gm,'').replace('export function','function'));
+extension.setup();const root=w.document.querySelector('.mmx-stage-progress');assert(root.hidden);
+const send=detail=>w.api.dispatchEvent(new w.CustomEvent('minimax_director/stage',{detail}));
+send({node:'12',active:true,index:2,total:4,label:'Text encoder · loading as needed',clip_id:'two'});
+assert(!root.hidden);assert(root.textContent.includes('Clip 2/4'));assert(root.textContent.includes('Text encoder'));
+send({node:'12',active:true,index:2,total:4,label:'Sampling H3',step:3,steps:8,clip_id:'two'});
+assert(root.textContent.includes('Step 3/8'));
+send({node:'other',active:false,label:'Finished'});assert(!root.hidden);
+w.api.dispatchEvent(new w.CustomEvent('execution_error'));assert(root.hidden);
+send({node:'12',active:true,label:'Video VAE'});send({node:'12',active:false,label:'Finished'});assert(root.hidden);
+extension.setup();assert.equal(w.document.querySelectorAll('.mmx-stage-progress').length,1);
+dom.window.close();console.log('Stage indicator labels, clip counts, sampler steps, completion, errors and reload cleanup passed.');
