@@ -11,11 +11,13 @@ const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  extension.setup();
  assert(!w.document.querySelector('.mmx-stage-progress'),'No separate loading UI');
+ assert.equal(w.shortStage('Video VAE · loading as needed and decoding frames'),'VideoVAE');
+ assert.equal(w.shortStage('Audio VAE · loading as needed and decoding sound'),'AudioVAE');
  send({node:'12',active:true,index:2,total:4,label:'Text encoder · loading as needed',clip_id:'two'});
  assert(bar.progressTextEl.textContent.includes('(1) 91%'));
- assert(bar.progressTextEl.textContent.includes('Opening fight'));assert(!bar.progressTextEl.textContent.includes('Clip 2/4'));assert(bar.progressTextEl.textContent.includes('Text encoder'));
+ assert(bar.progressTextEl.textContent.includes('Opening fight'));assert(!bar.progressTextEl.textContent.includes('Clip 2/4'));assert(bar.progressTextEl.textContent.includes('Text Encoder'));
  bar.progressTextEl.textContent='(1) 92% - MiniMax H3 Master Node (25%)';await flush();
- assert(bar.progressTextEl.textContent.includes('(25%)'));assert(bar.progressTextEl.textContent.includes('Text encoder'),'Suffix survives native updates');
+ assert(bar.progressTextEl.textContent.includes('(25%)'));assert(bar.progressTextEl.textContent.includes('Text Encoder'),'Suffix survives native updates');
  assert.equal(bar.progressTextEl.querySelectorAll('.mmx-stage-detail').length,1);
  send({node:'12',active:true,index:2,total:4,label:'Sampling H3',step:3,steps:8,clip_id:'two'});
  assert(bar.progressTextEl.textContent.includes('Step 3/8'));

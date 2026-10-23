@@ -3,6 +3,32 @@ import {api} from "../../scripts/api.js";
 
 // Extend the existing rgthree green bar, without replacing its text, percentages,
 // rendering method or prompt-service state. No standalone progress UI is created.
+function shortStage(label){
+    if(/video\s*vae/i.test(label))return 'VideoVAE';
+    if(/audio\s*vae/i.test(label))return 'AudioVAE';
+    if(/^Text encoder/i.test(label))return 'Text Encoder';
+    if(/^Text conditioning/i.test(label))return 'Conditioning';
+    if(/^Preparing reference /i.test(label))return label.split(' · ')[0].replace('Preparing reference','Reference');
+    const names={
+        'Reading project and settings':'Project',
+        'Preparing clip and references':'References',
+        'Checking model and asset fingerprints':'Model / Asset Checks',
+        'Preparing H3 model and clip LoRA configuration':'H3 / LoRAs',
+        'Preparing H3 model for sampling':'H3',
+        'H3 model · loading as needed and initializing sampler':'H3',
+        'Preparing latent and sampling noise':'Latent / Noise',
+        'Sampling H3':'Sampling',
+        'Refining clip':'Refine',
+        'Decoding generated video and audio':'Decode',
+        'Refining faces':'Face Refine',
+        'Clip saved':'Saved',
+        'First pass saved — waiting for approval':'Awaiting Approval',
+        'Saving clip latents, audio and frames':'Saving',
+        'Assembling output video and joining audio':'Output',
+        'Releasing temporary buffers':'Cleanup'
+    };
+    return names[label] || label.split(' · ')[0];
+}
 export function createStageProgress(client){
     let current=null,started=0,timer=null,bar=null,target=null,observer=null;
     const detail=document.createElement('span');
@@ -29,7 +55,7 @@ export function createStageProgress(client){
         if(bar.currentPromptExecution?.errorDetails || activeNode!=null && String(activeNode).split(':').at(-1)!==ours){detail.remove();return;}
         const clip=current.clipName?`${current.clipName} · `:'';
         const steps=Number.isFinite(current.step)?` · Step ${current.step}/${current.steps}`:'';
-        const text=`· ${clip}${current.label}${steps} · ${Math.floor((Date.now()-started)/1000)}s`;
+        const text=`· ${clip}${shortStage(current.label)}${steps} · ${Math.floor((Date.now()-started)/1000)}s`;
         if(detail.textContent!==text){detail.textContent=text;detail.title=text;}
         if(detail.parentNode!==target)target.append(detail);
     }
