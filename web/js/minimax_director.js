@@ -5201,6 +5201,11 @@ function mountDirectorUI(node) {
     if(detail.sequence){if(Number(detail.sequence)<progressSequence || (Number(detail.sequence)===progressSequence && !event.snapshot))return;progressSequence=Number(detail.sequence);}
     const runningPhase=['preparing','sampling','refining','decoding','face_refining'].includes(detail.phase);
     if(runningPhase)watchClipProgress();
+    if(detail.invalidated_clip_ids?.length){
+      const invalidated=new Set(detail.invalidated_clip_ids);
+      for(const clip of timelineState.clips)if(invalidated.has(String(clip.id))){clip.validated=false;clip.refine_approved=false;clip.refine_pending=false;}
+      syncState(true);void refreshClipResults();
+    }
     if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState(true);void refreshClipResults();renderTimeline();renderInspector();return;}
     if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState(true);renderTimeline();renderInspector();return; }
     const eventClip=timelineState.clips.find(value=>value.id===detail.clip_id);
