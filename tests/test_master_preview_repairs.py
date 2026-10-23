@@ -26,6 +26,41 @@ def master():
 
 
 class MasterPreviewRepairs(unittest.TestCase):
+    def test_first_pass_approval_is_bound_to_the_reviewed_draft(self):
+        with master() as case:
+            options={'enabled':True,'mode':'refine','confirm_first_pass':True,'skip_fl2v':False}
+            state=json.loads(case.execute([{'id':'one','type':'T2V','duration':1}],refine=options)[-1])
+            manager=ProjectCacheManager('regression',case.temp.name)
+            self.assertTrue(manager.result_availability()['one']['refine_pending'])
+            state['clips'][0].update(refine_approved=True,refine_approved_generation='obsolete')
+            with patch('nodes.node_director.apply_refine_pass') as refine:
+                result=case.execute(timeline_data=json.dumps(state),refine=options)
+            refine.assert_not_called()
+            self.assertFalse(json.loads(result[-1])['clips'][0]['refine_approved'])
+
+    def test_latest_output_skips_loading_unneeded_approved_predecessors(self):
+        with master() as case:
+            shots=[{'id':name,'type':'T2V','duration':1,'continuity':False} for name in ['one','two','three']]
+            result=case.execute(shots,config={'project_id':'regression','run_mode':'full_batch','decoded_output':'latest'})
+            state=json.loads(result[-1])
+            for shot in state['clips']:shot['validated']=True
+            original=ProjectCacheManager.load_clip_latent;loaded=[]
+            def load(manager,cid):loaded.append(cid);return original(manager,cid)
+            with patch.object(ProjectCacheManager,'load_clip_latent',load):
+                replay=case.execute(timeline_data=json.dumps(state),config={'project_id':'regression','run_mode':'full_batch','decoded_output':'latest'})
+            self.assertEqual(loaded,['three'])
+            self.assertEqual(json.loads(replay[-1])['clips'],state['clips'])
+            self.assertEqual(replay[0].shape,result[0].shape)
+
+    def test_approval_cannot_silently_follow_replaced_generation(self):
+        with master() as case:
+            state=json.loads(case.execute([{'id':'one','type':'T2V','duration':1}])[-1])
+            state['clips'][0].update(validated=True,validated_generation='obsolete')
+            case.sampling_calls.clear()
+            with self.assertRaisesRegex(ValueError,'replaced or removed'):
+                case.execute(timeline_data=json.dumps(state))
+            self.assertEqual(case.sampling_calls,[])
+
     def test_unvalidated_dependents_deleted_before_parent_sampling_even_if_sampling_fails(self):
         with master() as case:
             shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},

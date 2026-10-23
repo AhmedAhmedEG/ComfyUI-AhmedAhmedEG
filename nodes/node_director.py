@@ -464,6 +464,9 @@ class MiniMaxH3MasterDirector:
             clip_id = str(clip_item["id"])
             canon_mode = normalize_mode(clip_item.get("type", "T2V"))
             approved_take = bool(clip_item.get("validated"))
+            expected=clip_item.get('validated_generation')
+            if approved_take and expected and cache_mgr._manifest.get('clips',{}).get(clip_id,{}).get('generation')!=expected:
+                raise ValueError(f"Approved clip {clip_id!r} has been replaced or removed. Refresh and review its current saved result before approving it again.")
             audio_mode = clip_item.get("audio_mode", timeline.get("audio_mode", "generate"))
             cached_frames = cache_mgr.load_clip_frames(clip_id)
             cached_audio = cache_mgr.load_clip_audio(clip_id)
@@ -537,6 +540,18 @@ class MiniMaxH3MasterDirector:
             # Accepted footage is immutable: do not rebuild its conditioning,
             # validate current refs, load a sampling model, or reapply continuity.
             if clip_item.get("validated") and not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
+                following=clips[clip_idx+1] if clip_idx+1<len(clips) else None
+                if (decoded_output=='latest' and following and following.get('validated') and not following.get('locked')
+                        and all(os.path.isfile(path) for path in (cache_mgr.get_clip_frames_path(clip_id),
+                            cache_mgr.get_clip_audio_path(clip_id),cache_mgr.get_clip_latent_path(clip_id)))):
+                    expected=clip_item.get('validated_generation')
+                    meta=cache_mgr._manifest.get('clips',{}).get(clip_id,{})
+                    if expected and expected!=meta.get('generation'):
+                        raise ValueError(f"Approved clip {clip_id!r} has been replaced. Refresh and review its current saved result.")
+                    run_report.append({'clip_id':clip_id,'action':'cached','frames':meta.get('frame_count'),
+                                       'media_load':'skipped_unneeded_predecessor'})
+                    completed_clips.append(clip_item)
+                    continue
                 if not reuse_saved_take(clip_idx, clip_item):
                     raise ValueError(f"Approved clip {clip_id!r} has no complete saved take. Restore its saved results or unapprove it to generate again.")
                 completed_clips.append(clip_item)
@@ -1060,7 +1075,9 @@ class MiniMaxH3MasterDirector:
                 'initial_latent':latent,'video_vae':video_vae,'audio_vae':audio_vae,'clip':clip,
                 'audio_mode':audio_mode,'source_audio':source['audio'] if source is not None else None})
             staged=cache_mgr.load_first_pass(clip_id,first_fp) if confirm_first else None
-            if confirm_first and staged is None: clip_item['refine_approved']=False
+            if confirm_first and (staged is None or clip_item.get('refine_approved_generation')
+                    and clip_item['refine_approved_generation']!=staged['generation']):
+                clip_item['refine_approved']=False
             refine_pass_rows=[]
             def capture_refine_pass(number, pass_latent):
                 current_resources().offload_sampling_models()
@@ -1327,6 +1344,8 @@ class MiniMaxH3MasterDirector:
                     "media_recovery": {"color": clip_item.get("color"), "requires_final_media": bool(
                         clip_idx > 0 and clip_continuity and previous_tail is not None or
                         face_refine is not None and face_refine.get("enabled", False))},
+                    "authored_seed":authored_seed,
+                    "next_seed":str((clip_seed + (1 if seed_mode=='increment' else -1 if seed_mode=='decrement' else 0)) & 0xFFFFFFFFFFFFFFFF),
                     "audio_mode": audio_mode, "source_audio_fingerprint": fingerprint_value(source["audio"]) if source is not None and str(audio_mode).lower() in ("source", "keep_source", "original") else None})
             except Exception as c_err:
                 cache_error = str(c_err)

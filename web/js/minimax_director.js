@@ -7,6 +7,28 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 }
 
+const DIRECTOR_DRAFTS='minimax-director-drafts-v1';
+function readDirectorDraft(state,owner){
+  if(!state?.project_id)return null;
+  try{
+    const row=JSON.parse(localStorage.getItem(DIRECTOR_DRAFTS)||'{}')[`${state.project_id}::${owner}`];
+    if(!row || row.updated_at<=Number(state.draft_updated_at || 0))return null;
+    const timeline=JSON.parse(row.timeline);
+    if(timeline.project_id!==state.project_id || !Array.isArray(timeline.clips))return null;
+    return {...row,timeline};
+  }catch{return null;}
+}
+function writeDirectorDraft(project,timeline,builder,updated_at){
+  try{
+    let drafts=JSON.parse(localStorage.getItem(DIRECTOR_DRAFTS)||'{}');
+    if(!drafts || Array.isArray(drafts) || typeof drafts!=='object')drafts={};
+    delete drafts[project];drafts[project]={timeline,builder,updated_at};
+    const keys=Object.keys(drafts).sort((a,b)=>drafts[a].updated_at-drafts[b].updated_at);
+    while(keys.length>1 && (keys.length>16 || JSON.stringify(drafts).length>1000000))delete drafts[keys.shift()];
+    localStorage.setItem(DIRECTOR_DRAFTS,JSON.stringify(drafts));
+  }catch{/* ComfyUI's workflow state remains available if browser storage is full. */}
+}
+
 // Embedded CSS
 const embeddedCSS = `
 /* Extender hides generation_mode globally; restore only this pack's native row. */
@@ -2509,7 +2531,11 @@ function mountDirectorUI(node) {
   let progressSequence=0,progressTimer=null,progressWatching=false,progressRequest=false;
   let cachedClipResults={},cacheStatusProject=null,cacheStatusRequest=0;
   let serverStatus=null, savedProjectSignature=null;
-  const projectSignature=()=>JSON.stringify({timeline:{...timelineState,server_revision:undefined},builder:builderState});
+  let draftRestored=false,draftTimer=null,pendingDraft=null;
+  const flushDraft=()=>{clearTimeout(draftTimer);draftTimer=null;if(pendingDraft){writeDirectorDraft(...pendingDraft);pendingDraft=null;}};
+  const hideDraft=()=>{if(document.hidden)flushDraft();};
+  window.addEventListener('pagehide',flushDraft);document.addEventListener('visibilitychange',hideDraft);
+  const projectSignature=()=>JSON.stringify({timeline:{...timelineState,server_revision:undefined,draft_updated_at:undefined},builder:builderState});
   const updateServerStatus=()=>{
     if(serverStatus)serverStatus.textContent=savedProjectSignature && savedProjectSignature===projectSignature()
       ? "Saved On Server" : timelineState.server_revision ? "Server Project · Save Your Changes" : "Not Saved On Server";
@@ -2772,7 +2798,9 @@ function mountDirectorUI(node) {
       if (timelineWidget && timelineWidget.value) {
         const parsed = typeof timelineWidget.value === "string" ? JSON.parse(timelineWidget.value) : timelineWidget.value;
         if (parsed && typeof parsed === "object") {
-          timelineState = { ...timelineState, ...parsed };
+          const draft=draftRestored?null:readDirectorDraft(parsed,String(node.id));draftRestored=true;
+          timelineState = { ...timelineState, ...(draft?.timeline || parsed) };
+          if(draft && builderWidget)builderWidget.value=draft.builder;
           if (!Array.isArray(timelineState.clips)) {
             timelineState.clips = [
               {
@@ -2860,8 +2888,12 @@ function mountDirectorUI(node) {
       }
     }
     generationBaseline = current;
-    if (timelineWidget) timelineWidget.value = JSON.stringify(timelineState);
-    if (builderWidget) builderWidget.value = JSON.stringify(builderState);
+    timelineState.draft_updated_at=Math.max(Date.now(),Number(timelineState.draft_updated_at || 0)+1);
+    const serializedTimeline=JSON.stringify(timelineState),serializedBuilder=JSON.stringify(builderState);
+    if (timelineWidget) timelineWidget.value = serializedTimeline;
+    if (builderWidget) builderWidget.value = serializedBuilder;
+    pendingDraft=[`${timelineState.project_id}::${node.id}`,serializedTimeline,serializedBuilder,timelineState.draft_updated_at];
+    clearTimeout(draftTimer);draftTimer=setTimeout(flushDraft,150);
     updateServerStatus();
     if (approvalsChanged) renderTimeline();
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
@@ -3752,7 +3784,24 @@ function mountDirectorUI(node) {
     try {
       const status=await requestJson(`/minimax_director/project/cache/status?project_id=${encodeURIComponent(project)}`);
       if(node.__mmxDisposed || request!==cacheStatusRequest || project!==timelineState.project_id)return;
-      cachedClipResults=status.clips || {};renderTimeline();
+      cachedClipResults=status.clips || {};
+      let changed=false;
+      for(const clip of timelineState.clips){
+        const saved=cachedClipResults[clip.id];
+        if(clip.validated && (!saved?.can_approve || clip.validated_generation && saved.generation!==clip.validated_generation)){
+          unapproveChain(clip);delete clip.validated_generation;changed=true;
+        }
+        if(saved?.generation && clip.saved_generation!==saved.generation){
+          clip.saved_generation=saved.generation;
+          if(saved.seed!=null){clip.last_seed=String(saved.seed);if(saved.authored_seed!=null && String(clip.seed)===String(saved.authored_seed) && saved.next_seed!=null)clip.seed=String(saved.next_seed);}
+          changed=true;
+        }
+        if(clip.validated && !clip.validated_generation && saved?.generation){clip.validated_generation=saved.generation;changed=true;}
+        if(typeof saved?.refine_pending==='boolean' && clip.id!==generatingClipId && saved.refine_pending!==!!clip.refine_pending){clip.refine_pending=saved.refine_pending;clip.refine_approved=false;changed=true;}
+        if(clip.refine_approved && clip.refine_approved_generation && clip.refine_approved_generation!==saved?.first_pass_generation){clip.refine_approved=false;changed=true;}
+      }
+      if(changed)syncState(true);
+      renderTimeline();
     } catch(error) {
       if(request===cacheStatusRequest)progressLabel.title=`Cannot confirm saved results: ${error.message}`;
     }
@@ -3896,7 +3945,7 @@ function mountDirectorUI(node) {
       if(selectInput.disabled)selectLabel.title='Generate this clip first. Approval requires a saved result or latent on the server.';
       if(clip.refine_pending)selectLabel.title='Review First Pass in Smart Preview, approve here, then Run to refine its saved latent. This does not approve a final take.';
       selectInput.setAttribute('aria-label',`Approve ${clip.refine_pending ? 'First Pass Of ' : ''}${clip.name || `Clip ${idx+1}`}`);
-      selectInput.onchange=()=>{if(clip.refine_pending)clip.refine_approved=selectInput.checked;else if(selectInput.checked){clip.validated=true;delete clip.invalidated_generation;}else unapproveChain(clip);syncState();renderTimeline();};
+      selectInput.onchange=()=>{if(clip.refine_pending){clip.refine_approved=selectInput.checked;clip.refine_approved_generation=cachedClipResults[clip.id]?.first_pass_generation;}else if(selectInput.checked){clip.validated=true;clip.validated_generation=cachedClipResults[clip.id]?.generation;delete clip.invalidated_generation;}else unapproveChain(clip);syncState();renderTimeline();};
       for(const event of ['pointerdown','mousedown','click'])selectLabel.addEventListener(event,e=>e.stopPropagation());
       selectLabel.append(selectInput);shotBlock.append(selectLabel);
 
@@ -5249,6 +5298,7 @@ function mountDirectorUI(node) {
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
       node.__mmxDisposed = true;stopClipProgress();
+      flushDraft();window.removeEventListener('pagehide',flushDraft);document.removeEventListener('visibilitychange',hideDraft);
       for (const observers of node.__mmxRefObserverSets || []) observers.delete(node.__mmxRefObserver);
       node.__mmxRefObserverSets?.clear();
       cancelTimelineDrag?.();

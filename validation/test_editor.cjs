@@ -9,14 +9,14 @@ w.alert = message => problems.push(message);
 w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, {get: (_,key) => key === 'measureText' ? text => ({width:text.length*7}) : () => {}});
 w.app = {registerExtension: extension => {w.extension=extension;},graph:{links:{},getNodeById:()=>null,setDirtyCanvas:()=>{}},canvas:{setDirty:()=>{}}};
 const listeners = new Map();
-let submittedDraft,progressSnapshot=null,cacheStatusReads=0;
+let submittedDraft,progressSnapshot=null,cacheStatusReads=0,cacheStatusOverride=null;
 w.api = {apiURL: url=>url,addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:(name)=>listeners.delete(name),fetchApi:async (url,options={}) => {
   let result = [];
   if(url.includes("/minimax_director/progress"))result={state:progressSnapshot,active:progressSnapshot?.active};
   if (url.includes('waveform')) result={duration:5,peaks:[0,.5,1,.5]};
   if (url.includes('media/upload')) result={name:'tail.mp4',subfolder:'minimax_assets',media_type:'video'};
   if (url.includes('source/info')) result={duration:60,width:960,height:544};
-  if (url.includes('project/cache/status')) {cacheStatusReads++;result={clips:{clip_1:{can_approve:true,has_latent:true,has_frames:true,has_audio:true}}};}
+  if (url.includes('project/cache/status')) {cacheStatusReads++;result=cacheStatusOverride || {clips:{clip_1:{can_approve:true,has_latent:true,has_frames:true,has_audio:true}}};}
   if (url.includes('forge/draft')) result={context_key:'context',count:1,shots:[{prompt:'Drafted action',type:'T2VA',duration:5}]};
   if (url.includes('forge/apply')) { const body=JSON.parse(options.body); submittedDraft=body.draft; result={timeline:{...body.timeline,clips:[{id:'clip_1',...body.draft.shots[0]}]}}; }
   return {ok:true,json:async()=>result};
@@ -692,6 +692,27 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   contractTimeline.value=JSON.stringify(approved);contractNode.__mmxDirectorRefresh();
   contractNode.__mmxShotHandler({detail:{node:99,project_id:'contract_ui',clip_id:'first',phase:'completed',seed:'1',authored_seed:'1',next_seed:'2'}});
   assert.deepEqual(JSON.parse(contractTimeline.value).clips.map(c=>c.validated),[true,true,true],'Runtime advancement preserves accepted takes');
+  const approvedGeneration=JSON.parse(JSON.stringify(approved));
+  approvedGeneration.clips[0].validated_generation='old';
+  approvedGeneration.clips[0].seed='99';
+  contractTimeline.value=JSON.stringify(approvedGeneration);
+  cacheStatusOverride={clips:{first:{can_approve:true,generation:'new',seed:'7',authored_seed:'1',next_seed:'8'},second:{can_approve:true,generation:'second'},third:{can_approve:true,generation:'third'}}};
+  contractNode.__mmxDirectorRefresh();await new Promise(r=>setTimeout(r,200));
+  const recovered=JSON.parse(contractTimeline.value);
+  assert.deepEqual(recovered.clips.map(c=>c.validated),[false,false,true],'Stale generation approval rejects its continuity chain only');
+  assert.equal(recovered.clips[0].seed,'99','Recovery preserves a locally edited seed');
+  assert.equal(recovered.clips[0].last_seed,'7','Completion while away restores the actual generated seed');
+  w.dispatchEvent(new w.Event('pagehide'));
+  const draft=w.readDirectorDraft({project_id:'contract_ui'},'99');
+  assert(draft);assert.equal(draft.timeline.clips[0].seed,'99');
+  assert.equal(w.readDirectorDraft({project_id:'contract_ui'},'different-node'),null);
+  assert.equal(w.readDirectorDraft({project_id:'contract_ui',draft_updated_at:recovered.draft_updated_at+1000},'99'),null,'Newer workflow state wins over old browser drafts');
   contractNode.onRemoved();assert.strictEqual(listeners.size,0);
+  const reloadTimeline={name:'timeline_data',value:JSON.stringify(approved)};
+  const reloadNode={...contractNode,widgets:[reloadTimeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],__mmxDirectorMounted:false,__mmxDisposed:false,__mmxShotListener:null,onRemoved:undefined};
+  w.extension.nodeCreated(reloadNode);await new Promise(r=>setTimeout(r,200));
+  assert.equal(JSON.parse(reloadTimeline.value).clips[0].seed,'99','Reloading an older unsaved workflow restores the newer browser draft');
+  assert.equal(JSON.parse(reloadTimeline.value).clips[0].validated,false,'Reload preserves the rejected stale approval');
+  reloadNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, editable timecode, persistent zoom, file continuation, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});
