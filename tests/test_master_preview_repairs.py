@@ -49,7 +49,10 @@ class MasterPreviewRepairs(unittest.TestCase):
             with patch.object(ProjectCacheManager,'load_clip_latent',load):
                 replay=case.execute(timeline_data=json.dumps(state),config={'project_id':'regression','run_mode':'full_batch','decoded_output':'latest'})
             self.assertEqual(loaded,['three'])
-            self.assertEqual(json.loads(replay[-1])['clips'],state['clips'])
+            replay_clips=json.loads(replay[-1])['clips']
+            self.assertTrue(all(c['cache_report']['stats']['Saved clip']['hit']==1 for c in replay_clips))
+            self.assertEqual([{k:v for k,v in c.items() if k!='cache_report'} for c in replay_clips],
+                             [{k:v for k,v in c.items() if k!='cache_report'} for c in state['clips']])
             self.assertEqual(replay[0].shape,result[0].shape)
 
     def test_approval_cannot_silently_follow_replaced_generation(self):

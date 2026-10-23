@@ -69,6 +69,8 @@ def apply_loras(model, files, state_cache):
     patched = model.clone()
     for row in files:
         key = (row["path"], row["sha256"])
+        from .stage_progress import cache_event
+        cache_event('LoRA weights','hit' if key in state_cache else 'miss')
         for old in list(state_cache):
             if old[0] == row['path'] and old != key: state_cache.pop(old)
         if key not in state_cache:

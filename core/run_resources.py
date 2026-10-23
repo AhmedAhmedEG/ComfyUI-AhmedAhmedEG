@@ -68,8 +68,11 @@ class SamplingConfiguration:
         from .loras import apply_loras
         revision = _model_configuration(model)
         adapters = tuple((f['path'], f['sha256'], float(f['strength'])) for f in files)
+        from .stage_progress import cache_event
         if self.parent is model and self.revision == revision and self.adapters == adapters:
+            cache_event('Model setup','hit')
             return self.prepared
+        cache_event('Model setup','miss')
         previous = self.parent
         self.parent = self.prepared = self.shifted = None
         self.shifts = self.prepared_revision = None
@@ -130,6 +133,7 @@ class RunResources:
     def __init__(self):
         from .reference_cache import ReferenceEncodeCache
         self.reference_encodes = ReferenceEncodeCache()
+        self.text_conditioning = None
         self.models = OrderedDict()
         self.paths = []
         self.transient_models = []

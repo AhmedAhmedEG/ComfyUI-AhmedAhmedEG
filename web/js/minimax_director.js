@@ -2099,7 +2099,10 @@ const embeddedCSS = `
 .mmx-director-root .mmx-clip-img-cell img { width:100%;height:100%;object-fit:contain; background:#151515; }
 .mmx-director-root .mmx-clip-vid-cell { width: 64px; min-width: 64px; max-width: 64px; height: 44px; flex-basis:64px; }
 .mmx-director-root .mmx-clip-vid-cell video { width:100%;height:100%;object-fit:contain; background:#151515; }
-.mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block { height:52px; }
+.mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block, .mmx-director-root .mmx-aud-block { height:52px; }
+.mmx-cache-button{font-size:9px;padding:1px 4px;border:1px solid #516779;border-radius:4px;background:#25343e;color:#a8d7cc;white-space:nowrap;cursor:pointer}
+.mmx-cache-dialog{background:#222b32;color:#e1e8ee;border:1px solid #556573;border-radius:8px;padding:18px;max-width:560px;font:13px system-ui}
+.mmx-cache-dialog table{border-collapse:collapse;width:100%;margin:12px 0}.mmx-cache-dialog td,.mmx-cache-dialog th{padding:6px 10px;text-align:left;border-bottom:1px solid #ffffff18}.mmx-cache-dialog p{font-size:11px;color:#a9b7c4;max-width:480px}
 .mmx-director-root .mmx-clip-img-cell .mmx-ref-type-label { display:none; }
 
 .mmx-reference-dialog { padding:16px;background:#24262b;color:#eee;border:1px solid #61697b;border-radius:8px;max-width:85vw; }
@@ -3788,6 +3791,7 @@ function mountDirectorUI(node) {
       let changed=false;
       for(const clip of timelineState.clips){
         const saved=cachedClipResults[clip.id];
+        if(saved?.cache_report?.updated_at>(clip.cache_report?.updated_at || 0)){clip.cache_report=saved.cache_report;changed=true;}
         if(clip.validated && (!saved?.can_approve || clip.validated_generation && saved.generation!==clip.validated_generation)){
           unapproveChain(clip);delete clip.validated_generation;changed=true;
         }
@@ -3915,6 +3919,28 @@ function mountDirectorUI(node) {
         shotTopBar.append(saved);
       }
       if(clip.refine_pending) {const review=document.createElement('span');review.textContent=clip.refine_approved?'Ready To Refine':'Review First Pass';review.className='mmx-generating-badge';shotTopBar.append(review);}
+      if(clip.cache_report && (Object.keys(clip.cache_report.stats || {}).length || Object.keys(clip.cache_report.run_preparation || {}).length)){
+        const cache=document.createElement('button');cache.className='mmx-cache-button';cache.textContent='Cache';
+        cache.title='Show caches reused, rebuilt or bypassed for this clip';
+        cache.setAttribute('aria-label',`Cache report for ${clip.name || 'clip'}`);
+        cache.onpointerdown=e=>e.stopPropagation();
+        cache.onclick=e=>{
+          e.stopPropagation();node.__mmxCacheDialog?.remove();
+          const dialog=document.createElement('dialog');dialog.className='mmx-cache-dialog';node.__mmxCacheDialog=dialog;
+          const heading=document.createElement('strong');heading.textContent=`${clip.name || 'Clip'} · Cache report`;dialog.append(heading);
+          const tableFor=(rows,title)=>{
+            if(!Object.keys(rows || {}).length)return;
+            const label=document.createElement('h4');label.textContent=title;dialog.append(label);
+            const table=document.createElement('table');const head=document.createElement('tr');
+            for(const text of ['Cache','Reused','Built / Read','Bypassed']){const cell=document.createElement('th');cell.textContent=text;head.append(cell);}table.append(head);
+            for(const [name,count] of Object.entries(rows)){const row=document.createElement('tr');for(const text of [name,count.hit || 0,count.miss || 0,count.bypass || 0]){const cell=document.createElement('td');cell.textContent=String(text);row.append(cell);}table.append(row);}dialog.append(table);
+          };
+          tableFor(clip.cache_report.stats,'This clip');tableFor(clip.cache_report.run_preparation,'Shared run preparation');
+          const note=document.createElement('p');note.textContent='Counts describe cache lookups in the reported run. Bypassed means a fresh check was required. Model setup reuse does not guarantee that weights stayed in VRAM. No entry means that cache was not consulted.';dialog.append(note);
+          const close=document.createElement('button');close.textContent='Close';close.onclick=()=>dialog.remove();dialog.append(close);
+          dialog.onclose=()=>dialog.remove();document.body.append(dialog);if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
+        };shotTopBar.append(cache);
+      }
       if(clip.id===generatingClipId) {const running=document.createElement('span');running.className='mmx-generating-badge';running.textContent=({preparing:'Preparing',sampling:'Generating',refining:'Refining',decoding:'Decoding',face_refining:'Refining Faces'})[generatingPhase] || 'Generating';running.setAttribute('role','status');running.setAttribute('aria-label',`${clip.name || 'Clip '+(idx+1)}: ${running.textContent}`);shotBlock.append(running);}
 
 
@@ -4222,7 +4248,7 @@ function mountDirectorUI(node) {
 
     const types = new Set(timelineState.clips.flatMap(clip => activeReferences(clip).map(row=>row.type)));
     imagesRow.hidden = !types.has("image") && !types.has("refmod");
-    videosRow.hidden = !types.has("video"); audiosRow.hidden = !types.has("audio");
+    videosRow.hidden = !types.has("video"); audiosRow.hidden = false;
     // 3. Add Clip Button flush at end of Track 1 (Clips Lane)
     const addCard = document.createElement("div");
     addCard.className = "mmx-add-clip-card";
@@ -5283,6 +5309,14 @@ function mountDirectorUI(node) {
     }
   };
   if (!node.__mmxShotListener) {
+    const cacheUpdates=event=>{
+      const detail=event.detail,report=detail?.cache_report;
+      if(!report || String(detail.node).split(':').at(-1)!==String(node.id) || detail.project_id!==timelineState.project_id)return;
+      const clip=timelineState.clips.find(row=>String(row.id)===String(detail.clip_id));
+      if(!clip || clip.cache_report?.run_id===report.run_id && clip.cache_report?.revision===report.revision)return;
+      clip.cache_report=report;syncState(true);renderTimeline();
+    };
+    api.addEventListener('minimax_director/stage',cacheUpdates);
     node.__mmxShotListener = event => node.__mmxShotHandler?.(event);
     api.addEventListener("minimax_director/shot", node.__mmxShotListener);
     const clearGenerating=event=>{
@@ -5303,6 +5337,7 @@ function mountDirectorUI(node) {
       node.__mmxRefObserverSets?.clear();
       cancelTimelineDrag?.();
       node.__mmxProjectDialog?.remove();
+      node.__mmxCacheDialog?.remove();api.removeEventListener('minimax_director/stage',cacheUpdates);
 
           api.removeEventListener("minimax_director/shot", node.__mmxShotListener);
       for(const name of ['execution_error','execution_interrupted','executing'])api.removeEventListener(name,clearGenerating);

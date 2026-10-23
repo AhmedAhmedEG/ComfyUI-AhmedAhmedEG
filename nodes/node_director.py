@@ -273,6 +273,13 @@ class MiniMaxH3MasterDirector:
             from core.stage_progress import bind, stage
         bind(unique_id, project_id)
         executor = MasterDirectorExecutor(project_id=project_id)
+        try:
+            from ..core.text_conditioning_cache import TextConditioningCache
+            from ..core.stage_progress import cache_clip,cache_event,cache_report
+        except ImportError:
+            from core.text_conditioning_cache import TextConditioningCache
+            from core.stage_progress import cache_clip,cache_event,cache_report
+        current_resources().text_conditioning=TextConditioningCache(executor.cache_mgr.project_dir)
 
         # Check for RefMods from timeline or ref_pack
         refmod_rows = timeline.get("refmods", [])
@@ -530,6 +537,9 @@ class MiniMaxH3MasterDirector:
                     "tail_audio": cached_tail_aud,
                 }
                 run_report.append({"clip_id": clip_id, "action": "cached", "frames": int(cached_frames.shape[0])})
+                cache_event('Saved clip','hit');stage('Saved clip reused')
+                clip_item['cache_report']=cache_report()
+                cache_mgr.update_clip_metadata(clip_id,{'cache_report':clip_item['cache_report']})
                 current_resources().release_spills()
                 return True
             return False
@@ -537,6 +547,7 @@ class MiniMaxH3MasterDirector:
         for clip_idx, clip_item in enumerate(clips):
             clip_id = str(clip_item.get("id") or f"clip_{clip_idx + 1}")
             clip_type = str(clip_item.get("type", "T2V")).upper()
+            cache_clip(clip_id,clip_idx+1,len(clips))
             # Accepted footage is immutable: do not rebuild its conditioning,
             # validate current refs, load a sampling model, or reapply continuity.
             if clip_item.get("validated") and not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
@@ -551,6 +562,9 @@ class MiniMaxH3MasterDirector:
                     run_report.append({'clip_id':clip_id,'action':'cached','frames':meta.get('frame_count'),
                                        'media_load':'skipped_unneeded_predecessor'})
                     completed_clips.append(clip_item)
+                    cache_event('Saved clip','hit');stage('Saved clip reused')
+                    clip_item['cache_report']=cache_report()
+                    cache_mgr.update_clip_metadata(clip_id,{'cache_report':clip_item['cache_report']})
                     continue
                 if not reuse_saved_take(clip_idx, clip_item):
                     raise ValueError(f"Approved clip {clip_id!r} has no complete saved take. Restore its saved results or unapprove it to generate again.")
@@ -564,6 +578,7 @@ class MiniMaxH3MasterDirector:
                     clear_dependent_approvals(invalidated)
                 shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1,
                     total=len(clips), invalidated_clip_ids=invalidated)
+                cache_event('Saved clip','miss')
             # Content hashing can read tens of gigabytes on the first run.
             # Announce the active clip first, and never hash loader weights just
             # to replay an approved take or pass through source footage.
@@ -1199,7 +1214,7 @@ class MiniMaxH3MasterDirector:
                 first_audio=choose_audio(audio_mode,first_audio,source,first_frames.shape[0])
                 if staged is None:
                     cache_mgr.store_first_pass(clip_id,first_fp,sampled_latent,first_frames,first_audio,
-                        {'trim_prefix':int(is_chained_from_previous),'previous_trim':int(previous_trim),'seed':str(clip_seed)})
+                        {'trim_prefix':int(is_chained_from_previous),'previous_trim':int(previous_trim),'seed':str(clip_seed),'cache_report':cache_report()})
                 all_decoded_frames.append(first_frames);all_decoded_audios.append(first_audio)
                 clip_item['refine_pending']=True
                 timeline['clips']=clips;save_autosave(cache_mgr,timeline)
@@ -1339,6 +1354,7 @@ class MiniMaxH3MasterDirector:
                 clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
+                    'cache_report':cache_report(),
                     "refine_passes":refine_pass_rows,"refinement_pending":False,
                     "first_pass": {k:v for k,v in staged.items() if k != 'latent'} if staged is not None else None,
                     "media_recovery": {"color": clip_item.get("color"), "requires_final_media": bool(
@@ -1380,6 +1396,7 @@ class MiniMaxH3MasterDirector:
             clip_item["refine_approved"]=False
             generated_count += 1
             clip_item["last_seed"] = str(clip_seed)
+            clip_item['cache_report']=cache_report()
             clip_item["seed"] = str((clip_seed + (1 if seed_mode == "increment" else -1 if seed_mode == "decrement" else 0)) & 0xFFFFFFFFFFFFFFFF)
             timeline["builder_state"] = builder
             timeline["clips"] = clips

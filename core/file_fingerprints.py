@@ -69,7 +69,9 @@ class FileFingerprintCache:
             self._load()
             before = _stamp(path)
             row = self.entries.get(key)
+            from .stage_progress import cache_event
             if row is not None and row['stamp'] == before:
+                cache_event('File fingerprints','hit')
                 self.entries.move_to_end(key)
                 return {'sha256': row['sha256'], 'size': before[2]}
             # A replacement/write during hashing must never publish a digest
@@ -84,6 +86,7 @@ class FileFingerprintCache:
             else:
                 raise RuntimeError('File changed while calculating its fingerprint: ' + path)
             self.entries[key] = {'stamp': after, 'sha256': digest}
+            cache_event('File fingerprints','miss')
             self.entries.move_to_end(key)
             while len(self.entries) > self.limit:
                 self.entries.popitem(last=False)

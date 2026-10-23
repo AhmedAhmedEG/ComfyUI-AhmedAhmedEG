@@ -11,6 +11,7 @@ class TensorFingerprintCache:
         self.lock = threading.Lock()
 
     def feed(self, digest, tensor, mode, write):
+        from .stage_progress import cache_event
         try:
             version = tensor._version
             if not isinstance(version, int):
@@ -19,6 +20,7 @@ class TensorFingerprintCache:
                         str(tensor.device), tuple(tensor.stride()), tensor.storage_offset())
             reference = weakref.ref(tensor)
         except (RuntimeError, AttributeError, TypeError):
+            cache_event('Tensor fingerprints','bypass')
             # Inference tensors have no mutation counter: scan them normally.
             write(digest)
             return digest
@@ -26,8 +28,10 @@ class TensorFingerprintCache:
         with self.lock:
             cached = self.entries.get(key)
             if cached is not None and cached[0]() is tensor:
+                cache_event('Tensor fingerprints','hit')
                 self.entries.move_to_end(key)
                 return cached[1].copy()
+        cache_event('Tensor fingerprints','miss')
         write(digest)
         if tensor._version == version:
             with self.lock:

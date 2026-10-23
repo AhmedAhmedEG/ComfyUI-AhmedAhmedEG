@@ -115,6 +115,8 @@ class ReferenceEncodeCache:
         key = (self._vae_identity(vae), digest.hexdigest())
         token=hashlib.sha256(repr((getattr(self,'signature','1'),key)).encode()).hexdigest()
         if key in self.entries:
+            from .stage_progress import cache_event
+            cache_event('Reference latents','hit')
             data, device = self.entries.pop(key)
             self.entries[key] = (data, device)
             self.hits += 1
@@ -127,6 +129,8 @@ class ReferenceEncodeCache:
                 data,meta=load_reference_latent(str(path))
                 if meta.get('cache_key')!=token:raise ValueError('Mismatched reference cache entry')
                 self.hits+=1
+                from .stage_progress import cache_event
+                cache_event('Reference latents','hit')
                 self._add_owner(token)
                 device=getattr(vae,'output_device','cpu')
                 self._retain(key,data,device)
@@ -135,6 +139,8 @@ class ReferenceEncodeCache:
                 if isinstance(error, torch.OutOfMemoryError): raise
                 self.index.pop(token,None)
         self.misses += 1
+        from .stage_progress import cache_event
+        cache_event('Reference latents','miss')
         from .stage_progress import stage
         stage(f'{type(getattr(vae, "first_stage_model", vae)).__name__} · loading as needed and encoding reference')
         result = vae.encode(*args, **kwargs)

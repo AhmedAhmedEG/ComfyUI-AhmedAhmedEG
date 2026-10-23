@@ -459,13 +459,15 @@ class ProjectCacheManager:
             rows[cid] = {"has_frames": frames, "has_audio": audio, "has_latent": latent,
                          "can_approve": latent or frames and audio, "generation": meta.get("generation"),
                          "seed": meta.get('seed'), "authored_seed": meta.get('authored_seed'),
-                         "next_seed": meta.get('next_seed'), "refine_pending": False}
+                         "next_seed": meta.get('next_seed'), "refine_pending": False,
+                         "cache_report":meta.get('cache_report')}
         for cid,meta in self._manifest.get("first_pass",{}).items():
             row=rows.setdefault(cid,{"has_frames":False,"has_audio":False,"has_latent":False,"can_approve":False})
             row["has_first_pass"]=os.path.isfile(self._clip_artifact_path(cid,"draft",meta["generation"]))
             row['first_pass_generation']=meta['generation']
             row['refine_pending']=bool(row['has_first_pass'] and meta.get('updated_at',0)>
                 self._manifest.get('clips',{}).get(cid,{}).get('updated_at',0))
+            if row['refine_pending']:row['cache_report']=meta.get('cache_report')
         return rows
 
     @_locked

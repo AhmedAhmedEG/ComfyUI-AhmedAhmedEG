@@ -1,6 +1,7 @@
 """Execution-scoped status text; no tensor inspection, GPU calls or polling."""
 from contextvars import ContextVar
 import time
+import uuid
 
 _current = ContextVar('mmx_stage_progress', default=None)
 
@@ -22,6 +23,10 @@ class StageProgress:
         self.index = self.total = None
         self.last = None
         self.last_sent = -float('inf')
+        self.run_id=uuid.uuid4().hex
+        self.cache_stats={}
+        self.cache_revision=0
+        self.cache_updated=0
 
     def report(self, label, *, step=None, steps=None, active=True):
         if self.node is None:
@@ -33,7 +38,29 @@ class StageProgress:
         self.last, self.last_sent = identity, now
         self.send({'node': str(self.node), 'project_id': self.project,
             'clip_id': self.clip, 'index': self.index, 'total': self.total,
-            'label': label, 'step': step, 'steps': steps, 'active': active})
+            'label': label, 'step': step, 'steps': steps, 'active': active,
+            'cache_report':cache_report() if self is _current.get() else None})
+
+
+def cache_event(name, outcome):
+    reporter=_current.get()
+    if reporter is None:return
+    row=reporter.cache_stats.setdefault(reporter.clip,{}).setdefault(name,{'hit':0,'miss':0,'bypass':0})
+    row[outcome]=row.get(outcome,0)+1
+    reporter.cache_revision+=1;reporter.cache_updated=time.time()
+
+
+def cache_report():
+    reporter=_current.get()
+    if reporter is None:return None
+    return {'run_id':reporter.run_id,'revision':reporter.cache_revision,'updated_at':reporter.cache_updated,
+        'stats':{name:dict(row) for name,row in reporter.cache_stats.get(reporter.clip,{}).items()},
+        'run_preparation':{name:dict(row) for name,row in reporter.cache_stats.get('',{}).items()}}
+
+
+def cache_clip(clip_id,index,total):
+    reporter=_current.get()
+    if reporter is not None:reporter.clip=clip_id;reporter.index=index;reporter.total=total
 
 
 def stage(label, **kwargs):
@@ -75,6 +102,10 @@ class ProgressEncoder:
         return self.encoder.tokenize(*args, **kwargs)
     def encode_from_tokens_scheduled(self, *args, **kwargs):
         stage('Text encoder · loading as needed and encoding prompt')
-        result = self.encoder.encode_from_tokens_scheduled(*args, **kwargs)
+        from .run_resources import current_resources
+        owner=current_resources()
+        if owner is not None and owner.text_conditioning is not None:
+            result=owner.text_conditioning.encode(self.encoder,args,kwargs)
+        else:result = self.encoder.encode_from_tokens_scheduled(*args, **kwargs)
         stage('Text conditioning ready · preparing visual/audio conditioning')
         return result
