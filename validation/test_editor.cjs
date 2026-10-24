@@ -72,6 +72,10 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.extension.beforeConfigureGraph(currentExporter);
   assert.deepEqual(Array.from(currentExporter.nodes[0].widgets_values),[24,'H.265','mkv','pyav','10-bit',18,true,false,'my/output',false,true,'flac','320k',true,false]);
   w.extension.beforeConfigureGraph(currentExporter);assert.equal(currentExporter.nodes[0].widgets_values[8],'my/output');
+  const exporterWithPreview={nodes:[{type:'MiniMaxH3VideoCombine',widgets_values:[...oldExporter.slice(0,3),'pyav',...oldExporter.slice(3),'']}]};
+  w.extension.beforeConfigureGraph(exporterWithPreview);
+  assert.equal(exporterWithPreview.nodes[0].widgets_values.length,15);
+  assert.equal(exporterWithPreview.nodes[0].widgets_values[8],'video/test','Old serialized preview never shifts export settings');
   w.extension.beforeConfigureGraph(oldGraph);assert.strictEqual(oldGraph.nodes[0].widgets_values.length,9);
   const namedLegacy={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[...settingsValues],widgets_values_named:{run_mode:'clip_by_clip',execution_mode:'Conditioning Guide Output',seed:'18446744073709551615'}}]};
   w.extension.beforeConfigureGraph(namedLegacy);
@@ -110,6 +114,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   exporter.addDOMWidget=(name,type,element,options)=>{previewOptions=options;w.document.body.append(element);return {last_y:400};};
   exporter.onExecuted({video:[{filename:'my video.mkv',subfolder:'video',type:'output'}]});
   const combineVideo=exporter.__mmxVideoElement.querySelector('video');
+  assert.equal(exporter.__mmxVideoWidget.serialize,false);
   assert.equal(combineVideo.preload,'auto');assert.equal(combineVideo.style.maxHeight,'');
   assert.equal(previewOptions.getHeight(),384);exporter.size[1]=1200;assert.equal(previewOptions.getHeight(),784);
   combineVideo.onerror();assert(combineVideo.src.includes('/video/preview?'));

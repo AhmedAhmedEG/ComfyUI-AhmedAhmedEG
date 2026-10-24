@@ -5464,14 +5464,15 @@ app.registerExtension({
           "pingpong","save_metadata","filename_prefix","save_output","crop_to_audio",
           "audio_codec","audio_bitrate","save_first_frame","save_last_frame"];
         const legacy = [...current];legacy.splice(6,0,"log_level");legacy.splice(11,0,"pass_frames");
-        if(node.widgets_values.length === 16 && !node.widgets_values_named) {
+        if(node.widgets_values.length >= 16 && !node.widgets_values_named
+            && !["pyav","ffmpeg"].includes(node.widgets_values[3])) {
           // The original exporter used FFmpeg and had no backend widget.
           node.widgets_values.splice(3,0,"ffmpeg");
         }
-        const fields=node.widgets_values.length === 17 ? legacy : current;
+        const fields=node.widgets_values.length >= 17 ? legacy : current;
         const values=Object.fromEntries(fields.map((name,index)=>[name,node.widgets_values[index]]));
         Object.assign(values,node.widgets_values_named || {});
-        delete values.log_level;delete values.pass_frames;
+        delete values.log_level;delete values.pass_frames;delete values.video_preview;
         node.widgets_values=current.map(name=>values[name]);
         node.widgets_values_named=values;
       }
@@ -5569,6 +5570,7 @@ app.registerExtension({
             getHeight:()=>Math.max(220,(node.size?.[1] || 0)-(node.__mmxVideoWidget?.last_y || 0)-16),
           });
           this.__mmxVideoWidget=widget;
+          widget.serialize=false;
           widget.computeSize=width=>[width,220];
         }
         this.__mmxVideoDownload?.abort();
