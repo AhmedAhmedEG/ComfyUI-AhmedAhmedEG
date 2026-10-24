@@ -76,9 +76,9 @@ class MiniMaxH3MasterDirector:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "video_vae": ("VAE", {"tooltip": "MiniMax H3 Video VAE (minimax_h3_video_vae)."}),
-                "audio_vae": ("VAE", {"tooltip": "MiniMax H3 Audio VAE (minimax_h3_audio_vae). Required for REF2VA & Audio."}),
-                "clip": ("CLIP", {"tooltip": "MiniMax H3 Qwen3-VL CLIP model."}),
+                "video_vae": ("VAE", {"lazy": True, "tooltip": "MiniMax H3 Video VAE (minimax_h3_video_vae)."}),
+                "audio_vae": ("VAE", {"lazy": True, "tooltip": "MiniMax H3 Audio VAE (minimax_h3_audio_vae). Required for REF2VA & Audio."}),
+                "clip": ("CLIP", {"lazy": True, "tooltip": "MiniMax H3 Qwen3-VL CLIP model."}),
             },
             "optional": {
                 "timeline": ("MMX_TIMELINE", {"tooltip":"Optional externally authored clips. Timeline Builder owns prompts, types and durations; Master owns approval and execution."}),
@@ -123,6 +123,10 @@ class MiniMaxH3MasterDirector:
         preflight_inputs={'model':model,'fl2va_model':fl2va_model,'ref2va_model':ref2va_model,
             'config':config,'timeline_data':timeline_data,**kwargs}
         settings = config if isinstance(config, dict) else {}
+        graph=kwargs.get('prompt') or {}
+        sockets=graph.get(str(kwargs.get('unique_id','default_director')),{}).get('inputs',{})
+        auxiliary=[name for name in ('video_vae','audio_vae','clip') if kwargs.get(name) is None
+            and isinstance(sockets.get(name),(list,tuple))]
         try:
             tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
             tl = migrate_timeline(tl) if isinstance(tl, dict) else {}
@@ -139,9 +143,9 @@ class MiniMaxH3MasterDirector:
         next_only=generation in ('Next clip','Next shot') or generation is None and settings.get('run_mode')=='clip_by_clip'
         if generation == "Conditioning only" or (generation is None and
                 kwargs.get("execution_mode",settings.get("execution_mode")) == "Conditioning Guide Output"):
-            return []
+            return auxiliary
         if model is not None: # Compatibility for pre-cleanup API graphs.
-            return []
+            return auxiliary
         if kwargs.get("i2v_groups") is not None or kwargs.get("r2v_groups") is not None:
             from .node_groups import _normalize_group
             clips = [{"type":group.get("kind","REF2VA")} for group in
@@ -156,12 +160,15 @@ class MiniMaxH3MasterDirector:
         preflight=PreflightCache(preflight_inputs,tl)
         blocked=set()
         types = set()
+        needs_auxiliary=False
         for index,item in enumerate(clips):
             if item.get("locked") or item.get("validated"):
+                if not preflight.complete(index):needs_auxiliary=True
                 continue
             if item.get('id') not in blocked and preflight.matches(index):
                 if next_only:break
                 continue
+            needs_auxiliary=True
             if all('id' in row for row in clips):
                 blocked.update(dependent_successors(clips,index,settings.get('continuity_mode','Motion Context (Chained)'),settings.get('context_length','22')))
             name=item.get("model_override")
@@ -179,7 +186,7 @@ class MiniMaxH3MasterDirector:
             needed.append("fl2va_model")
         if any(get_required_model_type(t)=="ref2va" for t in types) and ref2va_model is None:
             needed.append("ref2va_model")
-        return needed
+        return needed + (auxiliary if needs_auxiliary else [])
 
     @execution_resources
     def execute(

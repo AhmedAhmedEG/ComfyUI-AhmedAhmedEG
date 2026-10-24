@@ -20,7 +20,7 @@ def model_graph_signature(graph,link,seen=None):
     seen.add(node_id)
     try:
         node=graph[node_id];kind=node['class_type'];inputs=node.get('inputs',{})
-        allowed={'UNETLoader','LoraLoaderModelOnly','H3SLAAttention','ComfySwitchNode',
+        allowed={'UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','H3SLAAttention','ComfySwitchNode',
                  'PrimitiveBoolean','PrimitiveInt','PrimitiveFloat'}
         if kind not in allowed or link[1]!=0:raise UnsupportedGraph('Unknown model modifier')
         def value(item):
@@ -37,9 +37,11 @@ def model_graph_signature(graph,link,seen=None):
             if not isinstance(switch,bool):raise UnsupportedGraph('Dynamic model switch')
             return {'type':kind,'switch':switch,'model':value(inputs['on_true' if switch else 'on_false'])}
         settings={key:value(item) for key,item in inputs.items()}
-        if kind in ('UNETLoader','LoraLoaderModelOnly'):
+        if kind in ('UNETLoader','LoraLoaderModelOnly','CLIPLoader','VAELoader'):
             import folder_paths
-            field,category=('unet_name','diffusion_models') if kind=='UNETLoader' else ('lora_name','loras')
+            field,category={'UNETLoader':('unet_name','diffusion_models'),
+                'LoraLoaderModelOnly':('lora_name','loras'),'CLIPLoader':('clip_name','text_encoders'),
+                'VAELoader':('vae_name','vae')}[kind]
             if not isinstance(inputs.get(field),str):raise UnsupportedGraph('Dynamic checkpoint filename')
             settings['weights']=file_provenance(folder_paths.get_full_path_or_raise(category,inputs[field]))
         # Include the installed modifier implementation when available.
@@ -91,7 +93,23 @@ class PreflightCache:
                     # checkpoint was overwritten. Do not bless new disk bytes
                     # as the identity of those old retained weights.
                     return None
-            # These inputs are already evaluated; this never requests H3.
+            # Stock auxiliary loaders can be identified before constructing any
+            # weight-bearing object. Unknown modifiers still need live checks.
+            auxiliaries={}
+            master_inputs=self.graph[self.node_id].get('inputs',{})
+            for name,kind in (('clip','CLIPLoader'),('video_vae','VAELoader'),('audio_vae','VAELoader')):
+                link=master_inputs.get(name)
+                if not isinstance(link,(list,tuple)) or len(link)!=2 or self.graph.get(str(link[0]),{}).get('class_type')!=kind:
+                    auxiliaries={};break
+                auxiliaries[name]=model_graph_signature(self.graph,link)
+                value=self.inputs.get(name)
+                if value is not None:
+                    identity=fingerprint_value(auxiliaries[name])
+                    previous=getattr(value,'_mmx_preflight_graph',None)
+                    if previous is None:setattr(value,'_mmx_preflight_graph',identity)
+                    elif previous!=identity:return None
+            if not auxiliaries and any(self.inputs.get(name) is None for name in ('clip','video_vae','audio_vae')):
+                return None
             record_graph_provenance(self.graph,self.node_id,**{name:self.inputs.get(name) for name in ('clip','video_vae','audio_vae')})
             encoder=self.inputs.get('clip');patcher=getattr(encoder,'patcher',None)
             if getattr(patcher,'forced_hooks',None) is not None or getattr(encoder,'apply_hooks_to_conds',None) is not None:return None
@@ -99,6 +117,12 @@ class PreflightCache:
             encoder_settings={name:getattr(encoder,name,None) for name in ('layer_idx','use_clip_schedule','tokenizer_options')}
             encoder_settings['patcher']={name:getattr(patcher,name,None) for name in ('patches','object_patches','model_options')}
             encoder_signature=framed_key(encoder_settings,hashlib.sha256()).hexdigest()
+            if auxiliaries:
+                if encoder is not None:
+                    previous=getattr(encoder,'_mmx_preflight_options',None)
+                    if previous is None:setattr(encoder,'_mmx_preflight_options',encoder_signature)
+                    elif previous!=encoder_signature:return None
+                encoder_signature=auxiliaries
             runtime_keys={'cache_report','validated','validated_generation','selected','last_seed','generation',
                 'refine_pending','refine_approved','refine_approved_generation','invalidated_generation','last_seed_mode','name'}
             authored={k:v for k,v in shot.items() if k not in runtime_keys}
@@ -130,6 +154,7 @@ class PreflightCache:
                 'shared_prompt_policy','shared_ref_ids','source_size','cast_cards') if k in self.timeline}
             ignored={'self','cls','model','fl2va_model','ref2va_model','prompt','unique_id','timeline_data','timeline',
                 'generation_mode','ref_pack','config','kwargs','builder_state'}
+            if auxiliaries:ignored.update(('clip','video_vae','audio_vae'))
             params={k:v for k,v in self.inputs.items() if k not in ignored and v is not None}
             builder=self.inputs.get('builder_state','{}')
             if isinstance(builder,str):builder=json.loads(builder or '{}')
@@ -142,7 +167,7 @@ class PreflightCache:
                 previous=manifest.get('clips',{}).get(str(shots[index-1]['id']),{})
                 upstream=(previous.get('generation'),previous.get('fingerprint'))
             self.runtime=self.runtime or runtime_provenance()
-            return fingerprint_value({'version':1,'runtime':self.runtime,'clip':authored,'model':signature,
+            return fingerprint_value({'version':2 if auxiliaries else 1,'runtime':self.runtime,'clip':authored,'model':signature,
                 'settings':settings,'params':params,'builder':builder,'shared':shared,'refs':refs,'files':file_refs,
                 'adapters':adapters,'algorithm_weights':algorithms,'encoder_options':encoder_signature,
                 'prefix':[(c.get('id'),c.get('duration')) for c in shots[:index]],'upstream':upstream})
@@ -155,6 +180,11 @@ class PreflightCache:
         root,manifest=self.manifest();cid=str(self.timeline['clips'][index]['id'])
         meta=manifest.get('clips',{}).get(cid,{})
         if meta.get('preflight_key')!=key:return False
+        return self.complete(index)
+
+    def complete(self,index):
+        root,manifest=self.manifest();cid=str(self.timeline['clips'][index]['id'])
+        meta=manifest.get('clips',{}).get(cid,{})
         generation=meta.get('generation')
         if not generation:return False
         # Resolve the native artifact names without constructing a project/cache.

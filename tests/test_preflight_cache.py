@@ -54,6 +54,36 @@ class PreflightTests(unittest.TestCase):
                 state['clips'][0]['seed_mode']='randomize'
                 self.assertIsNone(PreflightCache(self.inputs(case,graph,state),state).key(0))
 
+    def test_all_weight_loaders_are_skipped_for_unchanged_result(self):
+        with master() as case:
+            graph,folder,path=self.setup_graph(case)
+            graph['5']['inputs'].update(clip=['3',0],video_vae=['4',0],audio_vae=['6',0])
+            graph.update({'3':{'class_type':'CLIPLoader','inputs':{'clip_name':'encoder','type':'minimax','device':'default'}},
+                '4':{'class_type':'VAELoader','inputs':{'vae_name':'video'}},
+                '6':{'class_type':'VAELoader','inputs':{'vae_name':'audio'}}})
+            with patch.dict(sys.modules,{'folder_paths':folder}):
+                state=json.loads(case.execute([{'id':'one','type':'T2V','duration':1,'seed':7}],
+                    model=None,fl2va_model=case.model,prompt=graph,unique_id='5')[-1])
+                args=self.inputs(case,graph,state)
+                args.update(clip=None,video_vae=None,audio_vae=None)
+                self.assertTrue(PreflightCache(args,state).matches(0))
+                self.assertEqual(case.node.check_lazy_status(**args),[])
+                case.native_calls.clear();case.sampling_calls.clear()
+                result=case.node.execute(**args)
+                self.assertEqual(case.native_calls,[])
+                self.assertEqual(case.sampling_calls,[])
+                self.assertEqual(json.loads(result[8])['generated'],0)
+                changed=json.loads(args['timeline_data']);changed['clips'][0]['prompt']='different'
+                expected=['fl2va_model','video_vae','audio_vae','clip']
+                self.assertEqual(case.node.check_lazy_status(**{**args,'timeline_data':json.dumps(changed)}),expected)
+                graph['3']['inputs']['device']='cpu'
+                self.assertEqual(case.node.check_lazy_status(**args),expected)
+                graph['3']['class_type']='UnknownEncoderModifier'
+                self.assertEqual(case.node.check_lazy_status(**args),expected)
+                self.assertEqual(case.node.check_lazy_status(**args,generation_mode='Conditioning only'),expected[1:])
+                for name in ('clip','video_vae','audio_vae'):
+                    self.assertTrue(case.node.INPUT_TYPES()['required'][name][1]['lazy'])
+
     def test_model_graph_follows_selected_switch_and_rejects_unknown_modifiers(self):
         with master() as case:
             graph,folder,_=self.setup_graph(case)
