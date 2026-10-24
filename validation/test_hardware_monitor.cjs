@@ -20,7 +20,9 @@ const tick=async()=>{const task=[...jobs.entries()].find(([id,j])=>j.delay===200
   assert(root.textContent.includes('12.0 MiB/s'));assert(root.textContent.includes('3.0 MiB/s'));assert(root.querySelector('footer').hidden);assert(!root.textContent.includes('Live · ComfyUI server'));
   assert(root.textContent.includes('Retained models · 1'));assert(root.textContent.includes('MiniMaxH3'));assert(root.textContent.includes('18.00 GiB'));assert(root.textContent.includes('Process RAM 37.00 GiB · Swap 4.00 GiB'));
   root.querySelector('details').open=true;
-  sample.retained_models.models=[];await tick();assert(root.textContent.includes('No models in ComfyUI'));assert(!root.textContent.includes('MiniMaxH3'));assert(root.querySelector('details').open,'Polling preserves expanded state');
+  sample.retained_models.models=[{name:'RIFE · flownet.pkl_fp16',device:'cuda:0',dynamic:false,source:'ComfyUI-VFI private cache',model_bytes:200,device_bytes:200}];
+  await tick();assert(root.textContent.includes('RIFE'));assert(root.textContent.includes('ComfyUI-VFI private cache'));
+  sample.retained_models.models=[];await tick();assert(root.textContent.includes('No models in the native registry'));assert(!root.textContent.includes('MiniMaxH3'));assert(root.querySelector('details').open,'Polling preserves expanded state');
   sample.retained_models={available:false,models:[]};await tick();assert(root.textContent.includes('Retained models · unavailable'));
   const selector=root.querySelector('select');assert(!selector.hidden);selector.value='two';selector.onchange();assert(root.textContent.includes('1.0 / 8.0 GiB'));
   const handle=root.querySelector('.mmx-hardware-drag');const oldX=parseFloat(root.style.left);handle.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.equal(parseFloat(root.style.left),oldX-10);

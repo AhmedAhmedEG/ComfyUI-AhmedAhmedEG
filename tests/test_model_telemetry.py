@@ -1,4 +1,6 @@
 import unittest
+import sys
+from unittest.mock import patch
 from types import SimpleNamespace
 
 from core.model_telemetry import retained_models
@@ -19,6 +21,24 @@ class Patcher:
 
 
 class ModelTelemetryTests(unittest.TestCase):
+    def test_private_rife_cache_reports_metadata_without_loading_or_copying(self):
+        tensor=SimpleNamespace(numel=lambda:100,element_size=lambda:2,device='cuda:0')
+        host=SimpleNamespace(numel=lambda:20,element_size=lambda:4,device='cpu')
+        network=SimpleNamespace(parameters=lambda:iter([tensor,host]),buffers=lambda:iter([tensor]))
+        wrapper=SimpleNamespace(model=SimpleNamespace(flownet=network),device='cuda:0')
+        owner=SimpleNamespace(MODEL_CACHE={'flownet.pkl_fp16':wrapper,'duplicate':wrapper})
+        cls=type('RIFEInterpolation',(),{'__module__':'test_private_vfi'})
+        registry=SimpleNamespace(NODE_CLASS_MAPPINGS={'RIFEInterpolation':cls})
+        with patch.dict(sys.modules,{'test_private_vfi':owner}):
+            rows=retained_models(SimpleNamespace(current_loaded_models=[]),registry)['models']
+            self.assertEqual(len(rows),1)
+            self.assertEqual(rows[0]['model_bytes'],280)
+            self.assertEqual(rows[0]['device_bytes'],200)
+            self.assertIn('RIFE',rows[0]['name'])
+            self.assertIn('private cache',rows[0]['source'])
+            owner.MODEL_CACHE.clear()
+            self.assertEqual(retained_models(SimpleNamespace(current_loaded_models=[]),registry)['models'],[])
+
     def test_shared_base_deduplicated_without_conflating_distinct_models(self):
         first = Patcher()
         clone = Patcher(first.model)

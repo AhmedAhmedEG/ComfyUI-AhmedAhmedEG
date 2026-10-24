@@ -40,7 +40,7 @@ export function createHardwareMonitor(client, options={}) {
         root.querySelector('.mmx-hardware-meters').append(row);meters[key]={row,value:row.querySelector('.mmx-hardware-value'),fill:row.querySelector('.mmx-hardware-fill')};
     }
     const models=document.createElement('details');models.className='mmx-hardware-models';
-    models.innerHTML='<summary>Retained models</summary><p class="mmx-hardware-memory"></p><div class="mmx-hardware-model-list"></div><p class="mmx-hardware-note">Native registry across all GPUs. Host buffers cover tracked weights only; pinned bytes are a subset. These figures overlap with RAM and VRAM meters.</p>';
+    models.innerHTML='<summary>Retained models</summary><p class="mmx-hardware-memory"></p><div class="mmx-hardware-model-list"></div><p class="mmx-hardware-note">Native registry and supported extension caches across all GPUs. Host buffers cover tracked weights only; pinned bytes are a subset. These figures overlap with RAM and VRAM meters.</p>';
     body.insertBefore(models,body.querySelector('footer'));
     const modelSummary=models.querySelector('summary'),modelList=models.querySelector('.mmx-hardware-model-list'),processMemory=models.querySelector('.mmx-hardware-memory');
     document.body.append(root);
@@ -60,11 +60,11 @@ export function createHardwareMonitor(client, options={}) {
         processMemory.textContent=memory?`Process RAM ${bytes(memory.rss_bytes)} · Swap ${bytes(memory.swap_bytes)}`:'';
         processMemory.title='ComfyUI process resident RAM and swap. Includes models and other allocations; do not add these to the GPU counters.';
         modelList.replaceChildren();
-        if(!rows.length){const empty=document.createElement('p');empty.className='mmx-hardware-note';empty.textContent=registry?.available?'No models in ComfyUI’s loaded registry. Other execution caches are not enumerated.':'Model telemetry is unavailable. The server may need the updated node pack loaded.';modelList.append(empty);}
+        if(!rows.length){const empty=document.createElement('p');empty.className='mmx-hardware-note';empty.textContent=registry?.available?'No models in the native registry or supported extension caches.':'Model telemetry is unavailable. The server may need the updated node pack loaded.';modelList.append(empty);}
         for(const row of rows){
             const card=document.createElement('div');card.className='mmx-hardware-model';
             const name=document.createElement('strong');name.textContent=row.name||'Model';
-            const mode=document.createElement('p');mode.textContent=`${row.device||'Unknown device'} · ${row.dynamic?'Dynamic VRAM':'Standard loading'}`;
+            const mode=document.createElement('p');mode.textContent=`${row.device||'Unknown device'} · ${row.source || (row.dynamic?'Dynamic VRAM':'Standard loading')}`;
             const stats=document.createElement('dl');
             for(const [label,value] of [['Model size',row.model_bytes],['On device',row.device_bytes],['Host weight buffers',row.host_buffer_bytes],['Pinned host weights',row.pinned_bytes]]){
                 const term=document.createElement('dt'),amount=document.createElement('dd');term.textContent=label;amount.textContent=bytes(value);stats.append(term,amount);

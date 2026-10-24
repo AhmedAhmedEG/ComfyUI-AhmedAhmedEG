@@ -32,6 +32,12 @@ class PreflightTests(unittest.TestCase):
                 check=PreflightCache(args,state)
                 self.assertTrue(check.matches(0),'Saved input signature should match before model evaluation')
                 self.assertEqual(case.node.check_lazy_status(**args),[])
+                # The browser receives the just-saved generation identifier.
+                # It describes the result, not a request to produce new footage.
+                state['clips'][0]['saved_generation']='newly-completed-result'
+                args['timeline_data']=json.dumps(state)
+                self.assertTrue(PreflightCache(args,state).matches(0))
+                self.assertEqual(case.node.check_lazy_status(**args),[])
                 case.sampling_calls.clear();case.native_calls.clear()
                 result=case.node.execute(**args)
                 self.assertEqual(case.sampling_calls,[])
@@ -92,6 +98,24 @@ class PreflightTests(unittest.TestCase):
                 self.assertEqual(model_graph_signature(graph,['switch',0])['switch'],True)
                 graph['switch']['class_type']='UnrecognizedModelPatcher'
                 with self.assertRaises(UnsupportedGraph):model_graph_signature(graph,['switch',0])
+
+    def test_result_labels_do_not_hide_a_real_continuity_dependency_change(self):
+        with master() as case:
+            graph,folder,_=self.setup_graph(case)
+            with patch.dict(sys.modules,{'folder_paths':folder}):
+                state=json.loads(case.execute([
+                    {'id':'one','type':'T2V','duration':1,'seed':7},
+                    {'id':'two','type':'T2V','duration':1,'seed':7,'continuity':True}],
+                    model=None,fl2va_model=case.model,prompt=graph,unique_id='5')[-1])
+                for item in state['clips']:item['saved_generation']='browser-result-label'
+                state['clips'][0]['validated']=True
+                args=self.inputs(case,graph,state)
+                self.assertTrue(PreflightCache(args,state).matches(1))
+                self.assertEqual(case.node.check_lazy_status(**args,generation_mode='Next clip'),[])
+                manager=ProjectCacheManager('regression',case.temp.name)
+                manager.update_clip_metadata('one',{'generation':'actually-replaced-upstream-result'})
+                self.assertFalse(PreflightCache(args,state).matches(1))
+                self.assertEqual(case.node.check_lazy_status(**args,generation_mode='Next clip'),['fl2va_model'])
 
     def test_overwritten_checkpoint_cannot_relabel_retained_weights(self):
         with master() as case:
