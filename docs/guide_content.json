@@ -5407,7 +5407,8 @@
         "Connect the frames you actually intend to encode and their matching audio.",
         "Choose codec/container and an available encoder backend.",
         "Choose quality and save_output, then set a server-relative filename prefix.",
-        "Run and inspect the file. Use Project Video if the raw Master output is only the latest clip."
+        "Run and inspect the file. Use Project Video if the raw Master output is only the latest clip.",
+        "Use Download video below the preview to save the original encoded file. Resize the node taller to give playback more vertical room."
       ],
       "examples": [
         {
@@ -5587,30 +5588,6 @@
             "connection": false
           }
         },
-        "log_level": {
-          "what": "How much diagnostic information the operation reports.",
-          "when": "Enable more detail when checking providers, cache reuse or encoding failures.",
-          "effect": "Changes logs, not intended clip content.",
-          "caution": "Logs are not a visual-quality assessment.",
-          "advanced": false,
-          "contract": {
-            "name": "log_level",
-            "type": "COMBO",
-            "required": true,
-            "default": "Standard",
-            "choices": [
-              "Standard",
-              "Quiet",
-              "Verbose"
-            ],
-            "dynamic": false,
-            "description": "",
-            "min": null,
-            "max": null,
-            "step": null,
-            "connection": false
-          }
-        },
         "pingpong": {
           "what": "Reverse-loop frames or trim the encoded video to available audio.",
           "when": "Use deliberately for delivery timing rather than to fix model generation.",
@@ -5682,26 +5659,6 @@
             "type": "BOOLEAN",
             "required": true,
             "default": true,
-            "choices": [],
-            "dynamic": false,
-            "description": "",
-            "min": null,
-            "max": null,
-            "step": null,
-            "connection": false
-          }
-        },
-        "pass_frames": {
-          "what": "Optional encoder metadata, passthrough frames and endpoint image saves.",
-          "when": "Enable only outputs you actually need for delivery or downstream graph work.",
-          "effect": "Adds file metadata, separate frame files or raw-frame passthrough.",
-          "caution": "These do not change sampling; extra saved files are separate exported artifacts.",
-          "advanced": false,
-          "contract": {
-            "name": "pass_frames",
-            "type": "BOOLEAN",
-            "required": true,
-            "default": false,
             "choices": [],
             "dynamic": false,
             "description": "",
@@ -5865,7 +5822,7 @@
         }
       },
       "output_descriptions": [
-        "Processed frame batch when pass_frames is enabled; otherwise an empty batch.",
+        "Processed frame batch when the frames output is connected; otherwise an empty batch. No separate switch is needed.",
         "Encoded file path as a STRING."
       ]
     },
