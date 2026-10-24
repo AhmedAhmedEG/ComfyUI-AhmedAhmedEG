@@ -968,6 +968,27 @@ class RuntimeContracts(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "ffmpeg failed"):
                 MiniMaxH3VideoCombine().combine_video(torch.zeros((5, 32, 32, 3)), encoder_backend="ffmpeg")
 
+    def test_video_combine_frames_follow_connections_without_toggle(self):
+        import sys
+        from nodes.node_video_combine import MiniMaxH3VideoCombine
+        from unittest.mock import Mock
+        exporter = Mock()
+        exporter.combine.return_value = {"ui": {"gifs": []}, "result": (None, "output.mp4")}
+        module = SimpleNamespace(DaSiWa_EnhancedVideoCombine=lambda: exporter)
+        images = torch.zeros((5, 32, 32, 3))
+        inputs = MiniMaxH3VideoCombine.INPUT_TYPES()["required"]
+        self.assertNotIn("pass_frames", inputs)
+        self.assertNotIn("log_level", inputs)
+        with patch.dict(sys.modules, {"core.vendor.dasiwa.enhanced_video": module}):
+            for link, expected in [(["7", 0], True), ([7, 0], True), (["7", 1], False), (["8", 0], False)]:
+                self.assertEqual(MiniMaxH3VideoCombine.IS_CHANGED(unique_id="7",
+                    prompt={"9": {"inputs": {"images": link}}}), expected)
+                MiniMaxH3VideoCombine().combine_video(images, unique_id="7",
+                    prompt={"9": {"inputs": {"images": link}}}, pass_frames=not expected)
+                self.assertEqual(exporter.combine.call_args.args[10], expected)
+            MiniMaxH3VideoCombine().combine_video(images, pass_frames=True)
+            self.assertFalse(exporter.combine.call_args.args[10])
+
 
 
 if __name__ == "__main__":

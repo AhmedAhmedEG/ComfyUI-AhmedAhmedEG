@@ -13,6 +13,15 @@ from typing import Tuple
 
 log = logging.getLogger("MiniMaxH3VideoCombine")
 
+
+def _frames_connected(prompt, unique_id):
+    return any(
+        isinstance(link, (list, tuple)) and len(link) == 2
+        and str(link[0]) == str(unique_id) and link[1] == 0
+        for node in (prompt or {}).values()
+        for link in node.get("inputs", {}).values()
+    )
+
 try:
     import folder_paths
 except ImportError:
@@ -97,12 +106,10 @@ class MiniMaxH3VideoCombine:
                 "encoder_backend": (["pyav", "ffmpeg"], {"default": "pyav"}),
                 "bit_depth": (["Auto", "8-bit", "10-bit"], {"default": "Auto"}),
                 "quality": ("INT", {"default": 21, "min": 0, "max": 51, "step": 1}),
-                "log_level": (["Standard", "Quiet", "Verbose"], {"default": "Standard"}),
                 "pingpong": ("BOOLEAN", {"default": False}),
                 "save_metadata": ("BOOLEAN", {"default": True}),
                 "filename_prefix": ("STRING", {"default": "video/%date:yyyy-MM-dd%/%date:hhmmss%"}),
                 "save_output": ("BOOLEAN", {"default": True}),
-                "pass_frames": ("BOOLEAN", {"default": False}),
                 "crop_to_audio": ("BOOLEAN", {"default": False}),
                 "audio_codec": (["Auto", "aac", "opus", "mp3", "flac"], {"default": "Auto"}),
                 "audio_bitrate": (["Auto", "128k", "192k", "256k", "320k"], {"default": "192k"}),
@@ -125,6 +132,11 @@ class MiniMaxH3VideoCombine:
     OUTPUT_NODE = True
     FUNCTION = "combine_video"
     CATEGORY = "ComfyUI-AhmedAhmedEG"
+
+    @classmethod
+    def IS_CHANGED(cls, prompt=None, unique_id=None, **kwargs):
+        # Hidden PROMPT inputs alone do not invalidate ComfyUI's output cache.
+        return _frames_connected(prompt, unique_id)
 
     def combine_video(
         self,
@@ -153,6 +165,10 @@ class MiniMaxH3VideoCombine:
     ):
         import torch
         import numpy as np
+
+        # Connections, rather than a second switch, determine whether to retain
+        # the full IMAGE batch. Keep legacy arguments accepted for old API jobs.
+        pass_frames = _frames_connected(prompt, unique_id)
 
         if encoder_backend == "pyav":
             if container == "Auto": target_container = "Auto"
@@ -282,7 +298,7 @@ class MiniMaxH3VideoCombine:
                 except Exception:
                     pass
 
-        res_frames = images if pass_frames else images[:1]
+        res_frames = images if pass_frames else images[:0]
         from PIL import Image
         for enabled, index, suffix in ((save_first_frame, 0, "first"), (save_last_frame, -1, "last")):
             if enabled:

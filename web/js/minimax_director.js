@@ -5459,10 +5459,21 @@ app.registerExtension({
           node.widgets_values_named = values;
         }
       }
-      if (node.type === "MiniMaxH3VideoCombine" && Array.isArray(node.widgets_values)
-          && node.widgets_values.length === 16 && !node.widgets_values_named) {
-        // The pre-consolidation exporter used FFmpeg and had no backend widget.
-        node.widgets_values.splice(3, 0, "ffmpeg");
+      if (node.type === "MiniMaxH3VideoCombine" && Array.isArray(node.widgets_values)) {
+        const current = ["frame_rate","codec","container","encoder_backend","bit_depth","quality",
+          "pingpong","save_metadata","filename_prefix","save_output","crop_to_audio",
+          "audio_codec","audio_bitrate","save_first_frame","save_last_frame"];
+        const legacy = [...current];legacy.splice(6,0,"log_level");legacy.splice(11,0,"pass_frames");
+        if(node.widgets_values.length === 16 && !node.widgets_values_named) {
+          // The original exporter used FFmpeg and had no backend widget.
+          node.widgets_values.splice(3,0,"ffmpeg");
+        }
+        const fields=node.widgets_values.length === 17 ? legacy : current;
+        const values=Object.fromEntries(fields.map((name,index)=>[name,node.widgets_values[index]]));
+        Object.assign(values,node.widgets_values_named || {});
+        delete values.log_level;delete values.pass_frames;
+        node.widgets_values=current.map(name=>values[name]);
+        node.widgets_values_named=values;
       }
     }
     // Transfer retired global controls into the connected Master's authoring state.
@@ -5538,26 +5549,66 @@ app.registerExtension({
       };
     }
     if (["MiniMaxH3VideoCombine", "MiniMaxH3ProjectVideo"].includes(nodeData.name)) {
+      const removed=nodeType.prototype.onRemoved;
+      nodeType.prototype.onRemoved=function(){
+        this.__mmxVideoDownload?.abort();
+        for(const video of this.__mmxVideoElement?.querySelectorAll("video") || []) {video.pause();video.removeAttribute("src");video.load();}
+        return removed?.apply(this,arguments);
+      };
       const executed = nodeType.prototype.onExecuted;
       nodeType.prototype.onExecuted = function (message) {
         executed?.apply(this, arguments);
         if (!Array.isArray(message?.video)) return;
         if (!this.__mmxVideoElement) {
-          const element = document.createElement("div"); element.style.width = "100%";
+          const element = document.createElement("div");
+          element.style.cssText="width:100%;height:100%;min-height:0;display:flex;flex-direction:column;gap:8px;overflow:auto";
           this.__mmxVideoElement = element;
-          this.addDOMWidget("video_preview", "MMX_VIDEO_PREVIEW", element, { serialize: false });
+          const node=this;
+          const widget=this.addDOMWidget("video_preview", "MMX_VIDEO_PREVIEW", element, {
+            serialize:false,hideOnZoom:false,getMinHeight:()=>220,
+            getHeight:()=>Math.max(220,(node.size?.[1] || 0)-(node.__mmxVideoWidget?.last_y || 0)-16),
+          });
+          this.__mmxVideoWidget=widget;
+          widget.computeSize=width=>[width,220];
         }
+        this.__mmxVideoDownload?.abort();
+        for(const video of this.__mmxVideoElement.querySelectorAll("video")) {video.pause();video.removeAttribute("src");video.load();}
         this.__mmxVideoElement.replaceChildren();
         for (const item of message.video) {
-          const video = document.createElement("video"); video.controls = true; video.preload = "metadata";
-          video.style.cssText = "width:100%;max-height:280px";
-          video.src = api.apiURL(`/view?${new URLSearchParams({ filename: item.filename, subfolder: item.subfolder || "", type: item.type || "output" })}`);
+          const row=document.createElement("div");
+          row.style.cssText="display:flex;flex-direction:column;flex:1 0 200px;min-height:200px;gap:6px";
+          const video = document.createElement("video"); video.controls = true; video.preload = "auto";
+          video.style.cssText = "width:100%;height:0;min-height:160px;flex:1 1 auto;object-fit:contain;background:#111";
+          const query=new URLSearchParams({filename:item.filename,subfolder:item.subfolder || "",type:item.type || "output"});
+          const source=`/view?${query}`;
+          video.src = api.apiURL(source);
           video.onerror = () => {
             if (video.dataset.fallback) return;
             video.dataset.fallback = "1";
-            video.src = api.apiURL(`/minimax_director/video/preview?${new URLSearchParams({ filename: item.filename, subfolder: item.subfolder || "", type: item.type || "output" })}`);
+            video.src = api.apiURL(`/minimax_director/video/preview?${query}`);
           };
-          this.__mmxVideoElement.appendChild(video);
+          const download=document.createElement("button");download.type="button";download.textContent="Download video";
+          download.style.cssText="align-self:flex-end;flex-shrink:0;padding:6px 12px;cursor:pointer";
+          download.onclick=async()=>{
+            download.disabled=true;download.textContent="Downloading…";
+            const controller=new AbortController();this.__mmxVideoDownload?.abort();this.__mmxVideoDownload=controller;
+            let url;
+            try {
+              const response=await api.fetchApi(source,{signal:controller.signal});
+              if(!response.ok)throw Error(`HTTP ${response.status}`);
+              const blob=await response.blob();
+              if(controller.signal.aborted)return;
+              url=URL.createObjectURL(blob);
+              const link=document.createElement("a");link.href=url;link.download=item.filename;
+              document.body.append(link);link.click();link.remove();
+              const completed=url;setTimeout(()=>URL.revokeObjectURL(completed),60000);url=null;
+              download.textContent="Download video";
+            } catch(error) {
+              download.textContent=controller.signal.aborted?"Download video":"Download failed — retry";
+              download.title=error.message;
+            } finally {if(url)URL.revokeObjectURL(url);download.disabled=false;}
+          };
+          row.append(video,download);this.__mmxVideoElement.append(row);
         }
         this.setDirtyCanvas(true,true);
       };
