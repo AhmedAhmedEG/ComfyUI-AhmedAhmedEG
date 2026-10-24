@@ -79,6 +79,7 @@ class MasterPreviewRepairs(unittest.TestCase):
                    {'id':'three','type':'T2V','duration':1,'continuity':False}]
             state=json.loads(case.execute(shots)[-1])
             for shot in state['clips']: shot['validated']=False
+            state['clips'][0]['prompt']='changed parent prompt'
             manager=ProjectCacheManager('regression',case.temp.name)
             old=manager._manifest['clips']['two']['generation']
             def fail(*args, **kwargs):
@@ -102,6 +103,7 @@ class MasterPreviewRepairs(unittest.TestCase):
             manager=ProjectCacheManager('regression',case.temp.name)
             old=manager._manifest['clips']['two']['generation']
             state['clips'][1]['validated']=True
+            state['clips'][0]['prompt']='changed parent prompt'
             case.sampling_calls.clear()
             result=case.execute(timeline_data=json.dumps(state))
             self.assertEqual(len(case.sampling_calls),2,'The old approved successor must not be reused after its parent changes')

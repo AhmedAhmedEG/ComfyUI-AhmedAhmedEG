@@ -90,6 +90,8 @@ def fingerprint_value(value) -> str:
             h.update(b"list")
             for child in item:
                 visit(child)
+        elif getattr(item,'is_nested',False) and hasattr(item,'unbind'):
+            h.update(b'nested-streams');visit(list(item.unbind()))
         elif isinstance(item, torch.Tensor):
             from .tensor_fingerprints import tensor_fingerprints
             h.update(str((tuple(item.shape), item.dtype)).encode())

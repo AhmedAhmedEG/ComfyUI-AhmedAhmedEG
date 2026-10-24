@@ -507,7 +507,7 @@ class MiniMaxH3MasterDirector:
                     all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
                     all_decoded_audios[-1] = fit_audio_duration(all_decoded_audios[-1], all_decoded_frames[-1].shape[0], FPS)
                 previous_fingerprint = cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("fingerprint")
-                log.info(f"Master Director: Clip {clip_idx + 1}/{len(clips)} [{clip_id}] is validated & cached. Skipping diffusion sampling.")
+                log.info(f"Master Director: Clip {clip_idx + 1}/{len(clips)} [{clip_id}] has a reusable saved result. Skipping diffusion sampling.")
                 all_decoded_frames.append(cached_frames)
                 all_decoded_audios.append(
                     cached_audio if cached_audio is not None else {"waveform": torch.zeros((1, 2, 48000)), "sample_rate": 48000}
@@ -561,13 +561,8 @@ class MiniMaxH3MasterDirector:
                 continue
 
             if not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
-                invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length)
-                if invalidated:
-                    cache_mgr.discard_clip_results(invalidated)
-                    clear_dependent_approvals(invalidated)
                 shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1,
-                    total=len(clips), invalidated_clip_ids=invalidated)
-                cache_event('Saved clip','miss')
+                    total=len(clips))
             # Content hashing can read tens of gigabytes on the first run.
             # Announce the active clip first, and never hash loader weights just
             # to replay an approved take or pass through source footage.
@@ -1030,9 +1025,6 @@ class MiniMaxH3MasterDirector:
             if clip_idx == 0 or clip_item.get("continuation_source"):
                 # External context never trims unrelated delivered footage.
                 previous_trim = 0
-            if previous_trim and all_decoded_frames:
-                all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
-                all_decoded_audios[-1] = fit_audio_duration(all_decoded_audios[-1], all_decoded_frames[-1].shape[0], FPS)
             last_positive = positive
             last_latent = latent
             last_prompt = final_prompt
@@ -1064,9 +1056,27 @@ class MiniMaxH3MasterDirector:
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
+                    "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
+                    "initial_latent":latent,
                     "video_vae": video_vae, "audio_vae": audio_vae, "clip": clip},
             )
             completed_clips.append(clip_item)
+            # Approval preserves a take across edits. Independently, exact-input
+            # cache matches avoid repeating deterministic generation work.
+            if cache_mgr.is_clip_cached_and_valid(clip_id,clip_fp) and reuse_saved_take(clip_idx,clip_item,source):
+                shot_event(unique_id,project_id,clip_id,'completed',reused=True,index=clip_idx+1,total=len(clips))
+                if run_mode=='clip_by_clip':break
+                continue
+            if not clip_item.get('locked'):
+                invalidated=[cid for cid in dependent_successors(clips,clip_idx,continuity_mode,context_length)
+                    if cid in cache_mgr._manifest.get('clips',{}) or cid in cache_mgr._manifest.get('first_pass',{})]
+                if invalidated:
+                    cache_mgr.discard_clip_results(invalidated);clear_dependent_approvals(invalidated)
+                cache_event('Saved clip','miss')
+                if invalidated:shot_event(unique_id,project_id,clip_id,'preparing',index=clip_idx+1,total=len(clips),invalidated_clip_ids=invalidated)
+            if previous_trim and all_decoded_frames:
+                all_decoded_frames[-1]=all_decoded_frames[-1][:-previous_trim]
+                all_decoded_audios[-1]=fit_audio_duration(all_decoded_audios[-1],all_decoded_frames[-1].shape[0],FPS)
 
             refine_enabled=refine is not None and refine.get('enabled',False) and not (refine.get('skip_fl2v',True) and canon_mode=='FL2VA')
             confirm_first=refine_enabled and refine.get('confirm_first_pass',False)

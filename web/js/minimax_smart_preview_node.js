@@ -27,17 +27,30 @@ function mount(node) {
     return {project_id:projectId,clips:[]};
   };
   node.properties ||= {};
+  const ensureOutputs=()=>{
+    for(const [name,type] of [['images','IMAGE'],['audio','AUDIO'],['fps','FLOAT']])
+      if(!node.outputs?.some(output=>output.name===name))node.addOutput?.(name,type);
+  };
+  ensureOutputs();
+  let settings=node.widgets?.find(widget=>widget.name==='preview_settings');
+  settings ||= node.addWidget?.('text','preview_settings','{}',()=>{},{});
+  if(settings){settings.hidden=true;settings.type='hidden';settings.computeSize=()=>[0,-4];settings.draw=()=>{};}
+  const saveOptions=options=>{
+    node.properties.mmx_preview=options;
+    if(settings)settings.value=JSON.stringify(options);
+    node.setDirtyCanvas?.(true,true);
+  };
   const player = installSmartPreview({root, toolbar, timelinePanel: document.createElement("div"),
     inspector: document.createElement("div"), node, api, getTimeline, standalone: true,
     hasMasterInput:()=>receivedMasterInput,
     getOptions: () => node.properties.mmx_preview || {scope: "latest", autoplay: true},
-    saveOptions: options => {node.properties.mmx_preview = options;node.setDirtyCanvas?.(true,true);}});
+    saveOptions});
   node.__mmxPlayer = player;
   const widget = node.addDOMWidget("smart_preview", "MMX_SMART_PREVIEW", root, {serialize: false});
   widget.computeSize = () => [640, 400];
   widget.serialize = false;
   const configured = node.onConfigure;
-  node.onConfigure = function (...args) {receivedMasterInput=false;const result=configured?.apply(this,args);player.restore();return result;};
+  node.onConfigure = function (...args) {receivedMasterInput=false;const result=configured?.apply(this,args);ensureOutputs();player.restore();return result;};
   const connection = node.onConnectionsChange;
   node.onConnectionsChange = function (...args) {receivedMasterInput=false;const result=connection?.apply(this,args);player.contextChanged();return result;};
   const previous = node.onExecuted;

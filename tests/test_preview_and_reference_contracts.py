@@ -17,10 +17,10 @@ class PreviewReferenceContracts(unittest.TestCase):
         legacy,=MiniMaxH3DirectorSettings().build_config(seed=123)
         self.assertEqual(legacy['seed'],123)
 
-    def test_preview_is_only_a_state_sink(self):
+    def test_unwired_preview_stays_a_lightweight_state_sink(self):
         state={'project_id':'demo','clips':[{'id':'one'}]}
         result=MiniMaxH3SmartPreview().preview(json.dumps(state))
-        self.assertEqual(result['result'],())
+        self.assertEqual(result['result'],(None,None,24.0))
         self.assertEqual(json.loads(result['ui']['mmx_project'][0]),state)
         with self.assertRaises(ValueError):MiniMaxH3SmartPreview().preview('{}')
 

@@ -30,6 +30,31 @@ encoding. Records are bounded to 128; the CPU working set remains 128 MiB.
 Cache ownership now uses connected asset IDs, so old content-key ownership may
 require one initial rebuild after this update. This does not remove saved clips.
 
+## Unchanged clips
+
+An unapproved clip with a complete saved result is reused when its exact effective
+generation inputs still match. Approval additionally preserves a chosen take
+across input edits. An unchanged Next Clip run finishes without moving on to the
+next unapproved clip; All Clips checks each clip. Actual replacements invalidate
+dependent successors. Cache hits leave them intact. Changing the seed requests a
+new variation; random/increment/decrement seed modes retain their existing behavior.
+New identity fields and implementation changes can require an initial rebuild of
+older results whose full input compatibility cannot be established safely.
+
+## Smart Preview outputs for RIFE
+
+Smart Preview exposes **images**, **audio**, and **fps**. Its existing scope,
+resolution and stage selectors also select these outputs for the next queued run.
+Raw frames are assembled only when images or audio are wired to another node;
+ordinary playback remains lightweight. Generated source FPS is 24.
+
+For the installed **RIFE Frame Interpolation** node, connect Smart Preview images
+to images and fps to source_fps. Set target_fps to **48** for 2x interpolation.
+Connect the interpolated images to a video saver, set its FPS to the same **48**,
+and connect Smart Preview audio to the saver. Raising export FPS without adding
+frames speeds up playback instead of making motion smoother. RIFE generates the
+extra frames; it does not alter H3's sampling FPS.
+
 Loading titles distinguish **Checking Cache**, **Loading References** and
 **Encoding References**, followed by **Text Conditioning**, **Preparing MiniMax H3**,
 **Sampling**, **Refining**, **Decoding Video/Audio**, **Saving Clip** and

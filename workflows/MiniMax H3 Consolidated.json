@@ -239,8 +239,6 @@
         "simple",
         12,
         3,
-        0,
-        "fixed",
         "manual",
         1,
         "16:9",
@@ -256,8 +254,6 @@
         "scheduler": "simple",
         "shift_video": 12,
         "shift_audio": 3,
-        "seed": 0,
-        "control_after_generate": "fixed",
         "canvas_policy": "manual",
         "canvas_megapixels": 1,
         "canvas_aspect": "16:9",
@@ -853,7 +849,23 @@
           "link": 14
         }
       ],
-      "outputs": [],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": null
+        }
+      ],
       "properties": {
         "Node name for S&R": "MiniMaxH3SmartPreview",
         "mmx_preview": {
@@ -861,8 +873,12 @@
           "autoplay": true
         }
       },
-      "widgets_values": [],
-      "widgets_values_named": {},
+      "widgets_values": [
+        "{}"
+      ],
+      "widgets_values_named": {
+        "preview_settings": "{}"
+      },
       "title": "Smart Preview · Latest clip / Full video"
     },
     {
