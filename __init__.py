@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.31"
+__version__ = "1.7.32"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -170,6 +170,24 @@ if getattr(PromptServer, "instance", None) is not None:
         try:
             from .core.preview import encode_preview, preview_path
             project_id, key = request.query.get("project_id", ""), request.query.get("key", "")
+            if request.query.get('download')=='1':
+                from .core.preview_export import export_cached_preview
+                import tempfile
+                # A user-requested export may assemble existing fragments even
+                # before Master input. Its temporary file never changes caches.
+                with tempfile.TemporaryDirectory(prefix='minimax-preview-export-') as folder:
+                    path=await asyncio.to_thread(export_cached_preview,project_id,key,folder)
+                    response=web.StreamResponse(headers={'Content-Type':'video/mp4','Cache-Control':'no-store',
+                        'Content-Disposition':'attachment; filename="minimax-preview.mp4"',
+                        'Content-Length':str(os.path.getsize(path))})
+                    await response.prepare(request)
+                    with open(path,'rb') as media:
+                        while True:
+                            chunk=await asyncio.to_thread(media.read,1024*1024)
+                            if not chunk:break
+                            await response.write(chunk)
+                    await response.write_eof()
+                    return response
             from .core.progress import master_preview_input
             if request.query.get('read_only') == '1' or master_preview_input(project_id) is None:
                 from .core.cache_manager import get_cache_root_dir, safe_component

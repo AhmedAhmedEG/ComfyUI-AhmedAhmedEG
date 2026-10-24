@@ -131,16 +131,17 @@ def preview_path(project_id, key, base_dir=None):
     return manager, Path(manager.project_dir) / "previews" / (key + ".mp4")
 
 
-def encode_preview(project_id, key, base_dir=None):
+def encode_preview(project_id, key, base_dir=None, *, output_path=None):
     """Encode only the requested revision; iterate frames one shot at a time."""
     import numpy as np
     import torch
     import torch.nn.functional as F
     from .audio_post import join_timeline_audio
     from .vendor.dasiwa.helper_pyav_video import encode_attempt
-    manager, target = preview_path(project_id, key, base_dir)
+    manager, cached_target = preview_path(project_id, key, base_dir)
+    target=Path(output_path) if output_path is not None else cached_target
     if target.is_file(): return str(target)
-    plan_path = resolve_input_path(key + ".json", str(target.parent))
+    plan_path = resolve_input_path(key + ".json", str(cached_target.parent))
     plan = json.loads(Path(plan_path).read_text(encoding="utf-8"))
 
     def load(row):
