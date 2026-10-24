@@ -1,5 +1,6 @@
 """Read-only unchanged-result checks before requesting lazy diffusion models."""
 import inspect
+import hashlib
 import json
 from pathlib import Path
 
@@ -92,16 +93,31 @@ class PreflightCache:
                     return None
             # These inputs are already evaluated; this never requests H3.
             record_graph_provenance(self.graph,self.node_id,**{name:self.inputs.get(name) for name in ('clip','video_vae','audio_vae')})
+            encoder=self.inputs.get('clip');patcher=getattr(encoder,'patcher',None)
+            if getattr(patcher,'forced_hooks',None) is not None or getattr(encoder,'apply_hooks_to_conds',None) is not None:return None
+            from .text_conditioning_cache import framed_key
+            encoder_settings={name:getattr(encoder,name,None) for name in ('layer_idx','use_clip_schedule','tokenizer_options')}
+            encoder_settings['patcher']={name:getattr(patcher,name,None) for name in ('patches','object_patches','model_options')}
+            encoder_signature=framed_key(encoder_settings,hashlib.sha256()).hexdigest()
             runtime_keys={'cache_report','validated','validated_generation','selected','last_seed','generation',
                 'refine_pending','refine_approved','refine_approved_generation','invalidated_generation','last_seed_mode','name'}
             authored={k:v for k,v in shot.items() if k not in runtime_keys}
             refs=self.inputs.get('ref_pack') or {}
             ids=set([*self.timeline.get('shared_ref_ids',[]),*shot.get('ref_ids',[])])
             source=shot.get('source')
+            if source and (not isinstance(source,dict) or source.get('filename') and not source.get('ref_id')):
+                return None # File-source edits need the normal source decoder's provenance.
             if isinstance(source,dict) and source.get('ref_id'):ids.add(source['ref_id'])
             if 'refs' in refs:
                 refs=[row for row in refs['refs'] if ids & {row.get(k) for k in ('id','alt_id','slot_id','ref_id')}]
             else:refs={k:v for k,v in refs.items() if k in ids}
+            if self.timeline.get('refmods') or isinstance(refs,list) and any(row.get('type')=='refmod' for row in refs):
+                return None # RefMod bundles can have companion metadata; use their full loader check.
+            if (self.inputs.get('face_refine') or {}).get('enabled',False):return None
+            from .loras import resolve_lora_files
+            from .provenance import algorithm_provenance
+            adapters=resolve_lora_files(shot.get('loras',[]))
+            algorithms=algorithm_provenance(self.inputs.get('selflift'),self.inputs.get('refine'),self.inputs.get('semantic_bridge'))
             file_refs=[]
             for row in self.timeline.get('references',[]):
                 if row.get('id') not in ids:continue
@@ -128,6 +144,7 @@ class PreflightCache:
             self.runtime=self.runtime or runtime_provenance()
             return fingerprint_value({'version':1,'runtime':self.runtime,'clip':authored,'model':signature,
                 'settings':settings,'params':params,'builder':builder,'shared':shared,'refs':refs,'files':file_refs,
+                'adapters':adapters,'algorithm_weights':algorithms,'encoder_options':encoder_signature,
                 'prefix':[(c.get('id'),c.get('duration')) for c in shots[:index]],'upstream':upstream})
         except (ValueError,KeyError,TypeError,OSError,AttributeError,IndexError):
             return None # Unknown wiring/data needs the full generation-input check.

@@ -73,5 +73,16 @@ class PreflightTests(unittest.TestCase):
                 path.write_bytes(b'different weights')
                 self.assertIsNone(PreflightCache(args,state).key(0))
 
+    def test_clip_adapter_content_participates_in_preflight_key(self):
+        with master() as case:
+            graph,folder,_=self.setup_graph(case)
+            state={'project_id':'regression','clips':[{'id':'one','type':'T2V','seed':7,'loras':[{'name':'adapter','strength':.7}]}]}
+            args=self.inputs(case,graph,state)
+            with patch.dict(sys.modules,{'folder_paths':folder}),patch('core.loras.resolve_lora_files',return_value=[{'sha256':'one'}]):
+                first=PreflightCache(args,state).key(0)
+            with patch.dict(sys.modules,{'folder_paths':folder}),patch('core.loras.resolve_lora_files',return_value=[{'sha256':'two'}]):
+                second=PreflightCache(args,state).key(0)
+            self.assertIsNotNone(first);self.assertNotEqual(first,second)
+
 
 if __name__=='__main__':unittest.main()

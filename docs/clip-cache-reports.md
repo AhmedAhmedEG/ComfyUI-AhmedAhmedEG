@@ -45,7 +45,8 @@ The lazy-loader also checks a saved early input signature before requesting H3.
 It covers authored settings, effective reference content, installed generation
 code, checkpoint/LoRA files and supported upstream model wiring, plus continuity
 predecessor generations. Standard UNET loaders, Turbo LoRA, Boolean model switches
-and H3 SLA Attention are supported. Unknown modifiers, dynamic seed modes,
+and H3 SLA Attention are supported. Unknown modifiers, RefMod bundles, file-source
+edits, face refinement, encoder hooks, dynamic seed modes,
 missing files and old results without this signature use the full check. These
 fallbacks may load H3. Text encoder and VAE inputs remain ordinary upstream inputs;
 the early check does not require diffusion-model construction or sampling.
