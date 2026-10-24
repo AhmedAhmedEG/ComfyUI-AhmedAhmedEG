@@ -41,6 +41,15 @@ new variation; random/increment/decrement seed modes retain their existing behav
 New identity fields and implementation changes can require an initial rebuild of
 older results whose full input compatibility cannot be established safely.
 
+The lazy-loader also checks a saved early input signature before requesting H3.
+It covers authored settings, effective reference content, installed generation
+code, checkpoint/LoRA files and supported upstream model wiring, plus continuity
+predecessor generations. Standard UNET loaders, Turbo LoRA, Boolean model switches
+and H3 SLA Attention are supported. Unknown modifiers, dynamic seed modes,
+missing files and old results without this signature use the full check. These
+fallbacks may load H3. Text encoder and VAE inputs remain ordinary upstream inputs;
+the early check does not require diffusion-model construction or sampling.
+
 ## Smart Preview outputs for RIFE
 
 Smart Preview exposes **images**, **audio**, and **fps**. Its existing scope,

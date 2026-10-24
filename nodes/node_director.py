@@ -120,6 +120,8 @@ class MiniMaxH3MasterDirector:
         **kwargs,
     ):
         """Determine which model inputs need evaluation based on active timeline clip modes."""
+        preflight_inputs={'model':model,'fl2va_model':fl2va_model,'ref2va_model':ref2va_model,
+            'config':config,'timeline_data':timeline_data,**kwargs}
         settings = config if isinstance(config, dict) else {}
         try:
             tl = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else timeline_data
@@ -134,6 +136,7 @@ class MiniMaxH3MasterDirector:
         except (ValueError, TypeError):
             tl, clips = {}, []
         generation=kwargs.get("generation_mode", tl.get("generation_mode") if isinstance(tl,dict) else None)
+        next_only=generation in ('Next clip','Next shot') or generation is None and settings.get('run_mode')=='clip_by_clip'
         if generation == "Conditioning only" or (generation is None and
                 kwargs.get("execution_mode",settings.get("execution_mode")) == "Conditioning Guide Output"):
             return []
@@ -146,19 +149,30 @@ class MiniMaxH3MasterDirector:
         if not clips:
             clips = [{"type":"T2V"}]
         overrides = kwargs.get("model_pack") or {}
+        try:
+            from ..core.preflight_cache import PreflightCache
+        except ImportError:
+            from core.preflight_cache import PreflightCache
+        preflight=PreflightCache(preflight_inputs,tl)
+        blocked=set()
         types = set()
-        for item in clips:
+        for index,item in enumerate(clips):
             if item.get("locked") or item.get("validated"):
                 continue
+            if item.get('id') not in blocked and preflight.matches(index):
+                if next_only:break
+                continue
+            if all('id' in row for row in clips):
+                blocked.update(dependent_successors(clips,index,settings.get('continuity_mode','Motion Context (Chained)'),settings.get('context_length','22')))
             name=item.get("model_override")
             if name:
                 if not isinstance(overrides,dict) or overrides.get(name) is None:
                     raise ValueError(f"Unknown clip model override: {name}")
-                if generation in ("Next clip", "Next shot"):
+                if next_only:
                     break
                 continue
             types.add(normalize_mode(item.get("type","T2V")))
-            if generation in ("Next clip", "Next shot"):
+            if next_only:
                 break
         needed = []
         if any(get_required_model_type(t)=="fl2va" for t in types) and fl2va_model is None:
@@ -194,6 +208,8 @@ class MiniMaxH3MasterDirector:
         unique_id="default_director",
         **kwargs,
     ):
+        preflight_inputs={key:value for key,value in locals().items() if key!='kwargs'}
+        preflight_inputs.update(kwargs)
         try:
             from ..core.provenance import record_graph_provenance
         except ImportError:
@@ -389,6 +405,11 @@ class MiniMaxH3MasterDirector:
             raise ValueError("Every timeline shot must have a unique clip ID.")
 
         cache_mgr = executor.cache_mgr
+        try:
+            from ..core.preflight_cache import PreflightCache
+        except ImportError:
+            from core.preflight_cache import PreflightCache
+        preflight=PreflightCache(preflight_inputs,{**timeline,'clips':clips})
         if execution_mode != "Conditioning Guide Output":
             cache_mgr.begin_preview_run()
         preview_mode = str(
@@ -559,6 +580,13 @@ class MiniMaxH3MasterDirector:
                     raise ValueError(f"Approved clip {clip_id!r} has no complete saved take. Restore its saved results or unapprove it to generate again.")
                 completed_clips.append(clip_item)
                 continue
+
+            if not clip_item.get('locked') and execution_mode!='Conditioning Guide Output' and preflight.matches(clip_idx):
+                if reuse_saved_take(clip_idx,clip_item):
+                    completed_clips.append(clip_item)
+                    shot_event(unique_id,project_id,clip_id,'completed',reused=True,index=clip_idx+1,total=len(clips))
+                    if run_mode=='clip_by_clip':break
+                    continue
 
             if not clip_item.get("locked") and execution_mode != "Conditioning Guide Output":
                 shot_event(unique_id, project_id, clip_id, "preparing", index=clip_idx+1,
@@ -1064,6 +1092,7 @@ class MiniMaxH3MasterDirector:
             # Approval preserves a take across edits. Independently, exact-input
             # cache matches avoid repeating deterministic generation work.
             if cache_mgr.is_clip_cached_and_valid(clip_id,clip_fp) and reuse_saved_take(clip_idx,clip_item,source):
+                cache_mgr.update_clip_metadata(clip_id,{'preflight_key':preflight.key(clip_idx)})
                 shot_event(unique_id,project_id,clip_id,'completed',reused=True,index=clip_idx+1,total=len(clips))
                 if run_mode=='clip_by_clip':break
                 continue
@@ -1354,6 +1383,7 @@ class MiniMaxH3MasterDirector:
                 clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
+                    'preflight_key':preflight.key(clip_idx),
                     'cache_report':cache_report(),
                     "refine_passes":refine_pass_rows,"refinement_pending":False,
                     "first_pass": {k:v for k,v in staged.items() if k != 'latent'} if staged is not None else None,
