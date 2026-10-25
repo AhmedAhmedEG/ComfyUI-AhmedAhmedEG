@@ -42,7 +42,7 @@ REF_IMAGE_SHORT_EDGE = 2048
 
 # Project format version
 PROJECT_FORMAT = "MiniMax H3 Master Director Project"
-PROJECT_FORMAT_VERSION = 5
+PROJECT_FORMAT_VERSION = 6
 
 
 def align_frame_count(n: int, mode: str = "up") -> int:

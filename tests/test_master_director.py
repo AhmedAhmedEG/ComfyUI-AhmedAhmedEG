@@ -133,7 +133,7 @@ class TestMiniMaxH3MasterDirector(CacheIsolatedTestCase):
         }
         exported = mgr.export_lightweight_project_data(timeline, project_name="UnitTest")
         self.assertIn("timeline", exported)
-        self.assertIn("server_cache_manifest", exported)
+        self.assertIn("result_bindings", exported)
         self.assertEqual(exported["project_name"], "UnitTest")
         # Ensure no tensor or binary data in exported json
         serialized = str(exported)

@@ -172,7 +172,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const loraEditor=[...w.document.querySelectorAll('details')].find(d=>d.querySelector('summary')?.textContent==='Clip LoRAs');
   assert.equal(loraEditor.querySelector('input[type=checkbox]').checked,false,'Legacy inactive LoRAs display disabled');
   const adapterStrength=loraEditor.querySelector('input[type=number]');adapterStrength.value='1.2';adapterStrength.onchange();
-  const editedAdapter=JSON.parse(timeline.value).clips[0];assert.equal(editedAdapter.loras[0].strength,1.2);assert.equal(editedAdapter.validated,false,'Adapter edits require a new take');assert.equal(editedAdapter.refine_approved,false,'Adapter edits invalidate first-pass review');
+  const editedAdapter=JSON.parse(timeline.value).clips[0];assert.equal(editedAdapter.loras[0].strength,1.2);assert.equal(editedAdapter.validated,true,'Adapter edits preserve explicit approval');assert.equal(editedAdapter.refine_approved,true,'Adapter edits preserve explicit first-pass approval');
   timeline.value=savedLoraState;node.__mmxDirectorRefresh();
   assert.equal(chooseTool('Project'),null,'Project is not a clip-specific tool');
   assert.equal(w.document.querySelectorAll('.mmx-section').length,4,'Project configuration has one surface');
@@ -490,7 +490,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(!scrollWheel.defaultPrevented,'Native panel scrolling remains enabled');w.document.body.removeEventListener('wheel',wheelListener);
   assert(!editorRoot.querySelector('.mmx-toolbar-right').textContent.includes('Selected clips only'),'The obsolete selection filter is removed');
   const filesPanel=editorRoot.querySelector('.mmx-project-workspace .mmx-project-actions');
-  assert.deepStrictEqual([...filesPanel.querySelectorAll('button')].map(el=>el.textContent),['New Project','Import Project','Export Project','Restore Last Autosave','Reset Timeline','Delete Saved Results'],'Routine file actions precede restore and destructive actions');
+  assert.deepStrictEqual([...filesPanel.querySelectorAll('button')].filter(el=>!el.hidden).map(el=>el.textContent),['New Project','Import Project','Export Project','Restore Last Autosave','Reset Timeline','Delete Saved Results'],'Routine file actions precede restore and destructive actions');
   assert.equal(filesPanel.querySelectorAll('.mmx-project-danger').length,2);
   assert(!filesPanel.textContent.includes('🗑'));
   const oldConfirm=w.confirm;w.confirm=()=>false;
@@ -507,11 +507,18 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.HTMLAnchorElement.prototype.click=()=>{};
   w.api.fetchApi=async(url)=>{calls.push(url);return {ok:true,json:async()=>({ok:true,project:{}}),blob:async()=>new w.Blob(['archive'])};};
   const exportProject=button('Export Project'),mediaChoice=filesPanel.querySelector('.mmx-export-media');
-  await exportProject.onclick();
+  assert.equal(mediaChoice.checked,false,'JSON is the default export');
+  assert.equal(filesPanel.querySelector('.mmx-export-results').checked,false);
+  mediaChoice.checked=true;await exportProject.onclick();
   assert.equal(calls.pop().split('?')[0],'/minimax_director/project/portable/export');
   mediaChoice.checked=false;await exportProject.onclick();
   assert.equal(calls.pop(),'/minimax_director/project/export');
-  assert(!exportProject.disabled);w.api.fetchApi=previousFetch;
+  assert(!exportProject.disabled);
+  w.api.fetchApi=async(url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new w.DOMException('Cancelled','AbortError'))));
+  const downloading=exportProject.onclick(),cancelDownload=button('Cancel download');
+  assert.equal(cancelDownload.hidden,false);cancelDownload.click();await downloading;
+  assert(cancelDownload.hidden);assert(!exportProject.disabled);assert(editorRoot.textContent.includes('Download Cancelled.'));
+  w.api.fetchApi=previousFetch;
   const nameInput=editorRoot.querySelector('.mmx-project-name-field input');
   const projectFeedback=editorRoot.querySelector('.mmx-project-feedback');
   const clearVram=button('Clear VRAM');let releaseRequest;
@@ -735,7 +742,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
     contractTimeline.value=JSON.stringify(approved);contractNode.__mmxDirectorRefresh();
     const input=kind==='prompt'?contractRoot.querySelector('textarea[placeholder^="Describe the action"]'):contractRoot.querySelector('[aria-label="Clip Seed"]');
     assert(input,kind+' input exists');input.value=kind==='prompt'?'new prompt':'99';input[kind==='prompt'?'oninput':'onchange']();
-    assert.deepEqual(JSON.parse(contractTimeline.value).clips.map(c=>c.validated),[false,false,true],kind+' invalidates only the continuity chain');
+    assert.deepEqual(JSON.parse(contractTimeline.value).clips.map(c=>c.validated),[true,true,true],kind+' preserves approved takes');
   }
   contractTimeline.value=JSON.stringify(approved);contractNode.__mmxDirectorRefresh();
   contractNode.__mmxShotHandler({detail:{node:99,project_id:'contract_ui',clip_id:'first',phase:'completed',seed:'1',authored_seed:'1',next_seed:'2'}});
@@ -747,7 +754,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   cacheStatusOverride={clips:{first:{can_approve:true,generation:'new',seed:'7',authored_seed:'1',next_seed:'8'},second:{can_approve:true,generation:'second'},third:{can_approve:true,generation:'third'}}};
   contractNode.__mmxDirectorRefresh();await new Promise(r=>setTimeout(r,200));
   const recovered=JSON.parse(contractTimeline.value);
-  assert.deepEqual(recovered.clips.map(c=>c.validated),[false,false,true],'Stale generation approval rejects its continuity chain only');
+  assert.deepEqual(recovered.clips.map(c=>c.validated),[true,true,true],'Cache status cannot silently remove explicit approval');
   assert.equal(recovered.clips[0].seed,'99','Recovery preserves a locally edited seed');
   assert.equal(recovered.clips[0].last_seed,'7','Completion while away restores the actual generated seed');
   w.dispatchEvent(new w.Event('pagehide'));
@@ -760,7 +767,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const reloadNode={...contractNode,widgets:[reloadTimeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],__mmxDirectorMounted:false,__mmxDisposed:false,__mmxShotListener:null,onRemoved:undefined};
   w.extension.nodeCreated(reloadNode);await new Promise(r=>setTimeout(r,200));
   assert.equal(JSON.parse(reloadTimeline.value).clips[0].seed,'99','Reloading an older unsaved workflow restores the newer browser draft');
-  assert.equal(JSON.parse(reloadTimeline.value).clips[0].validated,false,'Reload preserves the rejected stale approval');
+  assert.equal(JSON.parse(reloadTimeline.value).clips[0].validated,true,'Reload preserves explicit approval');
   reloadNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, editable timecode, persistent zoom, file continuation, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

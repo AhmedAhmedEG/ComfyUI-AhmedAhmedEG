@@ -15,26 +15,15 @@ def merge_authored_timeline(local, authored):
     ids = [row.get('id') for row in incoming['clips']]
     if not ids or any(not value for value in ids) or len(set(ids)) != len(ids):
         raise ValueError('External clips need stable unique IDs.')
-    generation_keys = ('type', 'duration', 'prompt', 'ref_ids')
-    shared_changed = any(key in authored and incoming.get(key) != state.get(key)
-                         for key in ('shared_prompt', 'shared_prompt_policy', 'shared_ref_ids'))
-    invalidate_chain = False
     for row in incoming['clips']:
         saved = previous.get(row['id'], {})
         for key,value in saved.items():
             if key not in ('id','name','type','duration','prompt','ref_ids','group','authoring_owner'):
                 row[key]=value
         signature = fingerprint_value(row.get('group'))
-        changed = bool(saved) and (any(row.get(key) != saved.get(key) for key in generation_keys)
-            or saved.get('authored_group_signature') is not None and saved['authored_group_signature'] != signature)
         row['authored_group_signature'] = signature
-        independent = row.get('locked') or row.get('source') or row.get('continuity') is False or row.get('continuity_mode', 'Independent (No Continuity)') == 'Independent (No Continuity)'
-        invalidate_chain = changed or shared_changed or (invalidate_chain and not independent)
-        if invalidate_chain and not row.get('locked'):
-            row['validated'] = False
-            row['refine_approved'] = False
-            row['refine_pending'] = False
-            row['invalidated_generation'] = saved.get('invalidated_generation') or saved.get('generation')
+        # Stable clip identities retain the Master's explicit approval across
+        # authoring edits. Only the Master checkbox rejects a saved take.
         row['authoring_owner'] = 'Timeline Builder'
     # External authors own reference/prompt metadata, while the Master retains
     # execution state and approvals for existing stable clip identities.

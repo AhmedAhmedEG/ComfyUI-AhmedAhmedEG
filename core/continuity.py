@@ -157,10 +157,12 @@ def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
             "duration_policy": duration_policy}
 
 
-def dependent_successors(clips, changed_index, legacy_mode=MODES[1], legacy_frames=22):
+def dependent_successors(clips, changed_index, legacy_mode=MODES[1], legacy_frames=22, *, preserve_approved=False):
     """The contiguous dependency chain; an independent/source clip breaks it."""
     result = []
     for shot in clips[changed_index + 1:]:
+        if preserve_approved and shot.get('validated'):
+            break  # An approved saved take is a stable boundary during execution.
         if str(shot.get('type', '')).upper() == 'VIDEO':
             break
         policy = resolve_continuity(shot, legacy_mode, legacy_frames)

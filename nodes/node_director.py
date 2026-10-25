@@ -170,7 +170,7 @@ class MiniMaxH3MasterDirector:
                 continue
             needs_auxiliary=True
             if all('id' in row for row in clips):
-                blocked.update(dependent_successors(clips,index,settings.get('continuity_mode','Motion Context (Chained)'),settings.get('context_length','22')))
+                blocked.update(dependent_successors(clips,index,settings.get('continuity_mode','Motion Context (Chained)'),settings.get('context_length','22'),preserve_approved=True))
             name=item.get("model_override")
             if name:
                 if not isinstance(overrides,dict) or overrides.get(name) is None:
@@ -453,7 +453,6 @@ class MiniMaxH3MasterDirector:
         def clear_dependent_approvals(ids):
             for item in clips:
                 if str(item['id']) in ids:
-                    item['validated'] = False
                     item['refine_approved'] = False
                     item['refine_pending'] = False
         shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
@@ -891,7 +890,7 @@ class MiniMaxH3MasterDirector:
                 if source_ref_id:
                     meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
                     if meta.get("fingerprint") != previous_fingerprint or not meta.get("has_frames") or not os.path.isfile(cache_mgr.get_clip_frames_path(clip_id)):
-                        invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length)
+                        invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length,preserve_approved=True)
                         cache_mgr.store_clip_results(clip_id, previous_fingerprint, None, audio,
                             source.get("original_frames", frames), validated=True, invalidate_clip_ids=invalidated)
                         clear_dependent_approvals(invalidated)
@@ -1104,7 +1103,7 @@ class MiniMaxH3MasterDirector:
                 if run_mode=='clip_by_clip':break
                 continue
             if not clip_item.get('locked'):
-                invalidated=[cid for cid in dependent_successors(clips,clip_idx,continuity_mode,context_length)
+                invalidated=[cid for cid in dependent_successors(clips,clip_idx,continuity_mode,context_length,preserve_approved=True)
                     if cid in cache_mgr._manifest.get('clips',{}) or cid in cache_mgr._manifest.get('first_pass',{})]
                 if invalidated:
                     cache_mgr.discard_clip_results(invalidated);clear_dependent_approvals(invalidated)
@@ -1376,7 +1375,7 @@ class MiniMaxH3MasterDirector:
                     before_video, _ = extract_streams_from_av_latent(pre_refine_latent)
                     before_frames = decode_video_latent(video_vae, before_video)
                     before_frames = spill_frames(before_frames[:decoded_frames.shape[0]], cache_mgr.project_dir)
-                invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length)
+                invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length,preserve_approved=True)
                 cache_mgr.store_clip_results(
                     clip_id=clip_id,
                     fingerprint=clip_fp,

@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.37"
+__version__ = "1.7.38"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -467,20 +467,35 @@ if getattr(PromptServer, "instance", None) is not None:
 
     @routes.post("/minimax_director/project/portable/export")
     async def portable_export(request):
+        path=None
         try:
             import folder_paths, uuid
-            from .core.project import write_portable
+            from .core.project_bundle import write_bundle
             body = await request.json()
             mgr = ProjectCacheManager(body.get("project_id", "default"))
             path = os.path.join(mgr.project_dir, "portable_" + uuid.uuid4().hex + ".mmxproj")
             from .core.transfer import progress_callback
-            progress=progress_callback(PromptServer.instance,request.query.get("job_id"))
-            await asyncio.to_thread(write_portable, body["timeline"], folder_paths.get_input_directory(), path,progress)
-            return web.FileResponse(path, headers={"Content-Disposition": 'attachment; filename="MiniMaxProject.mmxproj"'})
+            report=progress_callback(PromptServer.instance,request.query.get("job_id"))
+            def progress(*args):
+                if request.transport is None or request.transport.is_closing():raise RuntimeError('Export cancelled.')
+                report(*args)
+            await asyncio.to_thread(write_bundle,mgr,body['timeline'],body.get('workflow'),body.get('master_node_id'),
+                folder_paths.get_input_directory(),path,include_media=body.get('include_media',True),
+                include_results=body.get('include_results',False),progress=progress)
+            response=web.StreamResponse(headers={'Content-Type':'application/zip',
+                'Content-Disposition':'attachment; filename="MiniMaxProject.mmxproj"',
+                'Content-Length':str(os.path.getsize(path))})
+            await response.prepare(request)
+            with open(path,'rb') as source:
+                while chunk:=source.read(1024*1024):await response.write(chunk)
+            await response.write_eof()
+            return response
         except (ValueError, TypeError, KeyError, FileNotFoundError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:
             return web.json_response({"error": str(exc)}, status=500)
+        finally:
+            if path and os.path.isfile(path):os.unlink(path)
 
     @routes.post("/minimax_director/project/portable/import")
     async def portable_import(request):
@@ -488,7 +503,7 @@ if getattr(PromptServer, "instance", None) is not None:
         path = None
         try:
             import folder_paths
-            from .core.project import read_portable
+            from .core.project_bundle import read_bundle
             reader = await request.multipart()
             part = await reader.next()
             if part is None: raise ValueError("No archive uploaded.")
@@ -497,12 +512,12 @@ if getattr(PromptServer, "instance", None) is not None:
             with os.fdopen(fd, "wb") as output:
                 while chunk := await part.read_chunk():
                     total += len(chunk)
-                    if total > 8 * 1024**3: raise ValueError("Archive exceeds 8 GiB.")
+                    if total > 256 * 1024**3: raise ValueError("Archive exceeds 256 GiB.")
                     output.write(chunk)
             from .core.transfer import progress_callback
             progress=progress_callback(PromptServer.instance,request.query.get("job_id"))
-            state = await asyncio.to_thread(read_portable, path, folder_paths.get_input_directory(),progress=progress)
-            return web.json_response({"timeline": state})
+            result = await asyncio.to_thread(read_bundle, path, folder_paths.get_input_directory(),progress=progress)
+            return web.json_response(result)
         except (ValueError, TypeError, KeyError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:
@@ -614,7 +629,8 @@ if getattr(PromptServer, "instance", None) is not None:
 
             mgr = ProjectCacheManager(project_id)
             timeline_state = {**timeline_state, "project_id": mgr.project_id}
-            project_data = await asyncio.to_thread(mgr.export_lightweight_project_data, timeline_state, project_name=name)
+            project_data = await asyncio.to_thread(mgr.export_lightweight_project_data, timeline_state, project_name=name,
+                workflow=body.get('workflow'),master_node_id=body.get('master_node_id'))
             return web.json_response({"ok": True, "project": project_data})
         except (ValueError, TypeError, AttributeError) as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
@@ -630,8 +646,12 @@ if getattr(PromptServer, "instance", None) is not None:
             project_id = str(project_data.get("project_id", "default")).strip()
 
             mgr = ProjectCacheManager(project_id)
-            timeline = await asyncio.to_thread(mgr.import_lightweight_project_data, project_data)
-            return web.json_response({"ok": True, "timeline": timeline})
+            timeline = await asyncio.to_thread(mgr.import_lightweight_project_data, project_data,body.get('reference_catalog'))
+            workflow=None
+            if project_data.get('workflow') is not None:
+                from .core.project_json import prepare_workflow
+                workflow=prepare_workflow(project_data['workflow'],project_data.get('master_node_id'),timeline)
+            return web.json_response({"ok": True, "timeline": timeline,"workflow":workflow})
         except (ValueError, TypeError, AttributeError) as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
         except Exception as exc:

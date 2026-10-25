@@ -94,7 +94,7 @@ class MasterPreviewRepairs(unittest.TestCase):
                     case.execute(timeline_data=json.dumps(state),
                         config={'project_id':'regression','run_mode':'clip_by_clip'})
 
-    def test_replacing_parent_removes_dependent_cache_and_approval_before_reuse(self):
+    def test_replacing_parent_preserves_explicitly_approved_successor(self):
         with master() as case:
             shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},
                    {'id':'two','type':'T2V','duration':1,'continuity_mode':'Motion Context (Chained)',
@@ -106,10 +106,10 @@ class MasterPreviewRepairs(unittest.TestCase):
             state['clips'][0]['prompt']='changed parent prompt'
             case.sampling_calls.clear()
             result=case.execute(timeline_data=json.dumps(state))
-            self.assertEqual(len(case.sampling_calls),2,'The old approved successor must not be reused after its parent changes')
-            self.assertFalse(json.loads(result[-1])['clips'][1]['validated'])
-            self.assertNotEqual(ProjectCacheManager('regression',case.temp.name)._manifest['clips']['two']['generation'],old)
-            self.assertFalse(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+            self.assertEqual(len(case.sampling_calls),1,'Approved successors are protected until manually unchecked')
+            self.assertTrue(json.loads(result[-1])['clips'][1]['validated'])
+            self.assertEqual(ProjectCacheManager('regression',case.temp.name)._manifest['clips']['two']['generation'],old)
+            self.assertTrue(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
 
     def test_paired_audio_reaches_native_numbered_slots(self):
         with master() as case:
@@ -195,11 +195,11 @@ class MasterPreviewRepairs(unittest.TestCase):
             self.assertEqual(case.sampling_calls, [])
             self.assertFalse(os.path.exists(manager.get_clip_frames_path('one')))
 
-    def test_external_prompt_change_invalidates_dependent_chain_only(self):
+    def test_external_prompt_change_preserves_explicit_approvals(self):
         clips = [{'id': key, 'prompt': 'old', 'validated': True,
                   'continuity_mode': 'Motion Context (Chained)' if key == 'two' else 'Independent (No Continuity)'}
                  for key in ('one', 'two', 'three')]
         incoming = json.loads(json.dumps(clips))
         incoming[0]['prompt'] = 'new'
         result = merge_authored_timeline({'clips': clips}, {'clips': incoming})
-        self.assertEqual([c['validated'] for c in result['clips']], [False, False, True])
+        self.assertEqual([c['validated'] for c in result['clips']], [True, True, True])

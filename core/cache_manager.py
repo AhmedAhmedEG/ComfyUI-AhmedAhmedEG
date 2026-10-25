@@ -564,25 +564,48 @@ class ProjectCacheManager:
         self,
         timeline_state: Dict[str, Any],
         project_name: str = "MyMiniMaxProject",
+        workflow=None,
+        master_node_id=None,
     ) -> Dict[str, Any]:
         """Produce a pure, lightweight JSON object with zero bulky latents."""
         self._manifest = self._load_manifest()
+        from .project_json import authoring_timeline,prepare_workflow
+        state=authoring_timeline(timeline_state)
         cache_refs = {}
-        for cid, meta in self._manifest.get("clips", {}).items():
+        original={clip.get('id'):clip for clip in timeline_state.get('clips',[])}
+        for clip in state['clips']:
+            cid=clip.get('id');meta=self._manifest.get('clips',{}).get(cid,{})
+            if not meta.get('generation'):continue
+            authored=original.get(cid,{})
+            expected=authored.get('validated_generation') if authored.get('validated') else None
+            generation=expected or meta.get('generation')
             cache_refs[cid] = {
-                "fingerprint": meta.get("fingerprint"),
-                "validated": meta.get("validated", False),
+                'fingerprint':meta.get('fingerprint') if generation==meta.get('generation') else None,
+                'generation':generation,
             }
 
-        return {
+        result = {
             "format": PROJECT_FORMAT,
             "version": PROJECT_FORMAT_VERSION,
             "project_name": project_name,
             "project_id": self.project_id,
             "created_at": time.time(),
-            "timeline": timeline_state,
-            "server_cache_manifest": cache_refs,
+            "timeline": state,
+            "result_bindings": cache_refs,
         }
+        catalog=timeline_state.get('available_refs',[])
+        result['reference_catalog']=[{k:row[k] for k in ('id','name','type','roles','description','slot_id') if k in row} for row in catalog]
+        names={row['id']:row.get('name') or row['id'] for row in catalog if row.get('id')}
+        counts={name:list(names.values()).count(name) for name in names.values()}
+        for clip in state['clips']:
+            ids=clip.get('ref_ids',[])
+            if not ids:continue
+            if all(cid in names and counts[names[cid]]==1 for cid in ids):
+                clip['ref_names']=[names[cid] for cid in ids];clip.pop('ref_ids',None)
+            else:clip.pop('ref_names',None)  # Preserve order for unresolved/ambiguous legacy references.
+        if workflow is not None:
+            result.update(workflow=prepare_workflow(workflow,master_node_id),master_node_id=master_node_id)
+        return result
 
     def serialize_project(
         self,
@@ -614,17 +637,18 @@ class ProjectCacheManager:
             zf.writestr("project.json", json.dumps(data, indent=2))
         return destination_zip_path
 
-    def import_lightweight_project_data(self, project_data: Dict[str, Any]) -> Dict[str, Any]:
+    def import_lightweight_project_data(self, project_data: Dict[str, Any], reference_catalog=None) -> Dict[str, Any]:
         """Restore project timeline settings and reconnect to existing server-side cached latents."""
         if not isinstance(project_data, dict) or project_data.get("format") != PROJECT_FORMAT:
             raise ValueError("Not a MiniMax H3 Master Director project.")
-        if project_data.get("version") != PROJECT_FORMAT_VERSION:
+        if project_data.get("version") not in (5,PROJECT_FORMAT_VERSION):
             raise ValueError("Unsupported project format version.")
         timeline = project_data.get("timeline")
         if not isinstance(timeline, dict) or not isinstance(timeline.get("clips", []), list):
             raise ValueError("Project timeline must contain a clips list.")
         # Uploaded fingerprints are hints, never proof of server cache contents.
-        return {**timeline, "project_id": self.project_id}
+        from .project_json import restore_timeline
+        return restore_timeline(self,project_data,reference_catalog)
 
 
     @_locked

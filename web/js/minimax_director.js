@@ -2793,9 +2793,7 @@ function mountDirectorUI(node) {
 
   };
 
-  let generationBaseline = null;
   const loadState = () => {
-    generationBaseline = null;
     resolveAvailableRefsFromGraph();
     try {
       if (timelineWidget && timelineWidget.value) {
@@ -2875,22 +2873,7 @@ function mountDirectorUI(node) {
     }
     migrateContinuitySources(timelineState);migrateClipApproval(timelineState);
     timelineState.project_id ||= `project_${crypto.randomUUID()}`;
-    // All generation edits pass through this boundary. Runtime notifications
-    // explicitly accept their own seed/source updates without rejecting takes.
-    const keys = ['type','duration','prompt','prompt_mode','structured_prompt','ref_ids',
-      'continuity','continuity_mode','context_length','audio_context_length','continuity_redraw','continuity_duration_policy',
-      'tail_seconds','tail_frames','seed','seed_mode','audio_mode','model_override','guides',
-      'loras','color','source','source_start','source_end','group'];
-    const shared = JSON.stringify([timelineState.shared_prompt || '', timelineState.shared_prompt_policy || 'prepend', timelineState.shared_ref_ids || [], builderState]);
-    const current = {project:timelineState.project_id, shared, clips:new Map(timelineState.clips.map(c=>[c.id,JSON.stringify(keys.map(k=>c[k]))]))};
-    let approvalsChanged=false;
-    if (!acceptRuntime && generationBaseline?.project === current.project) {
-      const allChanged = generationBaseline.shared !== shared;
-      for (const clip of timelineState.clips) {
-        if (allChanged || generationBaseline.clips.has(clip.id) && generationBaseline.clips.get(clip.id) !== current.clips.get(clip.id)) {unapproveChain(clip);approvalsChanged=true;}
-      }
-    }
-    generationBaseline = current;
+    // Approval belongs to the user; settings edits never reject a saved take.
     timelineState.draft_updated_at=Math.max(Date.now(),Number(timelineState.draft_updated_at || 0)+1);
     const serializedTimeline=JSON.stringify(timelineState),serializedBuilder=JSON.stringify(builderState);
     if (timelineWidget) timelineWidget.value = serializedTimeline;
@@ -2898,7 +2881,6 @@ function mountDirectorUI(node) {
     pendingDraft=[`${timelineState.project_id}::${node.id}`,serializedTimeline,serializedBuilder,timelineState.draft_updated_at];
     clearTimeout(draftTimer);draftTimer=setTimeout(flushDraft,150);
     updateServerStatus();
-    if (approvalsChanged) renderTimeline();
     if (node.setDirtyCanvas) node.setDirtyCanvas(true, true);
     if (app.graph && app.graph.setDirtyCanvas) app.graph.setDirtyCanvas(true, true);
   };
@@ -2956,24 +2938,31 @@ function mountDirectorUI(node) {
   exportBtn.className = "mmx-action-btn";
   exportBtn.textContent = "Export Project";exportBtn.dataset.projectAction="export";
   exportBtn.title = "Save the timeline as JSON, or include source/reference files in a portable archive.";
-  const includeMedia=document.createElement("input");includeMedia.type="checkbox";includeMedia.checked=true;
+  const includeMedia=document.createElement("input");includeMedia.type="checkbox";includeMedia.checked=false;
   includeMedia.className="mmx-export-media";
+  const includeResults=document.createElement('input');includeResults.type='checkbox';includeResults.className='mmx-export-results';
+  const cancelExport=document.createElement('button');cancelExport.textContent='Cancel download';cancelExport.hidden=true;
+  cancelExport.onclick=()=>node.__mmxExportController?.abort();
   exportBtn.onclick = async () => {
     if(exportBtn.disabled)return;
     exportBtn.disabled=true;exportBtn.textContent='Exporting…';exportBtn.setAttribute('aria-busy','true');
+    const controller=new AbortController();node.__mmxExportController=controller;cancelExport.hidden=false;
     showProjectFeedback('busy','Preparing Project Download…');
     try {
-      if(includeMedia.checked){await exportPortable();showProjectFeedback('success','Project Download Prepared With Source And Reference Media. Generated Results Stay On Server.');return;}
+      if(includeMedia.checked || includeResults.checked){await exportPortable(controller.signal);showProjectFeedback('success',includeResults.checked?'Project Download Includes Generated Latents, Frames And Audio.':'Project Download Includes Source And Reference Media.');return;}
       const res = await api.fetchApi("/minimax_director/project/export", {
         method: "POST",
+        signal:controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           project_id: timelineState.project_id || String(node.id ?? "default_director"),
           timeline: { ...timelineState, builder_state: builderWidget?.value || "{}" },
           name: timelineState.project_name || "MiniMaxProject",
+          workflow:(app.rootGraph || app.graph)?.serialize?.(),master_node_id:node.id,
         }),
       });
       const data = await res.json();
+      if(controller.signal.aborted)throw new DOMException('Download cancelled','AbortError');
       if (!res.ok || !data.ok) throw new Error(data.error || "Project export failed");
       if (data.ok) {
         const blob = new Blob([JSON.stringify(data.project, null, 2)], { type: "application/json" });
@@ -2986,8 +2975,8 @@ function mountDirectorUI(node) {
         showProjectFeedback('success','Project JSON Download Prepared. Media And Generated Results Stay On Server.');
       }
     } catch (err) {
-      showProjectFeedback('error',`Export Failed: ${err.message}`);
-    } finally { exportBtn.disabled=false;exportBtn.textContent='Export Project';exportBtn.removeAttribute('aria-busy'); }
+      showProjectFeedback(err.name==='AbortError'?'idle':'error',err.name==='AbortError'?'Download Cancelled.':`Export Failed: ${err.message}`);
+    } finally { cancelExport.hidden=true;node.__mmxExportController=null;exportBtn.disabled=false;exportBtn.textContent='Export Project';exportBtn.removeAttribute('aria-busy'); }
   };
 
 
@@ -3005,23 +2994,27 @@ function mountDirectorUI(node) {
     fileInput.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const policy = prompt("Import policy: append or overwrite", "overwrite");
+      const policy = prompt("Import: append, overwrite (timeline into current workflow), or workflow (restore all nodes/settings)", "overwrite");
       if(!policy){showProjectFeedback('idle','Import Cancelled.');return;}
-      if(!['append','overwrite'].includes(policy)){showProjectFeedback('error','Import Policy Must Be append Or overwrite.');return;}
+      if(!['append','overwrite','workflow'].includes(policy)){showProjectFeedback('error','Choose append, overwrite, or workflow.');return;}
       importBtn.disabled=true;importBtn.textContent='Importing…';importBtn.setAttribute('aria-busy','true');
       showProjectFeedback('busy','Importing Project…');
       try {
-        if(!file.name.toLowerCase().endsWith(".json")){await importPortable(file,policy);showProjectFeedback('success','Project Imported With Media. Generated Results Are Not Included In Portable Archives.');return;}
+        if(!file.name.toLowerCase().endsWith(".json")){await importPortable(file,policy);showProjectFeedback('success','Project Archive Imported.');return;}
         const text = await file.text();
         const projectData = JSON.parse(text);
         const res = await api.fetchApi("/minimax_director/project/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project: projectData }),
+          body: JSON.stringify({ project: projectData,reference_catalog:policy==='workflow'?undefined:timelineState.available_refs }),
         });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Project import failed");
         if (data.ok && data.timeline) {
+          if(policy==='workflow'){
+            if(!data.workflow || !app.loadGraphData)throw Error('This older export has no saved workflow. Use overwrite to import its timeline.');
+            await app.loadGraphData(data.workflow,true,true,'MiniMax Imported Project.json');return;
+          }
           const merged = await requestJson("/minimax_director/project/merge", {current:timelineState,incoming:data.timeline,policy});
           timelineState = merged.timeline;
           if (timelineState.builder_state !== undefined) builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state;
@@ -3062,14 +3055,14 @@ function mountDirectorUI(node) {
     if (section===projectTools) {
       const actions=document.createElement("div");actions.className="mmx-project-actions";
       const actionOrder=["new","import","export","restore","reset","delete-results"];
-      const buttons=[...body.children].filter(child=>child.tagName==='BUTTON').sort((a,b)=>actionOrder.indexOf(a.dataset.projectAction)-actionOrder.indexOf(b.dataset.projectAction));
+      const buttons=[...body.children].filter(child=>child.tagName==='BUTTON' && child!==cancelExport).sort((a,b)=>actionOrder.indexOf(a.dataset.projectAction)-actionOrder.indexOf(b.dataset.projectAction));
       for (const button of buttons) {
         const card=document.createElement("div");card.className="mmx-field";
         const help=document.createElement("small");help.textContent=button.title || "Clear the current timeline after confirmation.";
         card.append(button,help);actions.append(card);
         if(button===exportBtn){
           const exportControl=document.createElement('div');exportControl.className='mmx-export-control';
-          exportControl.append(button,body.querySelector('.mmx-export-options'));card.prepend(exportControl);
+          exportControl.append(button,cancelExport,body.querySelector('.mmx-export-options'),body.querySelector('.mmx-export-result-options'));card.prepend(exportControl);
         }
       }
       body.append(actions);
@@ -3211,8 +3204,10 @@ function mountDirectorUI(node) {
     cachedClipResults={};cacheStatusRequest++;
     timelineState.clips.forEach(clip => { clip.validated = false; }); syncState(); renderTimeline();
   });
-  const exportPortable=async()=>{
-    const blob = await transferRequest('/minimax_director/project/portable/export',{body:{project_id:timelineState.project_id,timeline:{...timelineState,builder_state:builderState}},blob:true,onProgress:e=>showProjectFeedback('busy',transferLabel(e))});
+  const exportPortable=async(signal)=>{
+    const blob = await transferRequest('/minimax_director/project/portable/export',{body:{project_id:timelineState.project_id,timeline:{...timelineState,builder_state:builderState},
+      workflow:(app.rootGraph || app.graph)?.serialize?.(),master_node_id:node.id,include_media:includeMedia.checked,include_results:includeResults.checked},signal,blob:true,onProgress:e=>showProjectFeedback('busy',transferLabel(e))});
+    if(signal?.aborted)throw new DOMException('Download cancelled','AbortError');
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a"); link.href = url; link.download = "MiniMaxProject.mmxproj"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -3220,13 +3215,19 @@ function mountDirectorUI(node) {
   const importPortable=async(file,policy)=>{
         const data = new FormData(); data.append("project", file);
         const result=await transferRequest('/minimax_director/project/portable/import',{body:data,onProgress:e=>showProjectFeedback('busy',transferLabel(e))});
-          const merged = await requestJson("/minimax_director/project/merge", { current: timelineState, incoming: result.timeline, policy });
+        if(policy==='workflow'){
+          if(!result.workflow || !app.loadGraphData)throw Error('This archive has no saved workflow; use overwrite for its timeline.');
+          await app.loadGraphData(result.workflow,true,true,'MiniMax Imported Project.json');return;
+        }
+          const rebound=result.project?await requestJson('/minimax_director/project/import',{project:result.project,reference_catalog:timelineState.available_refs}):result;
+          const merged = await requestJson("/minimax_director/project/merge", { current: timelineState, incoming: rebound.timeline, policy });
         timelineState = merged.timeline;
         if (merged.missing?.length) alert(`Missing media files: ${merged.missing.join(", ")}`);
         builderState = typeof timelineState.builder_state === "string" ? JSON.parse(timelineState.builder_state || "{}") : timelineState.builder_state || builderState;activeClipId=timelineState.clips?.[0]?.id; refreshFileRefs(); syncState(); renderTimeline();
   };
-  const exportOptions=field("Include Media",includeMedia,"On: portable archive with source/reference files. Off: lightweight JSON that points to existing files.");exportOptions.classList.add("mmx-export-options");exportOptions.prepend(includeMedia);exportOptions.title="Include source and reference files in the exported project.";
-  projectTools.append(exportBtn,importBtn,exportOptions);
+  const exportOptions=field("Include source/reference media",includeMedia,"Includes input assets, not model weights or generated latents. Off by default.");exportOptions.classList.add("mmx-export-options");exportOptions.prepend(includeMedia);
+  const resultOptions=field('Include generated results',includeResults,'Includes saved clip latents, frames and audio. Can be very large. Neither option checked: editable JSON only.');resultOptions.classList.add('mmx-export-result-options');resultOptions.prepend(includeResults);
+  projectTools.append(exportBtn,cancelExport,importBtn,exportOptions,resultOptions);
   addProjectAction("Restore Last Autosave", async () => {
     const result = await requestJson(`/minimax_director/project/recover?project_id=${encodeURIComponent(timelineState.project_id || "default_director")}`);
     timelineState = result.timeline; builderState = timelineState.builder_state || builderState;
@@ -3259,19 +3260,17 @@ function mountDirectorUI(node) {
     for (let i=index; i>=0 && i<timelineState.clips.length; i++) {
       const item=timelineState.clips[i];
       if (i>index && (item.locked || item.source || item.continuity===false ||
-          (item.continuity_mode || 'Independent (No Continuity)')==='Independent (No Continuity)')) break;
+          (item.continuity_mode || 'Independent (No Continuity)')==='Independent (No Continuity)' ||
+          Number(item.tail_seconds ?? Number(item.tail_frames ?? 12)/24)<=0)) break;
       item.validated=false; item.refine_approved=false; item.refine_pending=false;
       item.invalidated_generation=cachedClipResults[item.id]?.generation || null;
     }
-  };
-  const invalidateFrom = index => {
-    timelineState.clips.slice(index).forEach(clip => { if (!clip.locked) clip.validated = false; });
   };
   const deleteClip = clip => {
     if(node.inputs?.some(input=>input.name==='timeline' && input.link!=null))return;
     const index = timelineState.clips.indexOf(clip);
     if (index < 0 || !confirm(`Delete "${clip.name || "clip"}" from the timeline?`)) return;
-    timelineState.clips.splice(index, 1); invalidateFrom(index);
+    timelineState.clips.splice(index, 1);
     activeClipId = timelineState.clips[Math.min(index, timelineState.clips.length - 1)]?.id || null;
     syncState(); renderTimeline();
   };
@@ -3286,7 +3285,7 @@ function mountDirectorUI(node) {
     destination = Math.max(min, Math.min(max, destination));
     if (destination === index) return;
     timelineState.clips.splice(index, 1); timelineState.clips.splice(destination, 0, clip);
-    invalidateFrom(Math.min(index, destination)); activeClipId = clip.id;
+    activeClipId = clip.id;
     syncState(); renderTimeline();
   };
 
@@ -3792,9 +3791,6 @@ function mountDirectorUI(node) {
       for(const clip of timelineState.clips){
         const saved=cachedClipResults[clip.id];
         if(saved?.cache_report?.updated_at>(clip.cache_report?.updated_at || 0)){clip.cache_report=saved.cache_report;changed=true;}
-        if(clip.validated && (!saved?.can_approve || clip.validated_generation && saved.generation!==clip.validated_generation)){
-          unapproveChain(clip);delete clip.validated_generation;changed=true;
-        }
         if(saved?.generation && clip.saved_generation!==saved.generation){
           clip.saved_generation=saved.generation;
           if(saved.seed!=null){clip.last_seed=String(saved.seed);if(saved.authored_seed!=null && String(clip.seed)===String(saved.authored_seed) && saved.next_seed!=null)clip.seed=String(saved.next_seed);}
@@ -3997,12 +3993,13 @@ function mountDirectorUI(node) {
       shotBlock.appendChild(promptSnippet);
       const selectLabel=document.createElement('label');selectLabel.className='mmx-clip-selection';
       selectLabel.title='Approve Clip: reuse its saved result and skip generation. Uncheck to generate a new take.';
-      const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=clip.refine_pending ? !!clip.refine_approved : clip.validated===true;
-      selectInput.disabled=clip.refine_pending ? !cachedClipResults[clip.id]?.has_first_pass : !clip.validated && !cachedClipResults[clip.id]?.can_approve;
+      const reviewPending=!!clip.refine_pending && !clip.validated;
+      const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=reviewPending ? !!clip.refine_approved : clip.validated===true;
+      selectInput.disabled=reviewPending ? !cachedClipResults[clip.id]?.has_first_pass : !clip.validated && !cachedClipResults[clip.id]?.can_approve;
       if(selectInput.disabled)selectLabel.title='Generate this clip first. Approval requires a saved result or latent on the server.';
-      if(clip.refine_pending)selectLabel.title='Review First Pass in Smart Preview, approve here, then Run to refine its saved latent. This does not approve a final take.';
-      selectInput.setAttribute('aria-label',`Approve ${clip.refine_pending ? 'First Pass Of ' : ''}${clip.name || `Clip ${idx+1}`}`);
-      selectInput.onchange=()=>{if(clip.refine_pending){clip.refine_approved=selectInput.checked;clip.refine_approved_generation=cachedClipResults[clip.id]?.first_pass_generation;}else if(selectInput.checked){clip.validated=true;clip.validated_generation=cachedClipResults[clip.id]?.generation;delete clip.invalidated_generation;}else unapproveChain(clip);syncState();renderTimeline();};
+      if(reviewPending)selectLabel.title='Review First Pass in Smart Preview, approve here, then Run to refine its saved latent. This does not approve a final take.';
+      selectInput.setAttribute('aria-label',`Approve ${reviewPending ? 'First Pass Of ' : ''}${clip.name || `Clip ${idx+1}`}`);
+      selectInput.onchange=()=>{if(reviewPending){clip.refine_approved=selectInput.checked;clip.refine_approved_generation=cachedClipResults[clip.id]?.first_pass_generation;}else if(selectInput.checked){clip.validated=true;clip.validated_generation=cachedClipResults[clip.id]?.generation;delete clip.invalidated_generation;}else unapproveChain(clip);syncState();renderTimeline();};
       for(const event of ['pointerdown','mousedown','click'])selectLabel.addEventListener(event,e=>e.stopPropagation());
       selectLabel.append(selectInput);shotBlock.append(selectLabel);
 
@@ -4028,7 +4025,6 @@ function mountDirectorUI(node) {
           const deltaX = moveEvt.clientX - startX;
           const newDur = Math.max(0.5, Math.min(60.0, Math.round((startDuration + deltaX / (scale * resizeScale)) * 10) / 10));
           clip.duration = newDur;
-          if (newDur !== startDuration) invalidateFrom(idx);
           durTag.textContent = `${newDur.toFixed(1)}s`;
           const newWidth = newDur * resizeScale - 4;
 
@@ -4475,7 +4471,7 @@ function mountDirectorUI(node) {
               if(!Number.isFinite(Number(input.value)) || Number(input.value)<0) {input.setCustomValidity('Start must be non-negative seconds.');input.reportValidity();return;}
               activeClip.source_start=Number(input.value);
             }
-            activeClip.validated=false;syncState();renderTimeline();return;
+            syncState();renderTimeline();return;
           }
           const start = key === "source_start" ? Number(input.value) : Number(activeClip.source_start || 0);
           const end = key === "source_end" ? Number(input.value) : Number(activeClip.source_end ?? (Number(activeClip.source_start || 0) + Number(activeClip.duration || 5)));
@@ -4483,7 +4479,7 @@ function mountDirectorUI(node) {
             input.setCustomValidity("End must exceed start, and both must be finite non-negative seconds."); input.reportValidity(); return;
           }
           input.setCustomValidity(""); activeClip.source_start = start; activeClip.source_end = end;
-          activeClip.duration = end - start; activeClip.validated = false; syncState(); renderTimeline();
+          activeClip.duration = end - start; syncState(); renderTimeline();
         };
         wrap.appendChild(input); sourcePanel.appendChild(wrap);
       }
@@ -4537,7 +4533,7 @@ function mountDirectorUI(node) {
         activeClip.source_end = next.source_end; activeClip.duration = activeClip.source_end-(activeClip.source_start || 0);
         activeClip.prompt = [activeClip.prompt, next.prompt].filter(Boolean).join("\n");
         activeClip.ref_ids = [...new Set([...(activeClip.ref_ids || []), ...(next.ref_ids || [])])];
-        activeClip.validated = false; timelineState.clips.splice(index+1,1); syncState(); renderTimeline();
+        timelineState.clips.splice(index+1,1); syncState(); renderTimeline();
       }; sourcePanel.appendChild(merge);
 
       smart.disabled=!filename.value;
@@ -4553,7 +4549,6 @@ function mountDirectorUI(node) {
     const loraRows = document.createElement("div");
     loraPanel.appendChild(loraRows);
     const commitLoRAEdit=()=>{
-      unapproveChain(activeClip);
       syncState();renderTimeline();
     };
     const drawLoras = () => {
@@ -4641,7 +4636,7 @@ function mountDirectorUI(node) {
 
     durNum.onchange = () => {
       const v = Math.max(0.5, Math.min(60.0, parseFloat(durNum.value) || 5.0));
-      activeClip.duration = v; activeClip.validated = false;
+      activeClip.duration = v;
       durNum.value = String(v);
       syncState();
       renderTimeline();
@@ -4660,7 +4655,7 @@ function mountDirectorUI(node) {
     const continuityMode=document.createElement("select");continuityMode.className="mmx-shot-continuity-mode";
     for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method.replace(/ \(.*\)$/, "");continuityMode.append(option);}
     continuityMode.value=activeClip.continuity_mode || "Independent (No Continuity)";
-    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;activeClip.validated=false;syncState();renderTimeline();};
+    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;syncState();renderTimeline();};
     continuityMode.onchange=commitContinuity;
     continuityPanel.append(field("Method",continuityMode,"Independent starts fresh. Motion Context uses saved audiovisual latent guides, with decoded footage as a fallback. Latent Carry copies the tail into the sample with tapered redraw masks. FL2VA hands off one final frame."));
     if([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) for (const [key,title,choices,fallback] of [["context_length","Video Context (Seconds)",[5,22,39,56],22],["audio_context_length","Audio Context (Seconds)",[0,5,22,24,39,56],22]]) {
@@ -4724,7 +4719,7 @@ function mountDirectorUI(node) {
         if (!/^\d+$/.test(seedInput.value.trim())) throw new Error();
         const value = BigInt(seedInput.value.trim());
         if (value > 0xffffffffffffffffn) throw new Error();
-        activeClip.seed = value.toString(); activeClip.validated = false; seedInput.value = activeClip.seed; seedInput.setCustomValidity("");
+        activeClip.seed = value.toString(); seedInput.value = activeClip.seed; seedInput.setCustomValidity("");
       } catch { seedInput.setCustomValidity("Enter a decimal integer from 0 to 18446744073709551615."); seedInput.reportValidity(); return; }
       syncState();
     };
@@ -4738,7 +4733,7 @@ function mountDirectorUI(node) {
     diceBtn.title = "Generate new random seed";
     diceBtn.onclick = () => {
       const newSeed = Math.floor(Math.random() * 10000000000);
-      activeClip.seed = String(newSeed); activeClip.validated = false;
+      activeClip.seed = String(newSeed);
       seedInput.value = String(newSeed);
       syncState();
     };
@@ -4850,7 +4845,7 @@ function mountDirectorUI(node) {
             }
           }
         }
-        activeClip.validated=false;syncState();renderTimeline();
+        syncState();renderTimeline();
       };
       refsList.appendChild(item);
     });
@@ -5311,7 +5306,7 @@ function mountDirectorUI(node) {
     if(runningPhase)watchClipProgress();
     if(detail.invalidated_clip_ids?.length){
       const invalidated=new Set(detail.invalidated_clip_ids);
-      for(const clip of timelineState.clips)if(invalidated.has(String(clip.id))){clip.validated=false;clip.refine_approved=false;clip.refine_pending=false;}
+      for(const clip of timelineState.clips)if(invalidated.has(String(clip.id)) && !clip.validated){clip.refine_approved=false;clip.refine_pending=false;}
       syncState(true);void refreshClipResults();
     }
     if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState(true);void refreshClipResults();renderTimeline();renderInspector();return;}
@@ -5362,7 +5357,7 @@ function mountDirectorUI(node) {
     for(const name of ['execution_error','execution_interrupted','executing'])api.addEventListener(name,clearGenerating);
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
-      node.__mmxDisposed = true;stopClipProgress();
+      node.__mmxDisposed = true;node.__mmxExportController?.abort();stopClipProgress();
       flushDraft();window.removeEventListener('pagehide',flushDraft);document.removeEventListener('visibilitychange',hideDraft);
       for (const observers of node.__mmxRefObserverSets || []) observers.delete(node.__mmxRefObserver);
       node.__mmxRefObserverSets?.clear();
