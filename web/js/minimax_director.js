@@ -2180,7 +2180,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-generation-bar .mmx-field { grid-template-columns:155px 180px minmax(0,1fr);gap:14px; }
 .mmx-director-root .mmx-generation-bar small { color:#bdc8d3;font-size:13px; }
 .mmx-director-root .mmx-multitrack-panel { background:#1d2024;border-color:#4b525c;border-radius:8px; }
-.mmx-director-root .mmx-track-header-cell { background:#20262d;color:#bfcbd8;font-size:12px;letter-spacing:.02em;align-self:stretch;height:auto;flex-shrink:0;z-index:60; }
+.mmx-director-root .mmx-track-header-cell { background:#20262d;color:#bfcbd8;font-size:12px;letter-spacing:.02em;align-self:stretch;height:auto;flex-shrink:0;z-index:60;box-shadow:-14px 0 0 #20262d; }
 .mmx-director-root .mmx-track-row { border-color:#363d46; }
 .mmx-director-root .mmx-shot-block { border-radius:5px;background:#29333e;border-color:#516373; }
 .mmx-director-root .mmx-shot-block.active { background:#2c3b48!important;border-color:#86b8d8!important;box-shadow:inset 3px 0 #86b8d8; }
