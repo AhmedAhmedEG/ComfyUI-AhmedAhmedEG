@@ -9,6 +9,10 @@ function shortStage(label){
     if(/^Text encoder/i.test(label))return 'Text Conditioning';
     if(/^Text conditioning/i.test(label))return 'Text Conditioning';
     if(/^Preparing reference /i.test(label))return 'Checking Cache';
+    if(/^Encoding reference /i.test(label))return 'Encoding References';
+    let lora=/^LoRA · (reading|applying) (.+)$/i.exec(label);
+    if(lora)return `${lora[1].toLowerCase()==='reading'?'Loading':'Applying'} LoRA ${lora[2].replace(/\.safetensors$/i,'')}`;
+    if(/^LoRA · \d+ ready$/i.test(label))return 'LoRAs Ready';
     const names={
         'Checking reference cache':'Checking Cache',
         'Loading cached reference encodings':'Loading References',
@@ -16,9 +20,11 @@ function shortStage(label){
         'Reading project and settings':'Reading Project',
         'Preparing clip and references':'Checking Cache',
         'Checking model and asset fingerprints':'Checking Cache',
-        'Preparing H3 model and clip LoRA configuration':'Loading MiniMax H3',
+        'Preparing clip LoRAs':'Loading LoRAs',
+        'Preparing MiniMax H3 model configuration':'Loading MiniMax H3',
         'Preparing H3 model for sampling':'Loading MiniMax H3',
         'H3 model · loading as needed and initializing sampler':'Loading MiniMax H3',
+        'H3 model · loading as needed and applying LoRA weights':'Loading MiniMax H3 + LoRA',
         'Preparing latent and sampling noise':'Preparing Sampling',
         'Sampling H3':'Sampling',
         'Refining clip':'Refining',
@@ -37,11 +43,24 @@ export function createStageProgress(client){
     const detail=document.createElement('span');
     detail.className='mmx-stage-detail';
     detail.style.cssText='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;margin-left:6px';
+    // Stages without a step count (model loads, VAE decode, saving) have no
+    // measurable progress; show live activity instead of a frozen bar.
+    const spinner=document.createElement('span');spinner.className='mmx-stage-spinner';spinner.setAttribute('aria-hidden','true');
+    const text=document.createElement('span');
+    detail.append(spinner,text);
+    if(!document.getElementById('mmx-stage-progress-style')){
+        const style=document.createElement('style');style.id='mmx-stage-progress-style';
+        style.textContent='@keyframes mmx-stage-spin{to{transform:rotate(360deg)}}@keyframes mmx-stage-busy{from{background-position:0 0}to{background-position:40px 0}}'+
+            '.mmx-stage-spinner{display:inline-block;width:.8em;height:.8em;margin:0 5px -1px 0;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:mmx-stage-spin .8s linear infinite;box-sizing:border-box}'+
+            '.mmx-stage-detail[data-counted=true] .mmx-stage-spinner{display:none}'+
+            'rgthree-progress-bar.mmx-stage-busy{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.10) 0 10px,transparent 10px 20px);background-size:40px 100%;animation:mmx-stage-busy 1s linear infinite}';
+        document.head.append(style);
+    }
     function attach(){
         const next=document.querySelector('rgthree-progress-bar');
         const text=next?.progressTextEl || next?.shadowRoot?.querySelector('[part="text"]');
         if(next===bar && text===target)return;
-        observer?.disconnect();detail.remove();bar=next;target=text;
+        observer?.disconnect();detail.remove();if(bar!==next)bar?.classList?.remove('mmx-stage-busy');bar=next;target=text;
         if(target){
             // rgthree replaces its text on every native progress update. Observe
             // that element only and restore our suffix after its own render.
@@ -55,14 +74,18 @@ export function createStageProgress(client){
         if(!target)return;
         const activeNode=bar.currentNodeId;
         const ours=String(current.node).split(':').at(-1);
-        if(bar.currentPromptExecution?.errorDetails || activeNode!=null && String(activeNode).split(':').at(-1)!==ours){detail.remove();return;}
+        if(bar.currentPromptExecution?.errorDetails || activeNode!=null && String(activeNode).split(':').at(-1)!==ours){detail.remove();bar.classList?.remove('mmx-stage-busy');return;}
         const clip=current.clipName?`${current.clipName} · `:'';
-        const steps=Number.isFinite(current.step)?` · Step ${current.step}/${current.steps}`:'';
-        const text=`· ${clip}${shortStage(current.label)}${steps} · ${Math.floor((Date.now()-started)/1000)}s`;
-        if(detail.textContent!==text){detail.textContent=text;detail.title=text;}
+        const counted=Number.isFinite(current.step) && Number(current.steps)>0;
+        const sampling=current.label==='Sampling H3';
+        const steps=counted?(sampling?` · Step ${current.step}/${current.steps}`:` · ${current.step}/${current.steps}`):'';
+        const value=`· ${clip}${shortStage(current.label)}${steps} · ${Math.floor((Date.now()-started)/1000)}s`;
+        if(text.textContent!==value){text.textContent=value;detail.title=value;}
+        detail.dataset.counted=String(counted);
+        bar.classList?.toggle('mmx-stage-busy',!counted);
         if(detail.parentNode!==target)target.append(detail);
     }
-    function clear(){current=null;clearInterval(timer);timer=null;observer?.disconnect();observer=null;detail.remove();bar=target=null;}
+    function clear(){current=null;clearInterval(timer);timer=null;observer?.disconnect();observer=null;detail.remove();bar?.classList?.remove('mmx-stage-busy');bar=target=null;}
     function update(event){
         const value=event.detail;
         if(!value || typeof value.label!=='string' || !value.node)return;

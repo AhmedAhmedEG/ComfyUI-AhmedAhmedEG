@@ -125,7 +125,7 @@ class PreflightCache:
                 encoder_signature=auxiliaries
             runtime_keys={'cache_report','validated','validated_generation','selected','last_seed','generation',
                 'refine_pending','refine_approved','refine_approved_generation','invalidated_generation','last_seed_mode','name',
-                'saved_generation'}
+                'saved_generation','pending_upstream'}
             authored={k:v for k,v in shot.items() if k not in runtime_keys}
             refs=self.inputs.get('ref_pack') or {}
             ids=set([*self.timeline.get('shared_ref_ids',[]),*shot.get('ref_ids',[])])

@@ -14,15 +14,20 @@ class DocumentedControls(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         content = json.loads((root/'docs/guide_content.json').read_text(encoding='utf8'))
         for key, node in schema.items():
-            manual = (root/'docs/manuals'/f'{key}.html').read_text(encoding='utf8')
+            stub = root/'docs/manuals'/f'{key}.html'
+            manual = stub.read_text(encoding='utf8')
+            # Manuals are redirects into the illustrated guide; check the real page.
+            target = re.search(r'http-equiv="refresh"[^>]*url=([^"]+)"', manual)
+            if target:
+                manual = (stub.parent/target.group(1)).resolve().read_text(encoding='utf8')
             self.assertGreater(len(re.sub('<[^>]+>', '', manual).split()), 170, key)
             cls = NODE_CLASS_MAPPINGS[key]
             signature = inspect.signature(getattr(cls, cls.FUNCTION))
             accepts_kwargs = any(p.kind == p.VAR_KEYWORD for p in signature.parameters.values())
             for field in node['inputs']:
                 self.assertTrue(field['name'] in signature.parameters or accepts_kwargs, (key,field['name']))
-                self.assertTrue(content['nodes'][key]['control_descriptions'].get(field['name'])
-                    or field['description'] or content['control_descriptions'].get(field['name']), (key,field['name']))
+                option = content['nodes'][key].get('options', {}).get(field['name'], {})
+                self.assertTrue(option.get('what') or field['description'], (key,field['name']))
             self.assertEqual(len(cls.RETURN_TYPES),len(getattr(cls,'RETURN_NAMES',cls.RETURN_TYPES)),key)
 
     def test_master_has_one_timeline_authoring_surface(self):

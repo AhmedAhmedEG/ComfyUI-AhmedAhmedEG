@@ -7,7 +7,7 @@ class MiniMaxH3SmartPreview:
     def INPUT_TYPES(cls):
         return {"required": {"project_state": ("STRING", {"forceInput": True,
             "tooltip": "Connect the Master's project_state output. Reads completed shot caches without exporting the full movie."})},
-            "optional":{"preview_settings":('STRING',{'default':'{}','multiline':False})},
+            "optional":{"preview_settings":('STRING',{'default':'{}','multiline':False,'tooltip':'Viewer options saved by the preview panel (stream, scope, quality, autoplay, loop). Scope, quality and stream also choose what the images/audio outputs carry. Managed by the panel; no need to edit.'})},
             "hidden":{"prompt":"PROMPT","unique_id":"UNIQUE_ID"}}
 
     RETURN_TYPES = ('IMAGE','AUDIO','FLOAT')

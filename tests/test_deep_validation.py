@@ -123,8 +123,9 @@ class TestDeepValidation(CacheIsolatedTestCase):
                 continuity_mode="FL2VA Tail Handoff",
             )
 
-            self.assertEqual(mock_native.execute.call_count, 2)
-            c2_call_kwargs = mock_native.execute.call_args_list[1][1]
+            # c1 conditioning, c2 cached reference encode, c2 conditioning.
+            self.assertEqual(mock_native.execute.call_count, 3)
+            c2_call_kwargs = mock_native.execute.call_args_list[-1][1]
             self.assertIn("ref_images", c2_call_kwargs)
             self.assertIn("ref_image_1", c2_call_kwargs["ref_images"])
             self.assertIsNotNone(c2_call_kwargs["ref_images"]["ref_image_1"])

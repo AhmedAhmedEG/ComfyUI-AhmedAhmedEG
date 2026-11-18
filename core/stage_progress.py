@@ -15,6 +15,14 @@ def _send(data):
         pass  # A disconnected UI must never fail generation.
 
 
+def _native_progress(step, steps):
+    try:
+        import comfy.utils
+        comfy.utils.ProgressBar(int(steps)).update_absolute(int(step), int(steps))
+    except Exception:
+        pass  # Outside ComfyUI (tests) or with no executing node: text only.
+
+
 class StageProgress:
     def __init__(self, send=_send, clock=time.monotonic):
         self.send, self.clock = send, clock
@@ -37,6 +45,11 @@ class StageProgress:
         if identity == self.last or step is not None and now-self.last_sent < .25 and step != steps:
             return
         self.last, self.last_sent = identity, now
+        if step is not None and steps and label != 'Sampling H3':
+            # Countable work (references, LoRA files, saved artifacts) fills the
+            # existing green bar through ComfyUI's own progress API. Sampling
+            # already reports through ComfyUI's latent-preview callback.
+            _native_progress(step, steps)
         self.send({'node': str(self.node), 'project_id': self.project,
             'clip_id': self.clip, 'index': self.index, 'total': self.total,
             'label': label, 'step': step, 'steps': steps, 'active': active,

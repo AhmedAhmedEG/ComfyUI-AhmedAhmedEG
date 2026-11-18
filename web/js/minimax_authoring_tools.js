@@ -86,6 +86,112 @@ function conditionalWidgets(node){
 function element(tag,text,className){const e=document.createElement(tag);if(text)e.textContent=text;if(className)e.className=className;return e;}
 function field(root,label,input){const row=element("label",label,"mmx-tool-field");row.append(input);root.append(row);return input;}
 function input(root,label,type,current,change){const e=document.createElement("input");e.type=type;e.value=current ?? "";e.onchange=()=>change(e.value);return field(root,label,e);}
+// Graphical crop: drag inside the box to move it, drag a handle to resize it,
+// drag outside it to draw a new one. Values stay normalized (0..1) for the
+// backend's edit_images(). The DOM is updated live; settings save on release.
+const CROP_ASPECTS=[['free','Free'],['source','Original'],['16:9','16:9'],['9:16','9:16'],['1:1','1:1'],['4:3','4:3'],['3:4','3:4']];
+const CROP_MIN=.02;
+function cropEditor(node,media,a,save,details,type){
+  const stage=element('div',null,'mmx-crop-stage');media.replaceWith(stage);stage.append(media);
+  const layer=element('div',null,'mmx-crop-layer'),frame=element('div',null,'mmx-crop-box');
+  layer.append(frame);stage.append(layer);
+  for(const h of ['nw','n','ne','e','se','s','sw','w']){const d=element('span',null,'mmx-crop-handle');d.dataset.handle=h;frame.append(d);}
+  let crop={x:0,y:0,width:1,height:1,...(a.crop || {})};
+  const natural=()=>{const w=media.naturalWidth || media.videoWidth || 0,h=media.naturalHeight || media.videoHeight || 0;return w && h?[w,h]:null;};
+  // Normalized width/height ratio for a pixel aspect ratio on this source.
+  const normalizedAspect=()=>{
+    const mode=a.crop_aspect || 'free';if(mode==='free')return null;
+    const size=natural();const [W,H]=size || [1,1];
+    if(mode==='source')return 1;
+    const [rw,rh]=mode.split(':').map(Number);return (rw/rh)*H/W;
+  };
+  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+  const tools=element('div',null,'mmx-crop-tools');details.append(tools);
+  const aspect=choice(tools,'Aspect',CROP_ASPECTS,a.crop_aspect || 'free',v=>{
+    if(v==='free')delete a.crop_aspect;else a.crop_aspect=v;
+    const r=normalizedAspect();
+    if(r){const cx=crop.x+crop.width/2,cy=crop.y+crop.height/2;let h=crop.height,w=h*r;
+      if(w>1){w=1;h=w/r;}if(h>1){h=1;w=h*r;}
+      crop={width:w,height:h,x:clamp(cx-w/2,0,1-w),y:clamp(cy-h/2,0,1-h)};}
+    render();commit();
+  });
+  const readout=element('span',null,'mmx-crop-readout');tools.append(readout);
+  const reset=element('button','Reset Crop');reset.type='button';reset.onclick=()=>{crop={x:0,y:0,width:1,height:1};render();commit();};tools.append(reset);
+  details.append(element('p',type==='video'?'Open this section to drag the crop box over the video. Drag inside to move, drag the handles to resize, drag outside to draw a new box.':'Drag inside the box to move it, drag the handles to resize, or drag outside it to draw a new box.','mmx-role-help'));
+  const isFull=()=>crop.x<=.0005 && crop.y<=.0005 && crop.width>=.9995 && crop.height>=.9995;
+  const render=()=>{
+    Object.assign(frame.style,{left:crop.x*100+'%',top:crop.y*100+'%',width:crop.width*100+'%',height:crop.height*100+'%'});
+    stage.classList.toggle('mmx-crop-full',isFull());
+    const size=natural();
+    readout.textContent=isFull()?'Full frame':size?`${Math.round(crop.width*size[0])}×${Math.round(crop.height*size[1])} px`:`${Math.round(crop.width*100)}% × ${Math.round(crop.height*100)}%`;
+  };
+  const commit=()=>{
+    if(isFull())delete a.crop;
+    else{
+      const r=v=>Math.round(v*10000)/10000;
+      const x=r(crop.x),y=r(crop.y);
+      a.crop={x,y,width:Math.min(r(crop.width),1-x),height:Math.min(r(crop.height),1-y)};
+    }
+    save();
+  };
+  // Opposite corner stays fixed; the pointer defines the other corner.
+  const fromAnchor=(ax,ay,px,py,r)=>{
+    const sx=px>=ax?1:-1,sy=py>=ay?1:-1;let w=Math.abs(px-ax),h=Math.abs(py-ay);
+    const maxW=sx>0?1-ax:ax,maxH=sy>0?1-ay:ay;
+    if(r){if(w/Math.max(h,1e-9)>r)h=w/r;else w=h*r;const s=Math.min(1,maxW/Math.max(w,1e-9),maxH/Math.max(h,1e-9));w*=s;h*=s;}
+    else{w=Math.min(w,maxW);h=Math.min(h,maxH);}
+    return {x:sx>0?ax:ax-w,y:sy>0?ay:ay-h,width:w,height:h};
+  };
+  const point=e=>{const b=layer.getBoundingClientRect();return [clamp((e.clientX-b.left)/(b.width || 1),0,1),clamp((e.clientY-b.top)/(b.height || 1),0,1)];};
+  let drag=null;
+  layer.onpointerdown=e=>{
+    if(e.button!==undefined && e.button!==0)return;
+    const [px,py]=point(e),handle=e.target?.dataset?.handle;
+    const start={...crop};
+    if(handle)drag={mode:'resize',handle,start};
+    else if(e.target===frame && !isFull())drag={mode:'move',start,px,py};
+    else drag={mode:'draw',ax:px,ay:py,start};
+    layer.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopPropagation?.();
+  };
+  layer.onpointermove=e=>{
+    if(!drag)return;
+    const [px,py]=point(e),r=normalizedAspect(),s=drag.start;
+    if(drag.mode==='move'){crop={...s,x:clamp(s.x+px-drag.px,0,1-s.width),y:clamp(s.y+py-drag.py,0,1-s.height)};}
+    else if(drag.mode==='draw'){crop=fromAnchor(drag.ax,drag.ay,px,py,r);}
+    else{
+      const h=drag.handle,right=s.x+s.width,bottom=s.y+s.height;
+      if(h.length===2){ // corner: anchor the opposite corner
+        crop=fromAnchor(h.includes('w')?right:s.x,h.includes('n')?bottom:s.y,px,py,r);
+      }else if(h==='e' || h==='w'){
+        let x0=h==='e'?s.x:clamp(px,0,right-CROP_MIN),x1=h==='e'?clamp(px,s.x+CROP_MIN,1):right,w=x1-x0;
+        if(r){const cy=s.y+s.height/2;let hh=w/r;const maxH=2*Math.min(cy,1-cy);if(hh>maxH){hh=maxH;w=hh*r;if(h==='w')x0=x1-w;}crop={x:x0,y:cy-hh/2,width:w,height:hh};}
+        else crop={...s,x:x0,width:w};
+      }else{
+        let y0=h==='s'?s.y:clamp(py,0,bottom-CROP_MIN),y1=h==='s'?clamp(py,s.y+CROP_MIN,1):bottom,hh=y1-y0;
+        if(r){const cx=s.x+s.width/2;let w=hh*r;const maxW=2*Math.min(cx,1-cx);if(w>maxW){w=maxW;hh=w/r;if(h==='n')y0=y1-hh;}crop={x:cx-w/2,y:y0,width:w,height:hh};}
+        else crop={...s,y:y0,height:hh};
+      }
+    }
+    render();
+  };
+  layer.onpointerup=layer.onpointercancel=e=>{
+    if(!drag)return;
+    if(e && e.type!=='pointercancel')layer.onpointermove(e);
+    const mode=drag.mode,start=drag.start;drag=null;layer.releasePointerCapture?.(e?.pointerId);
+    // A click without a real drag never replaces the existing crop.
+    if(crop.width<CROP_MIN || crop.height<CROP_MIN){crop=start;render();return;}
+    if(mode==='draw' && crop.width===start.width && crop.height===start.height && crop.x===start.x && crop.y===start.y)return;
+    commit();
+  };
+  // Videos keep their native controls usable until the Crop section is open.
+  const setActive=()=>{const active=type!=='video' || details.open;layer.classList.toggle('mmx-crop-active',active);if(type==='video')media.controls=!details.open;};
+  details.open=node.properties.mmx_crop_open===true;
+  details.addEventListener('toggle',()=>{node.properties.mmx_crop_open=details.open;setActive();});
+  media.addEventListener?.(type==='video'?'loadedmetadata':'load',()=>{render();});
+  aspect.value=a.crop_aspect || 'free';
+  setActive();render();
+  return {stage,layer,frame,get crop(){return {...crop};}};
+}
 function choice(root,label,options,current,change){const e=document.createElement("select");for(const [v,t] of options.map(o=>Array.isArray(o)?o:[o,o])){const x=element("option",t);x.value=v;e.append(x);}e.value=current;e.onchange=()=>change(e.value);return field(root,label,e);}
 function button(root,label,action){const b=element("button",label);b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){const status=root.__status || root.closest('.mmx-authoring-tool')?.__status;if(status){status.textContent=e.message;status.dataset.error="true";}}finally{b.disabled=false;}};root.append(b);return b;}
 async function request(path,body,signal){const r=await api.fetchApi(path,{method:body===undefined?"GET":"POST",headers:body===undefined?{}:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),signal});const data=await r.json();if(!r.ok)throw Error(data.error || `HTTP ${r.status}`);return data;}
@@ -263,8 +369,8 @@ function assets(node){
           scaling.append(element('p','Preserves aspect ratio and aligns to 32 pixels without enlarging smaller sources. 1 MP = 1,000,000 pixels. This prepared reference is used by every clip that selects it.'));
         }else if(scaleMode!=='Off' && scaleMode!=='Divisible crop'){scaling.open=true;input(scaling,'Width','number',a.width || 1344,v=>change('width',Number(v)));input(scaling,'Height','number',a.height || 768,v=>change('height',Number(v)));}
         const cropping=element('details');cropping.append(element('summary','Crop'));box.append(cropping);
-        const crop=a.crop || {x:0,y:0,width:1,height:1};for(const key of ['x','y','width','height']){const e=input(cropping,key[0].toUpperCase()+key.slice(1),'number',crop[key],v=>{a.crop={...crop,[key]:Number(v)};Object.assign(crop,a.crop);save();});e.min=0;e.max=1;e.step=.01;}
-        if(media && !peopleMode){const preview=element('div');preview.style.cssText='position:relative;width:fit-content;max-width:100%;margin:0 auto';media.replaceWith(preview);preview.append(media);const overlay=element('div');overlay.style.cssText=`position:absolute;pointer-events:none;border:2px solid #67c7ff;background:#67c7ff18;box-sizing:border-box;left:${crop.x*100}%;top:${crop.y*100}%;width:${crop.width*100}%;height:${crop.height*100}%`;overlay.hidden=!a.crop;preview.append(overlay);let origin=null;media.style.cursor='crosshair';media.onpointerdown=e=>{const r=media.getBoundingClientRect();origin=[Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];media.setPointerCapture(e.pointerId);e.preventDefault();};media.onpointerup=e=>{if(!origin)return;const r=media.getBoundingClientRect();const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));a.crop={x:Math.min(x,origin[0]),y:Math.min(y,origin[1]),width:Math.abs(x-origin[0]),height:Math.abs(y-origin[1])};origin=null;if(a.crop.width>.005 && a.crop.height>.005){save();draw();}else delete a.crop;};}
+        if(media && !peopleMode)cropEditor(node,media,a,save,cropping,asset.type);
+        else cropping.append(element('p',media?'Close Edit People Boxes to crop this picture.':'Connect a file-backed source to crop it.','mmx-role-help'));
       }
       if(asset.file)button(box,'Remove Asset',()=>{data.files=data.files.filter(f=>f.id!==asset.id);save();draw();});
     }reset.disabled=!slots.length;root.__status.textContent=`${slots.length} References`;};
@@ -278,7 +384,7 @@ function projectImport(node){const root=mount(node,'Convert Upstream Project');c
  button(root,'Convert And Review',async()=>{if(!file.files[0])throw Error('Choose a project file.');const form=new FormData();form.append('file',file.files[0]);form.append('restore_cache',String(restore.checked));root.__status.textContent='Preparing upload…';const result=await transferRequest('/minimax_director/project/convert',{body:form,onProgress:e=>root.__status.textContent=transferLabel(e)});converted=result.timeline;report.textContent=JSON.stringify(result.report,null,2);const w=widget(node,'project_json');w.value=JSON.stringify(converted);widget(node,'source').value='current';root.__status.textContent='Converted · Review Warnings Before Applying';});
  button(root,'Apply Converted Timeline',()=>{if(!converted)throw Error('Convert and review a project first.');const master=getMaster();if(master.inputs?.some(i=>i.name==='timeline' && i.link!=null))throw Error('Disconnect the external Timeline Builder before importing into the editable Master.');persist(master,'timeline_data',converted);master.__mmxDirectorRefresh?.();root.__status.textContent='Converted Timeline Applied · Save It As A Named Project';});}
 
-app.registerExtension({name:'MiniMaxH3.AuthoringTools',nodeCreated(node){node.properties ||= {};syncOutputLabels(node);const type=node.comfyClass || node.type;if(type==='MiniMaxH3RefPack')assets(node);if(type==='MiniMaxH3RefModLibrary')refmods(node);if(type==='MiniMaxH3PromptForge')forge(node);if(type==='MiniMaxH3ProjectVideo')exporter(node);if(type==='MiniMaxH3ProjectImport')projectImport(node);if(['MiniMaxH3DirectorRefine','MiniMaxH3FrameInterpolation','MiniMaxH3ProjectVideo','MiniMaxH3PixelUpscale','MiniMaxH3PromptForge','MiniMaxH3DirectorSelfLift','MiniMaxH3DirectorSettings','MiniMaxH3LocalPromptModel'].includes(type))conditionalWidgets(node);const removed=node.onRemoved;node.onRemoved=function(...args){void cancelVision(node).catch(()=>{});return removed?.apply(this,args);};const configure=node.onConfigure;node.onConfigure=function(...args){const result=configure?.apply(this,args);syncOutputLabels(node);node.__mmxReload?.();node.__mmxUpdateVisibility?.();return result;};},setup(){const style=document.createElement('style');style.textContent='.mmx-authoring-tool{height:100%;overflow:auto;padding:14px;background:#20272e;color:#dbe5ee;border:1px solid #506070;border-radius:8px;font:13px Arial}.mmx-authoring-tool fieldset{border:1px solid #465966;border-radius:7px;margin:12px 0;padding:12px}.mmx-tool-field{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}.mmx-tool-field input,.mmx-tool-field select,.mmx-tool-field textarea{min-width:120px;max-width:70%;background:#151e26;color:#eee;border:1px solid #536574;border-radius:4px;padding:7px}.mmx-tool-field textarea{width:70%}.mmx-authoring-tool button{padding:8px 12px;background:#304657;color:#edf6ff;border:1px solid #607d92;border-radius:5px;margin:4px;cursor:pointer;text-align:center}.mmx-authoring-tool button:hover{background:#42617a}.mmx-authoring-tool button:disabled{opacity:.45}.mmx-asset-preview{max-width:100%;max-height:220px;display:block}.mmx-tool-status{color:#8ed5ae}.mmx-tool-status[data-error=true]{color:#ffa7a7}';style.textContent += '.lg-node-widgets:has(.mmx-ref-editor) > .lg-node-widget:not(:has(.mmx-ref-editor)){display:none!important}.mmx-ref-editor{box-sizing:border-box;padding:16px;background:#20262d;border-color:#3d4a56;font:14px/1.4 system-ui,sans-serif}.mmx-ref-editor h3{font-size:16px;margin:0 0 4px}.mmx-ref-editor .mmx-tool-status{margin:0 0 14px;color:#93a5b6;font-size:12px}.mmx-ref-editor fieldset{border:0;padding:0;margin:12px 0}.mmx-ref-editor legend{display:none}.mmx-ref-editor .mmx-tool-field{gap:16px;margin:10px 0}.mmx-ref-editor .mmx-tool-field input,.mmx-ref-editor .mmx-tool-field select{box-sizing:border-box;width:60%;max-width:60%;min-width:0;font:inherit;padding:8px 10px}.mmx-ref-editor .mmx-asset-preview{height:180px;max-width:100%;width:auto;object-fit:contain;margin:16px auto;background:#141a20;border-radius:6px}.mmx-ref-editor details{border-top:1px solid #35424e;padding:10px 0}.mmx-ref-editor summary{cursor:pointer;font-weight:600;color:#c5d2df;list-style-position:inside}.mmx-ref-editor summary:hover{color:#fff}.mmx-ref-editor button{font:inherit;background:#2d3e4b;margin:8px 4px 0 0}.mmx-ref-editor input[type=file]{font-size:12px}.mmx-people-stage{position:relative;width:fit-content;max-width:100%;margin:12px auto}.mmx-people-stage>.mmx-asset-preview{display:block;width:auto;height:auto;max-height:320px;max-width:100%;margin:0}.mmx-people-boxes{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}.mmx-people-boxes rect{fill:#55b8ef22;stroke:#55b8ef;stroke-width:4;cursor:move}.mmx-people-boxes text{fill:white;font:bold 30px sans-serif;pointer-events:none;paint-order:stroke;stroke:#14202b;stroke-width:5}.mmx-people-boxes .mmx-people-handle{fill:#f8d366;stroke:#263646;cursor:nwse-resize}.mmx-person-row{display:flex;align-items:center;justify-content:space-between}.mmx-person-row label{display:flex;align-items:center;gap:8px}.mmx-person-row input{width:72px!important;padding:6px;background:#151e26;color:#edf3f8;border:1px solid #536574;border-radius:4px}.mmx-ref-editor input[type=checkbox]{width:auto!important;min-width:0}.mmx-ref-editor input[type=file]::file-selector-button{padding:5px 8px;background:#354b5d;color:#edf3f8;border:0;border-radius:4px}';style.textContent += '.mmx-reference-roles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:12px 0}.mmx-reference-roles>strong{grid-column:1/-1}.mmx-ref-editor .mmx-reference-roles .mmx-tool-field{padding:7px 8px;margin:0;gap:6px;border:1px solid #465966;border-radius:5px;font-size:12px}.mmx-reference-roles .mmx-tool-field:has(input:checked){background:#304b60;border-color:#6fa4c6}.mmx-role-help{font-size:12px;color:#aebfcc;margin:8px 0 12px}.mmx-forge-editor details{border-top:1px solid #3d4a56;padding:9px 0}.mmx-forge-editor summary{cursor:pointer;color:#c8d7e4}.mmx-forge-editor textarea{box-sizing:border-box;resize:vertical}.mmx-authoring-tool label[hidden]{display:none!important}';document.head.append(style);}});
+app.registerExtension({name:'MiniMaxH3.AuthoringTools',nodeCreated(node){node.properties ||= {};syncOutputLabels(node);const type=node.comfyClass || node.type;if(type==='MiniMaxH3RefPack')assets(node);if(type==='MiniMaxH3RefModLibrary')refmods(node);if(type==='MiniMaxH3PromptForge')forge(node);if(type==='MiniMaxH3ProjectVideo')exporter(node);if(type==='MiniMaxH3ProjectImport')projectImport(node);if(['MiniMaxH3DirectorRefine','MiniMaxH3FrameInterpolation','MiniMaxH3ProjectVideo','MiniMaxH3PixelUpscale','MiniMaxH3PromptForge','MiniMaxH3DirectorSelfLift','MiniMaxH3DirectorSettings','MiniMaxH3LocalPromptModel'].includes(type))conditionalWidgets(node);const removed=node.onRemoved;node.onRemoved=function(...args){void cancelVision(node).catch(()=>{});return removed?.apply(this,args);};const configure=node.onConfigure;node.onConfigure=function(...args){const result=configure?.apply(this,args);syncOutputLabels(node);node.__mmxReload?.();node.__mmxUpdateVisibility?.();return result;};},setup(){const style=document.createElement('style');style.textContent='.mmx-authoring-tool{height:100%;overflow:auto;padding:14px;background:#20272e;color:#dbe5ee;border:1px solid #506070;border-radius:8px;font:13px Arial}.mmx-authoring-tool fieldset{border:1px solid #465966;border-radius:7px;margin:12px 0;padding:12px}.mmx-tool-field{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}.mmx-tool-field input,.mmx-tool-field select,.mmx-tool-field textarea{min-width:120px;max-width:70%;background:#151e26;color:#eee;border:1px solid #536574;border-radius:4px;padding:7px}.mmx-tool-field textarea{width:70%}.mmx-authoring-tool button{padding:8px 12px;background:#304657;color:#edf6ff;border:1px solid #607d92;border-radius:5px;margin:4px;cursor:pointer;text-align:center}.mmx-authoring-tool button:hover{background:#42617a}.mmx-authoring-tool button:disabled{opacity:.45}.mmx-asset-preview{max-width:100%;max-height:220px;display:block}.mmx-tool-status{color:#8ed5ae}.mmx-tool-status[data-error=true]{color:#ffa7a7}';style.textContent += '.lg-node-widgets:has(.mmx-ref-editor) > .lg-node-widget:not(:has(.mmx-ref-editor)){display:none!important}.mmx-ref-editor{box-sizing:border-box;padding:16px;background:#20262d;border-color:#3d4a56;font:14px/1.4 system-ui,sans-serif}.mmx-ref-editor h3{font-size:16px;margin:0 0 4px}.mmx-ref-editor .mmx-tool-status{margin:0 0 14px;color:#93a5b6;font-size:12px}.mmx-ref-editor fieldset{border:0;padding:0;margin:12px 0}.mmx-ref-editor legend{display:none}.mmx-ref-editor .mmx-tool-field{gap:16px;margin:10px 0}.mmx-ref-editor .mmx-tool-field input,.mmx-ref-editor .mmx-tool-field select{box-sizing:border-box;width:60%;max-width:60%;min-width:0;font:inherit;padding:8px 10px}.mmx-ref-editor .mmx-asset-preview{height:180px;max-width:100%;width:auto;object-fit:contain;margin:16px auto;background:#141a20;border-radius:6px}.mmx-ref-editor details{border-top:1px solid #35424e;padding:10px 0}.mmx-ref-editor summary{cursor:pointer;font-weight:600;color:#c5d2df;list-style-position:inside}.mmx-ref-editor summary:hover{color:#fff}.mmx-ref-editor button{font:inherit;background:#2d3e4b;margin:8px 4px 0 0}.mmx-ref-editor input[type=file]{font-size:12px}.mmx-people-stage{position:relative;width:fit-content;max-width:100%;margin:12px auto}.mmx-people-stage>.mmx-asset-preview{display:block;width:auto;height:auto;max-height:320px;max-width:100%;margin:0}.mmx-people-boxes{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}.mmx-people-boxes rect{fill:#55b8ef22;stroke:#55b8ef;stroke-width:4;cursor:move}.mmx-people-boxes text{fill:white;font:bold 30px sans-serif;pointer-events:none;paint-order:stroke;stroke:#14202b;stroke-width:5}.mmx-people-boxes .mmx-people-handle{fill:#f8d366;stroke:#263646;cursor:nwse-resize}.mmx-person-row{display:flex;align-items:center;justify-content:space-between}.mmx-person-row label{display:flex;align-items:center;gap:8px}.mmx-person-row input{width:72px!important;padding:6px;background:#151e26;color:#edf3f8;border:1px solid #536574;border-radius:4px}.mmx-ref-editor input[type=checkbox]{width:auto!important;min-width:0}.mmx-ref-editor input[type=file]::file-selector-button{padding:5px 8px;background:#354b5d;color:#edf3f8;border:0;border-radius:4px}';style.textContent += '.mmx-reference-roles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:12px 0}.mmx-reference-roles>strong{grid-column:1/-1}.mmx-ref-editor .mmx-reference-roles .mmx-tool-field{padding:7px 8px;margin:0;gap:6px;border:1px solid #465966;border-radius:5px;font-size:12px}.mmx-reference-roles .mmx-tool-field:has(input:checked){background:#304b60;border-color:#6fa4c6}.mmx-role-help{font-size:12px;color:#aebfcc;margin:8px 0 12px}.mmx-forge-editor details{border-top:1px solid #3d4a56;padding:9px 0}.mmx-forge-editor summary{cursor:pointer;color:#c8d7e4}.mmx-forge-editor textarea{box-sizing:border-box;resize:vertical}.mmx-authoring-tool label[hidden]{display:none!important}';style.textContent += '.mmx-crop-stage{position:relative;width:fit-content;max-width:100%;margin:12px auto;user-select:none}.mmx-ref-editor .mmx-crop-stage>.mmx-asset-preview{display:block;width:auto;height:auto;max-height:320px;max-width:100%;margin:0;border-radius:0}.mmx-crop-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;touch-action:none}.mmx-crop-layer.mmx-crop-active{pointer-events:auto;cursor:crosshair}.mmx-crop-box{position:absolute;box-sizing:border-box;border:1px solid #fff;box-shadow:0 0 0 9999px rgba(8,12,16,.58);background-image:linear-gradient(to right,transparent calc(33.33% - .5px),#ffffff59 calc(33.33% - .5px),#ffffff59 calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),#ffffff59 calc(66.66% - .5px),#ffffff59 calc(66.66% + .5px),transparent calc(66.66% + .5px)),linear-gradient(to bottom,transparent calc(33.33% - .5px),#ffffff59 calc(33.33% - .5px),#ffffff59 calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),#ffffff59 calc(66.66% - .5px),#ffffff59 calc(66.66% + .5px),transparent calc(66.66% + .5px))}.mmx-crop-active .mmx-crop-box{cursor:move}.mmx-crop-full .mmx-crop-box{box-shadow:none;background-image:none;border-color:#ffffff40}.mmx-crop-full .mmx-crop-layer:not(.mmx-crop-active) .mmx-crop-box{display:none}.mmx-crop-handle{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;background:#fff;border:1px solid #1d2730;border-radius:2px;box-sizing:border-box;display:none}.mmx-crop-active .mmx-crop-handle{display:block}.mmx-crop-handle[data-handle=nw]{left:0;top:0;cursor:nwse-resize}.mmx-crop-handle[data-handle=n]{left:50%;top:0;cursor:ns-resize}.mmx-crop-handle[data-handle=ne]{left:100%;top:0;cursor:nesw-resize}.mmx-crop-handle[data-handle=e]{left:100%;top:50%;cursor:ew-resize}.mmx-crop-handle[data-handle=se]{left:100%;top:100%;cursor:nwse-resize}.mmx-crop-handle[data-handle=s]{left:50%;top:100%;cursor:ns-resize}.mmx-crop-handle[data-handle=sw]{left:0;top:100%;cursor:nesw-resize}.mmx-crop-handle[data-handle=w]{left:0;top:50%;cursor:ew-resize}.mmx-crop-tools{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.mmx-crop-tools .mmx-tool-field{flex:1 1 220px;margin:0}.mmx-crop-readout{color:#aebfcc;font-size:12px;font-variant-numeric:tabular-nums}.mmx-ref-editor .mmx-crop-tools button{margin:0}';document.head.append(style);}});
 
 api.addEventListener?.('minimax_refine_seed',event=>{
   const data=event.detail;const node=app.graph?.getNodeById(Number(data?.node_id));

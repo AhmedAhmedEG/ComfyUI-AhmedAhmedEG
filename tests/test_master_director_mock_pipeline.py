@@ -445,7 +445,9 @@ class TestMockPipeline(CacheIsolatedTestCase):
                 def record_sample(*args, **kwargs):
                     s = kwargs.get("seed") if "seed" in kwargs else (args[8] if len(args) > 8 else None)
                     sampled_seeds.append(s)
-                    return {"samples": (torch.zeros((1, 16, 5, 16, 16)), torch.zeros((1, 32, 2, 4)))}
+                    # 12 latent frames decode to 39 frames: long enough that the
+                    # chained continuity prefix still leaves visible frames.
+                    return {"samples": (torch.zeros((1, 16, 12, 16, 16)), torch.zeros((1, 32, 2, 4)))}
                 mock_sample.side_effect = record_sample
 
                 # Populate with the real Director fingerprint, which now includes
@@ -461,6 +463,9 @@ class TestMockPipeline(CacheIsolatedTestCase):
                 accepted_generation = ProjectCacheManager("test_val_cache", tmp_dir)._manifest["clips"]["c1"]["generation"]
                 for mode in ("Next clip", "All clips"):
                     with self.subTest(generation_mode=mode):
+                        # Each mode must sample the unapproved clip itself, not
+                        # reuse the take the previous mode saved.
+                        ProjectCacheManager("test_val_cache", tmp_dir).discard_clip_results(["c2"])
                         sampled_seeds.clear()
                         self.director.execute(
                             model=self.mock_model, video_vae=self.mock_vae,

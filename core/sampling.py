@@ -36,7 +36,13 @@ def sample_latent(model, latent, steps, cfg, sampler_name, scheduler,
         stage('Sampling H3', step=step+1, steps=total_steps)
         if native_callback is not None:
             native_callback(step, x0, x, total_steps)
-    stage('H3 model · loading as needed and initializing sampler')
+    # Graph LoRAs (stock LoRA loader nodes) and clip LoRAs are merged into the
+    # weights by ComfyUI during this load, so name them in the label.
+    from .loras import lora_patch_count
+    if lora_patch_count(model):
+        stage('H3 model · loading as needed and applying LoRA weights')
+    else:
+        stage('H3 model · loading as needed and initializing sampler')
     result = comfy.sample.sample(
         model, noise, steps, cfg, sampler_name, scheduler, positive, negative,
         samples, denoise=denoise, disable_noise=disable_noise,

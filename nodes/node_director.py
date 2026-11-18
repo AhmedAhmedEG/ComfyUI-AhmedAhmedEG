@@ -455,6 +455,11 @@ class MiniMaxH3MasterDirector:
                 if str(item['id']) in ids:
                     item['refine_approved'] = False
                     item['refine_pending'] = False
+                    # Their upstream take was just replaced: later clips in this
+                    # same run must regenerate them instead of reusing them.
+                    if item.pop('pending_upstream', None):
+                        item['validated'] = False
+                        item.pop('validated_generation', None)
         shot_event(unique_id, project_id, "", "timeline_ready", timeline=export_timeline_state(timeline))
         algorithm_signature = algorithm_provenance(selflift, refine, semantic_bridge) if execution_mode != "Conditioning Guide Output" else []
         if execution_mode != "Conditioning Guide Output":
@@ -890,10 +895,12 @@ class MiniMaxH3MasterDirector:
                 if source_ref_id:
                     meta = cache_mgr._manifest.get("clips", {}).get(clip_id, {})
                     if meta.get("fingerprint") != previous_fingerprint or not meta.get("has_frames") or not os.path.isfile(cache_mgr.get_clip_frames_path(clip_id)):
-                        invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length,preserve_approved=True)
+                        # Dependents keep their saved takes (now a cache miss via
+                        # the upstream fingerprint) until their own new take is saved.
+                        stale = dependent_successors(clips, clip_idx, continuity_mode, context_length,preserve_approved=True)
                         cache_mgr.store_clip_results(clip_id, previous_fingerprint, None, audio,
-                            source.get("original_frames", frames), validated=True, invalidate_clip_ids=invalidated)
-                        clear_dependent_approvals(invalidated)
+                            source.get("original_frames", frames), validated=True)
+                        clear_dependent_approvals(stale)
                         cache_mgr.store_source_media(clip_id,source.get("original_frames",frames),source["audio"])
                         cache_mgr.update_clip_metadata(clip_id, {"mode": "VIDEO", "trim_prefix": 0, "previous_trim": 0})
                     clip_item["duration"] = int(frames.shape[0]) / FPS
@@ -1102,13 +1109,12 @@ class MiniMaxH3MasterDirector:
                 shot_event(unique_id,project_id,clip_id,'completed',reused=True,index=clip_idx+1,total=len(clips))
                 if run_mode=='clip_by_clip':break
                 continue
+            # Dependent results stay visible while this clip samples/decodes.
+            # store_clip_results removes them atomically only after the
+            # replacement take is saved; their fingerprints already embed this
+            # clip's new upstream fingerprint, so they cannot be reused meanwhile.
             if not clip_item.get('locked'):
-                invalidated=[cid for cid in dependent_successors(clips,clip_idx,continuity_mode,context_length,preserve_approved=True)
-                    if cid in cache_mgr._manifest.get('clips',{}) or cid in cache_mgr._manifest.get('first_pass',{})]
-                if invalidated:
-                    cache_mgr.discard_clip_results(invalidated);clear_dependent_approvals(invalidated)
                 cache_event('Saved clip','miss')
-                if invalidated:shot_event(unique_id,project_id,clip_id,'preparing',index=clip_idx+1,total=len(clips),invalidated_clip_ids=invalidated)
             if previous_trim and all_decoded_frames:
                 all_decoded_frames[-1]=all_decoded_frames[-1][:-previous_trim]
                 all_decoded_audios[-1]=fit_audio_duration(all_decoded_audios[-1],all_decoded_frames[-1].shape[0],FPS)
@@ -1168,7 +1174,7 @@ class MiniMaxH3MasterDirector:
 
             # Both fresh sampling and resumed refinement need the clip's adapters.
             # Fingerprints above describe the base model plus the effective LoRA files.
-            stage('Preparing H3 model and clip LoRA configuration')
+            stage('Preparing clip LoRAs' if clip_lora_files else 'Preparing MiniMax H3 model configuration')
             clip_active_model = current_resources().prepare_loras(clip_active_model, clip_lora_files)
 
             if staged is not None:
@@ -1368,6 +1374,7 @@ class MiniMaxH3MasterDirector:
 
             # Store result in cache manager
             cache_error = None
+            invalidated = []
             stage('Saving clip latents, audio and frames')
             try:
                 before_frames = None
@@ -1375,6 +1382,11 @@ class MiniMaxH3MasterDirector:
                     before_video, _ = extract_streams_from_av_latent(pre_refine_latent)
                     before_frames = decode_video_latent(video_vae, before_video)
                     before_frames = spill_frames(before_frames[:decoded_frames.shape[0]], cache_mgr.project_dir)
+                # A clip's saved take is only ever replaced by its own new take.
+                # Dependents continuing from this clip are now stale: their
+                # fingerprint includes this clip's, so they regenerate unless
+                # ticked again, but their saved takes stay usable until then
+                # (cancelling a run never loses them).
                 invalidated = dependent_successors(clips, clip_idx, continuity_mode, context_length,preserve_approved=True)
                 cache_mgr.store_clip_results(
                     clip_id=clip_id,
@@ -1384,7 +1396,6 @@ class MiniMaxH3MasterDirector:
                     decoded_frames=decoded_frames,
                     validated=clip_validated,
                     pre_refine_frames=before_frames,
-                    invalidate_clip_ids=invalidated,
                 )
                 clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
@@ -1460,7 +1471,9 @@ class MiniMaxH3MasterDirector:
                 from core.memory_lifecycle import between_clips, log_memory_boundary
             between_clips()
             log_memory_boundary("completed", clip_id, decoded_output)
-            shot_event(unique_id, project_id, clip_id, "completed", seed=str(clip_seed), next_seed=clip_item["seed"], authored_seed=authored_seed, index=clip_idx+1, total=len(clips))
+            shot_event(unique_id, project_id, clip_id, "completed", seed=str(clip_seed), next_seed=clip_item["seed"], authored_seed=authored_seed, index=clip_idx+1, total=len(clips),
+                saved=cache_error is None,
+                **({'stale_clip_ids': list(invalidated)} if invalidated and cache_error is None else {}))
             if run_mode == "clip_by_clip":
                 break
 

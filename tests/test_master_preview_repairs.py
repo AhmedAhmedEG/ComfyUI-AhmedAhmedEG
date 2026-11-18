@@ -71,7 +71,9 @@ class MasterPreviewRepairs(unittest.TestCase):
                 case.execute(timeline_data=json.dumps(state))
             self.assertEqual(case.sampling_calls,[])
 
-    def test_unvalidated_dependents_deleted_before_parent_sampling_even_if_sampling_fails(self):
+    def test_unvalidated_dependents_stay_visible_until_parent_replacement_is_saved(self):
+        # Preview must keep the old chain while the parent is still generating;
+        # dependents are invalidated only once the replacement take is stored.
         with master() as case:
             shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},
                    {'id':'two','type':'T2V','duration':1,'continuity_mode':'Motion Context (Chained)',
@@ -84,15 +86,62 @@ class MasterPreviewRepairs(unittest.TestCase):
             old=manager._manifest['clips']['two']['generation']
             def fail(*args, **kwargs):
                 current=ProjectCacheManager('regression',case.temp.name)
-                self.assertNotIn('two', current._manifest['clips'])
-                self.assertIn('one', current._manifest['clips'])
-                self.assertIn('three', current._manifest['clips'])
-                self.assertFalse(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+                self.assertIn('two', current._manifest['clips'])
+                self.assertNotIn('two', current._manifest.get('invalidated_clips', []))
+                self.assertTrue(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
                 raise RuntimeError('Intentional sampler failure')
             with patch('comfy.sample.sample', side_effect=fail):
                 with self.assertRaisesRegex(RuntimeError,'Intentional sampler failure'):
                     case.execute(timeline_data=json.dumps(state),
                         config={'project_id':'regression','run_mode':'clip_by_clip'})
+            # A failed parent run leaves the previous chain intact.
+            self.assertEqual(ProjectCacheManager('regression',case.temp.name)._manifest['clips']['two']['generation'],old)
+            # A saved parent replacement still keeps the dependent's take: only
+            # the dependent's own new take may replace it (cancel-safe).
+            case.execute(timeline_data=json.dumps(state),
+                config={'project_id':'regression','run_mode':'clip_by_clip'})
+            current=ProjectCacheManager('regression',case.temp.name)._manifest
+            self.assertEqual(current['clips']['two']['generation'],old)
+            self.assertNotIn('two', current.get('invalidated_clips', []))
+            self.assertIn('three', current['clips'])
+            self.assertTrue(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+            # It is stale (cache miss via the new parent), so the next run
+            # regenerates it, and only then is the old take replaced.
+            state['clips'][0].update(validated=True,validated_generation=current['clips']['one']['generation'])
+            case.sampling_calls.clear()
+            case.execute(timeline_data=json.dumps(state),
+                config={'project_id':'regression','run_mode':'clip_by_clip'})
+            self.assertEqual(len(case.sampling_calls),1)
+            current=ProjectCacheManager('regression',case.temp.name)._manifest
+            self.assertNotEqual(current['clips']['two']['generation'],old)
+            self.assertFalse(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+
+    def test_unticked_parent_keeps_dependent_approval_until_parent_take_is_saved(self):
+        # Unticking clip one marks its approved dependent "pending_upstream":
+        # cancelling mid-run keeps it approved and reusable; once one's new
+        # take is saved the dependent is regenerated in the same run.
+        with master() as case:
+            shots=[{'id':'one','type':'T2V','duration':1,'continuity':False},
+                   {'id':'two','type':'T2V','duration':1,'continuity_mode':'Motion Context (Chained)',
+                    'context_length':5,'audio_context_length':5}]
+            state=json.loads(case.execute(shots)[-1])
+            manager=ProjectCacheManager('regression',case.temp.name)
+            old=manager._manifest['clips']['two']['generation']
+            state['clips'][0].update(validated=False,prompt='changed parent prompt')
+            state['clips'][1].update(validated=True,validated_generation=old,pending_upstream='one')
+            config={'project_id':'regression','run_mode':'full_batch'}
+            with patch('comfy.sample.sample', side_effect=RuntimeError('Cancelled')):
+                with self.assertRaisesRegex(RuntimeError,'Cancelled'):
+                    case.execute(timeline_data=json.dumps(state),config=config)
+            current=ProjectCacheManager('regression',case.temp.name)._manifest
+            self.assertEqual(current['clips']['two']['generation'],old)
+            self.assertTrue(list(Path(manager.project_dir).glob('*'+old+'*.pt')))
+            case.sampling_calls.clear()
+            result=json.loads(case.execute(timeline_data=json.dumps(state),config=config)[-1])
+            self.assertEqual(len(case.sampling_calls),2,'Parent and its pending dependent are both generated')
+            two=result['clips'][1]
+            self.assertFalse(two['validated']);self.assertNotIn('pending_upstream',two)
+            self.assertNotEqual(ProjectCacheManager('regression',case.temp.name)._manifest['clips']['two']['generation'],old)
 
     def test_replacing_parent_preserves_explicitly_approved_successor(self):
         with master() as case:

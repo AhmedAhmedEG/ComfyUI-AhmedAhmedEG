@@ -431,8 +431,25 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
     {...chain.clips[0],id:'after-independent',validated:true,continuity:true,continuity_mode:'Latent Carry (Pinned)'}];
   timeline.value=JSON.stringify(chain);node.__mmxDirectorRefresh();
   editorRoot.querySelector('.mmx-clip-selection input').click();
-  assert.deepStrictEqual(JSON.parse(timeline.value).clips.map(c=>c.validated),[false,false,true,true],
-    'Unapproval cascades only through the continuity dependency chain');
+  let unticked=JSON.parse(timeline.value);
+  assert.deepStrictEqual(unticked.clips.map(c=>c.validated),[false,true,true,true],
+    'Unticking a clip keeps its dependents approved until its new take is saved');
+  assert.deepStrictEqual(unticked.clips.map(c=>c.pending_upstream ?? null),[null,'clip_1',null,null],
+    'Only the continuity dependency chain waits on the unticked clip');
+  assert(editorRoot.querySelectorAll('.mmx-clip-selection')[1].classList.contains('mmx-pending-upstream'),'Waiting approval is marked');
+  // Cancelled before the new take was saved: re-ticking restores everything.
+  editorRoot.querySelector('.mmx-clip-selection input').click();
+  assert.deepStrictEqual(JSON.parse(timeline.value).clips.map(c=>[c.validated,c.pending_upstream ?? null]),
+    [[true,null],[true,null],[true,null],[true,null]],'Re-ticking the parent clears the waiting marks');
+  editorRoot.querySelector('.mmx-clip-selection input').click();
+  // A failed save keeps the dependent waiting; a saved take unticks it.
+  node.__mmxShotHandler({detail:{node:String(node.id),project_id:chain.project_id,clip_id:'clip_1',phase:'completed',saved:false}});
+  assert.equal(JSON.parse(timeline.value).clips[1].pending_upstream,'clip_1','A failed save does not settle waiting approvals');
+  node.__mmxShotHandler({detail:{node:String(node.id),project_id:chain.project_id,clip_id:'clip_1',phase:'completed',saved:true,stale_clip_ids:['dependent']}});
+  unticked=JSON.parse(timeline.value);
+  assert.deepStrictEqual(unticked.clips.map(c=>c.validated),[false,false,true,true],
+    'Once the new take is saved its dependents are unticked for regeneration');
+  assert.equal(unticked.clips[1].pending_upstream,undefined);
   timeline.value=approvalBackup;node.__mmxDirectorRefresh();
   const executionState=JSON.parse(timeline.value),executionClip=executionState.clips.at(-1);
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'preparing',index:2,total:2}});
@@ -754,7 +771,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   cacheStatusOverride={clips:{first:{can_approve:true,generation:'new',seed:'7',authored_seed:'1',next_seed:'8'},second:{can_approve:true,generation:'second'},third:{can_approve:true,generation:'third'}}};
   contractNode.__mmxDirectorRefresh();await new Promise(r=>setTimeout(r,200));
   const recovered=JSON.parse(contractTimeline.value);
-  assert.deepEqual(recovered.clips.map(c=>c.validated),[true,true,true],'Cache status cannot silently remove explicit approval');
+  assert.deepEqual(recovered.clips.map(c=>c.validated),[false,true,true],'An approval of a take that was replaced is cleared instead of failing the next run');
+  assert.match(contractRoot.querySelector('.mmx-progress-label')?.textContent || '', /newer take/,'The cleared approval is announced');
+  // Ticking it again pins the take the server holds now, even from a stale status.
+  const firstBox=contractRoot.querySelector('.mmx-clip-selection input');firstBox.click();await new Promise(r=>setTimeout(r,200));
+  const reticked=JSON.parse(contractTimeline.value).clips[0];
+  assert.equal(reticked.validated,true);assert.equal(reticked.validated_generation,'new','A fresh tick approves the current saved take');
   assert.equal(recovered.clips[0].seed,'99','Recovery preserves a locally edited seed');
   assert.equal(recovered.clips[0].last_seed,'7','Completion while away restores the actual generated seed');
   w.dispatchEvent(new w.Event('pagehide'));

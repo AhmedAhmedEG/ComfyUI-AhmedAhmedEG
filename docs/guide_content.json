@@ -1,5 +1,5 @@
 {
-  "version": "1.7.22",
+  "version": "1.7.39",
   "reviewed": "2026-10-23",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -632,26 +632,6 @@
             "min": 0.1,
             "max": 100.0,
             "step": 0.1,
-            "connection": false
-          }
-        },
-        "seed": {
-          "what": "The random seed for this stage.",
-          "when": "Keep fixed for controlled comparisons; use a different seed for another attempt.",
-          "effect": "Selects the starting random noise.",
-          "caution": "The same seed alone is not enough for identical output: model, schedule, references and continuity must match too.",
-          "advanced": false,
-          "contract": {
-            "name": "seed",
-            "type": "INT",
-            "required": true,
-            "default": 0,
-            "choices": [],
-            "dynamic": false,
-            "description": "Base random seed.",
-            "min": 0,
-            "max": 18446744073709551615,
-            "step": null,
             "connection": false
           }
         },
@@ -1424,9 +1404,33 @@
             "step": null,
             "connection": true
           }
+        },
+        "preview_settings": {
+          "what": "Saved viewer options for the preview panel",
+          "when": "Leave it alone; the panel writes it when you change stream, scope, quality, autoplay or loop.",
+          "effect": "Restores the same viewer choices next time, and picks which take (latest clip or full timeline, quality, stream) the images and audio outputs carry.",
+          "caution": "Editing the text by hand can reset the panel to its defaults if the JSON is invalid.",
+          "advanced": true,
+          "contract": {
+            "name": "preview_settings",
+            "type": "STRING",
+            "required": false,
+            "default": "{}",
+            "choices": [],
+            "dynamic": false,
+            "description": "Viewer options saved by the preview panel (stream, scope, quality, autoplay, loop). Scope, quality and stream also choose what the images/audio outputs carry. Managed by the panel; no need to edit.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
         }
       },
-      "output_descriptions": []
+      "output_descriptions": [
+        "Frames of the clip or timeline currently chosen in the panel, loaded only when this output is connected (for example into RIFE frame interpolation).",
+        "Matching audio for the same selection, joined across clips with the panel's fade and gain settings; only loaded when connected.",
+        "Frame rate of those frames (24 for H3 output), to pass to interpolation or Video Combine."
+      ]
     },
     "MiniMaxH3DirectorSelfLift": {
       "purpose": "Do early generation steps on a smaller canvas, lift the latent, then finish at target size.",

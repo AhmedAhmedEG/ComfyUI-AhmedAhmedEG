@@ -165,16 +165,20 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   const autoplayLabel = document.createElement("label");
   const autoplay = document.createElement("input"); autoplay.type = "checkbox"; autoplay.checked = !!getOptions().autoplay;
   autoplayLabel.append(autoplay, document.createTextNode(" Autoplay"));
+  const loopLabel = document.createElement("label");
+  const loop = document.createElement("input"); loop.type = "checkbox"; loop.checked = !!getOptions().loop;
+  loopLabel.append(loop, document.createTextNode(" Loop"));
   const save = document.createElement("a"); save.textContent = "Save preview"; save.className = "mmx-action-btn";
   save.hidden = true; save.download = "minimax-preview.mp4";
   const refresh = document.createElement("button"); refresh.className = "mmx-action-btn"; refresh.textContent = "Refresh";
   const stream=document.createElement('select');stream.setAttribute('aria-label','Preview Stage');
   for(const [v,t] of [['final','Final Output'],['first_pass','First Pass · Review'],['pre_refine','Before Refinement'],...Array.from({length:20},(_,i)=>['pass:'+(i+1),'Refine Pass '+(i+1)])]){const o=document.createElement('option');o.value=v;o.textContent=t;stream.append(o);}
   stream.value=getOptions().stream || 'final';
-  header.append(scope, quality, stream, label, autoplayLabel, refresh, save);
+  header.append(scope, quality, stream, label, autoplayLabel, loopLabel, refresh, save);
   const empty = document.createElement("div"); empty.className = "mmx-preview-empty";
   empty.textContent = "Your completed clip will appear here.";
   const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "auto"; video.hidden = true;
+  video.loop = loop.checked;
   video.setAttribute("aria-label", "Generated video preview");
   panel.append(header, empty, video); root.append(panel);
   let request = 0, controller, disposed = false, source = "", checking = false;
@@ -211,7 +215,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     finally{downloadBusy=false;if(!disposed){save.textContent='Save preview';save.removeAttribute('aria-busy');}}
   };
   let failedRevision='', retryCount=0, retryAt=0, recovering=false, eviction=Promise.resolve();
-  const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, open: !panel.hidden});
+  const persist = () => saveOptions({scope: scope.value, quality:quality.value,stream:stream.value, autoplay: autoplay.checked, loop: loop.checked, open: !panel.hidden});
   let positionWritten=0,mediaReady=false;
   const savePosition = (force=false) => {
     if(!hasMasterInput())return;
@@ -229,6 +233,7 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
     quality.value=options.quality || 'original';if(!quality.value)quality.value='original';
     stream.value=options.stream || 'final';if(!stream.value)stream.value='final';
     autoplay.checked=!!options.autoplay;
+    loop.checked=!!options.loop;video.loop=loop.checked;
     return options;
   };
   const stop = () => {
@@ -392,6 +397,9 @@ export function installSmartPreview({root, toolbar, timelinePanel, inspector, no
   stream.onchange=()=>{stop();persist();refreshPreview();};
   quality.onchange=()=>{stop();persist();refreshPreview();};
   autoplay.onchange = () => { persist(); if (!autoplay.checked) video.pause(); };
+  loop.onchange = () => { video.loop = loop.checked; persist(); };
+  // MediaSource playback can fire 'ended' even with loop set; restart explicitly.
+  video.onended = () => { if (loop.checked && !panel.hidden && !disposed) { video.currentTime = 0; video.play().catch(() => {}); } };
   refresh.onclick = () => {retryCount=0;retryAt=0;refreshPreview();};
   // Completion websocket messages can be missed. Poll current saved results;
   // stable revision URLs avoid rebuffering unchanged results.

@@ -36,7 +36,7 @@ class TestDirectorSettings(CacheIsolatedTestCase):
         self.assertEqual(config["scheduler"], "simple")
         self.assertEqual(config["shift_video"], 12.0)
         self.assertEqual(config["shift_audio"], 3.0)
-        self.assertEqual(config["seed"], 0)
+        self.assertNotIn("seed", config)  # clips own their seeds
         self.assertEqual(config["execution_mode"], "All-in-One Generation")
         self.assertEqual(config["prompt_mode"], "structured")
         self.assertEqual(config["run_mode"], "clip_by_clip")

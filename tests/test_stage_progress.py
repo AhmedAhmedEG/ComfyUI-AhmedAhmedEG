@@ -2,6 +2,37 @@ import unittest
 from core.stage_progress import StageProgress, ProgressEncoder, _current, bind, clip_stage
 
 
+class NativeProgressTests(unittest.TestCase):
+    def test_counted_stages_drive_native_bar_but_sampling_does_not(self):
+        from unittest.mock import patch
+        import core.stage_progress as module
+        calls=[];reporter=StageProgress(lambda data:None,lambda:0.0);reporter.node='1'
+        with patch.object(module,'_native_progress',lambda step,steps:calls.append((step,steps))):
+            reporter.report('Encoding reference 1/2',step=0,steps=2)
+            reporter.report('Sampling H3',step=1,steps=8)
+            reporter.report('Video VAE · loading as needed and decoding frames')
+        self.assertEqual(calls,[(0,2)])
+
+    def test_lora_stage_names_each_file(self):
+        from unittest.mock import patch, MagicMock
+        import sys, types
+        from core import loras
+        sent=[];reporter=StageProgress(sent.append,lambda:0.0);reporter.node='1';token=_current.set(reporter)
+        model=MagicMock();patched=MagicMock();patched.patches={}
+        model.clone.return_value=patched
+        def load(model,clip,state,strength,clip_strength):
+            result=MagicMock();result.patches={'w':[1]*(len(model.patches.get('w',[]))+1)};return result,None
+        fake_sd=types.SimpleNamespace(load_lora_for_models=load)
+        fake_utils=types.SimpleNamespace(load_torch_file=lambda path,safe_load=True:{'w':1})
+        try:
+            with patch.dict(sys.modules,{'comfy':types.SimpleNamespace(sd=fake_sd,utils=fake_utils),'comfy.sd':fake_sd,'comfy.utils':fake_utils}):
+                loras.apply_loras(model,[{'path':'/x/turbo_8step.safetensors','sha256':'a','name':'turbo_8step.safetensors','strength':1.0}],{})
+        finally:_current.reset(token)
+        labels=[row['label'] for row in sent]
+        self.assertIn('LoRA · reading turbo_8step.safetensors',labels)
+        self.assertIn('LoRA · 1 ready',labels)
+
+
 class StageProgressTests(unittest.TestCase):
     def test_duplicates_throttle_and_final_update(self):
         sent, now = [], [0.]

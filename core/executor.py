@@ -96,6 +96,7 @@ class MasterDirectorExecutor:
             request=cache.preparation_key(asset,width,height,duration,ref_image_size,(vae,audio_vae))
             token=cache.source_owner(kind,data)
             if cache.preparation_ready(request,token):continue
+            stage(f'Encoding reference {index+1}/{len(assets)}',step=index,steps=len(assets))
             with cache.asset(token),cache.preparing(request):
                 # Use native preparation, sizes, trimming, and VAE transforms.
                 # The stub avoids running Qwen or conditioning any real clip.

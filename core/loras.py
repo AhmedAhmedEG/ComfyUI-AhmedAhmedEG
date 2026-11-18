@@ -1,6 +1,7 @@
 """Shot-local model LoRAs using ComfyUI's loader; patches never leak to siblings."""
 from __future__ import annotations
 import math
+import os
 from .provenance import file_provenance
 
 MAX_CACHED_LORAS = 8
@@ -67,10 +68,12 @@ def apply_loras(model, files, state_cache):
     import comfy.sd
     import comfy.utils
     patched = model.clone()
-    for row in files:
+    from .stage_progress import cache_event, stage
+    for number, row in enumerate(files, 1):
         key = (row["path"], row["sha256"])
-        from .stage_progress import cache_event
         cache_event('LoRA weights','hit' if key in state_cache else 'miss')
+        name = os.path.basename(str(row.get("name") or row["path"]))
+        stage(f'LoRA · {"reading" if key not in state_cache else "applying"} {name}', step=number-1, steps=len(files))
         for old in list(state_cache):
             if old[0] == row['path'] and old != key: state_cache.pop(old)
         if key not in state_cache:
@@ -84,4 +87,13 @@ def apply_loras(model, files, state_cache):
         after = _patch_count(patched)
         if before is not None and after is not None and after <= before:
             raise ValueError(f"LoRA {row['name']!r} has no compatible diffusion-model patches. Select a LoRA compatible with the clip's H3 checkpoint.")
+    stage(f'LoRA · {len(files)} ready', step=len(files), steps=len(files))
     return patched
+
+
+def lora_patch_count(model):
+    """Patches waiting to be merged into weights when ComfyUI loads the model."""
+    try:
+        return _patch_count(model) or 0
+    except Exception:
+        return 0

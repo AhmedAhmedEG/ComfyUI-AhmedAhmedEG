@@ -161,8 +161,10 @@ def dependent_successors(clips, changed_index, legacy_mode=MODES[1], legacy_fram
     """The contiguous dependency chain; an independent/source clip breaks it."""
     result = []
     for shot in clips[changed_index + 1:]:
-        if preserve_approved and shot.get('validated'):
+        if preserve_approved and shot.get('validated') and not shot.get('pending_upstream'):
             break  # An approved saved take is a stable boundary during execution.
+        # A take kept only until its upstream clip is regenerated
+        # ("pending_upstream") is not a boundary: it depends on the old take.
         if str(shot.get('type', '')).upper() == 'VIDEO':
             break
         policy = resolve_continuity(shot, legacy_mode, legacy_frames)

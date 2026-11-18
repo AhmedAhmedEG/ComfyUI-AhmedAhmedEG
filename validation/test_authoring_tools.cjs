@@ -72,6 +72,28 @@ const widget=(n,name)=>n.widgets.find(w=>w.name===name);
  assert.equal(images.__mmxTools.querySelectorAll('details').length,4);assert([...images.__mmxTools.querySelectorAll('details')].every(d=>!d.open));
  const resize=[...images.__mmxTools.querySelectorAll('details')].find(d=>d.querySelector('summary').textContent==='Resize');assert.equal(resize.querySelectorAll('input').length,0,'Scaling Off hides irrelevant dimensions');
  images.inputs[1].link=null;images.onConnectionsChange();assert.equal(field(images,'Edit Reference').value,'image_1');
+ {
+  const cropLayer=images.__mmxTools.querySelector('.mmx-crop-layer');assert(cropLayer.classList.contains('mmx-crop-active'),'Image crop box is directly draggable');
+  cropLayer.getBoundingClientRect=()=>({left:0,top:0,width:100,height:100});
+  const cp=(x,y,target=cropLayer)=>({button:0,clientX:x,clientY:y,target,pointerId:1,type:'pointerup',preventDefault(){}});
+  const cropOf=()=>JSON.parse(widget(images,'asset_edits').value).assets.image_1.crop;
+  assert.equal(cropOf(),undefined,'No crop until the user draws one');
+  cropLayer.onpointerdown(cp(10,20));cropLayer.onpointermove(cp(50,60));cropLayer.onpointerup(cp(60,70));
+  assert.deepEqual(cropOf(),{x:.1,y:.2,width:.5,height:.5},'Dragging on the picture draws a crop box');
+  const frame=cropLayer.querySelector('.mmx-crop-box');assert.equal(frame.style.left,'10%');
+  cropLayer.onpointerdown(cp(30,30,frame));cropLayer.onpointerup(cp(70,50));
+  assert.deepEqual(cropOf(),{x:.5,y:.4,width:.5,height:.5},'Dragging inside the box moves it and stays inside the picture');
+  cropLayer.onpointerdown(cp(100,90,frame.querySelector('[data-handle=se]')));cropLayer.onpointerup(cp(80,80));
+  assert.deepEqual(cropOf(),{x:.5,y:.4,width:.3,height:.4},'Corner handles resize from the opposite corner');
+  cropLayer.onpointerdown(cp(20,20));cropLayer.onpointerup(cp(20,20));
+  assert.deepEqual(cropOf(),{x:.5,y:.4,width:.3,height:.4},'A plain click never discards the crop');
+  field(images,'Aspect').value='1:1';field(images,'Aspect').onchange();
+  assert.deepEqual(cropOf(),{x:.45,y:.4,width:.4,height:.4},'Aspect presets reshape around the current centre');
+  cropLayer.onpointerdown(cp(45,40,frame.querySelector('[data-handle=nw]')));cropLayer.onpointerup(cp(65,50));
+  const locked=cropOf();assert(Math.abs(locked.width-locked.height)<1e-3,'Resizing keeps the locked aspect');
+  await click(images,'Reset Crop');assert.equal(cropOf(),undefined,'Reset returns to the full frame');
+  field(images,'Aspect').value='free';field(images,'Aspect').onchange();
+ }
  field(images,'Character Numbers').value='1, 2';field(images,'Character Numbers').onchange();
  field(images,'Prompt Writer').value='Ignore';field(images,'Prompt Writer').onchange();
  assert.equal(JSON.parse(widget(images,'asset_edits').value).assets.image_1.characters.join(','),'1,2');

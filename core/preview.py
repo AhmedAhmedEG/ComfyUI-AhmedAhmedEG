@@ -96,7 +96,13 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     # Trim a predecessor's handoff only when its immediate successor is present.
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
-            left["trim_tail"] = right.get("previous_trim", 0)
+            trim = int(right.get("previous_trim", 0) or 0)
+            # A kept successor's handoff can be stale after its predecessor was
+            # regenerated shorter; never let it erase the whole predecessor
+            # (that made every preview request fail with "no visible frames").
+            if left.get("frame_count") is not None:
+                trim = min(trim, max(0, int(left["frame_count"]) - int(left.get("trim_prefix", 0)) - 1))
+            left["trim_tail"] = trim
     plan = {"version": 6, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
         "source_state": {k: state[k] for k in ("width", "height", "resolution", "references") if k in state},
         "gain_match": bool(state.get("audio_gain_match", True)), "fade_ms": float(state.get("audio_fade_ms", 15))}

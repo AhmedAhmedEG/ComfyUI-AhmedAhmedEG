@@ -2531,6 +2531,7 @@ function mountDirectorUI(node) {
     available_refs: [],
   };
   let generatingClipId=null,generatingPhase='sampling';
+  const freshApprovals=new Set(); // clips ticked since the last cache-status refresh
   let progressSequence=0,progressTimer=null,progressWatching=false,progressRequest=false;
   let cachedClipResults={},cacheStatusProject=null,cacheStatusRequest=0;
   let serverStatus=null, savedProjectSignature=null;
@@ -3038,7 +3039,7 @@ function mountDirectorUI(node) {
   };
 
 
-  const progressLabel = document.createElement("span"); progressLabel.style.fontSize = "11px"; toolbarLeft.appendChild(progressLabel);
+  const progressLabel = document.createElement("span"); progressLabel.className = "mmx-progress-label"; progressLabel.style.fontSize = "11px"; toolbarLeft.appendChild(progressLabel);
   const field = (title, control, help = "") => {
     const label = document.createElement("label"); label.className = "mmx-field";
     const caption = document.createElement("span"); caption.textContent = title;
@@ -3262,7 +3263,15 @@ function mountDirectorUI(node) {
       if (i>index && (item.locked || item.source || item.continuity===false ||
           (item.continuity_mode || 'Independent (No Continuity)')==='Independent (No Continuity)' ||
           Number(item.tail_seconds ?? Number(item.tail_frames ?? 12)/24)<=0)) break;
+      if (i>index) {
+        // Dependent clips keep their approval and saved take until the new
+        // take of this clip is actually saved; the Master then removes them
+        // and the completed event unticks them. Cancelling keeps them.
+        if (item.validated && !item.pending_upstream) item.pending_upstream=clip.id;
+        continue;
+      }
       item.validated=false; item.refine_approved=false; item.refine_pending=false;
+      delete item.pending_upstream;
       item.invalidated_generation=cachedClipResults[item.id]?.generation || null;
     }
   };
@@ -3790,6 +3799,9 @@ function mountDirectorUI(node) {
       let changed=false;
       for(const clip of timelineState.clips){
         const saved=cachedClipResults[clip.id];
+        // Missed the completed event: the upstream clip has a newer saved take.
+        const upstreamSaved=clip.pending_upstream ? cachedClipResults[clip.pending_upstream] : null;
+        if(clip.validated && clip.pending_upstream && upstreamSaved?.generation && upstreamSaved.generation!==timelineState.clips.find(c=>c.id===clip.pending_upstream)?.invalidated_generation){clip.validated=false;delete clip.validated_generation;delete clip.pending_upstream;changed=true;}
         if(saved?.cache_report?.updated_at>(clip.cache_report?.updated_at || 0)){clip.cache_report=saved.cache_report;changed=true;}
         if(saved?.generation && clip.saved_generation!==saved.generation){
           clip.saved_generation=saved.generation;
@@ -3797,6 +3809,20 @@ function mountDirectorUI(node) {
           changed=true;
         }
         if(clip.validated && !clip.validated_generation && saved?.generation){clip.validated_generation=saved.generation;changed=true;}
+        if(clip.validated && clip.validated_generation && saved?.generation && clip.validated_generation!==saved.generation && clip.id!==generatingClipId){
+          if(freshApprovals.has(clip.id)){
+            // Just ticked: the user approved the take the server holds now
+            // (the one Smart Preview shows), not an older cached status.
+            clip.validated_generation=saved.generation;
+          }else{
+            // The approved take was replaced and its files removed. Untick it
+            // for review instead of letting the next run fail.
+            clip.validated=false;delete clip.validated_generation;delete clip.pending_upstream;
+            progressLabel.textContent=`${clip.name || 'A clip'} has a newer take · review it and tick again`;
+          }
+          changed=true;
+        }
+        freshApprovals.delete(clip.id);
         if(typeof saved?.refine_pending==='boolean' && clip.id!==generatingClipId && saved.refine_pending!==!!clip.refine_pending){clip.refine_pending=saved.refine_pending;clip.refine_approved=false;changed=true;}
         if(clip.refine_approved && clip.refine_approved_generation && clip.refine_approved_generation!==saved?.first_pass_generation){clip.refine_approved=false;changed=true;}
       }
@@ -3997,9 +4023,17 @@ function mountDirectorUI(node) {
       const selectInput=document.createElement('input');selectInput.type='checkbox';selectInput.checked=reviewPending ? !!clip.refine_approved : clip.validated===true;
       selectInput.disabled=reviewPending ? !cachedClipResults[clip.id]?.has_first_pass : !clip.validated && !cachedClipResults[clip.id]?.can_approve;
       if(selectInput.disabled)selectLabel.title='Generate this clip first. Approval requires a saved result or latent on the server.';
+      // Its saved take is about to be replaced; approve after it finishes (or cancel the run).
+      if(clip.id===generatingClipId && !clip.validated && !reviewPending){selectInput.disabled=true;selectLabel.title='This clip is generating. Its new take replaces the saved one when it finishes; cancel the run to keep and approve the current take.';}
       if(reviewPending)selectLabel.title='Review First Pass in Smart Preview, approve here, then Run to refine its saved latent. This does not approve a final take.';
+      const upstream=!reviewPending && clip.validated && clip.pending_upstream ? timelineState.clips.find(c=>c.id===clip.pending_upstream) : null;
+      if(upstream){
+        const upstreamName=upstream.name || `Clip ${timelineState.clips.indexOf(upstream)+1}`;
+        selectLabel.classList.add('mmx-pending-upstream');selectLabel.style.outline='1px dashed #f59e0b';selectLabel.style.outlineOffset='1px';
+        selectLabel.title=`Kept until ${upstreamName}'s new take is saved, then regenerated because it continues from it. Cancelling the run keeps this take. To keep it even after ${upstreamName} changes, untick and tick it again.`;
+      }
       selectInput.setAttribute('aria-label',`Approve ${reviewPending ? 'First Pass Of ' : ''}${clip.name || `Clip ${idx+1}`}`);
-      selectInput.onchange=()=>{if(reviewPending){clip.refine_approved=selectInput.checked;clip.refine_approved_generation=cachedClipResults[clip.id]?.first_pass_generation;}else if(selectInput.checked){clip.validated=true;clip.validated_generation=cachedClipResults[clip.id]?.generation;delete clip.invalidated_generation;}else unapproveChain(clip);syncState();renderTimeline();};
+      selectInput.onchange=()=>{if(reviewPending){clip.refine_approved=selectInput.checked;clip.refine_approved_generation=cachedClipResults[clip.id]?.first_pass_generation;}else if(selectInput.checked){clip.validated=true;clip.validated_generation=cachedClipResults[clip.id]?.generation;delete clip.invalidated_generation;delete clip.pending_upstream;for(const other of timelineState.clips)if(other.pending_upstream===clip.id)delete other.pending_upstream;freshApprovals.add(clip.id);}else unapproveChain(clip);syncState();renderTimeline();if(selectInput.checked && !reviewPending)void refreshClipResults();};
       for(const event of ['pointerdown','mousedown','click'])selectLabel.addEventListener(event,e=>e.stopPropagation());
       selectLabel.append(selectInput);shotBlock.append(selectLabel);
 
@@ -5304,10 +5338,24 @@ function mountDirectorUI(node) {
     if(detail.sequence){if(Number(detail.sequence)<progressSequence || (Number(detail.sequence)===progressSequence && !event.snapshot))return;progressSequence=Number(detail.sequence);}
     const runningPhase=['preparing','sampling','refining','decoding','face_refining'].includes(detail.phase);
     if(runningPhase)watchClipProgress();
-    if(detail.invalidated_clip_ids?.length){
-      const invalidated=new Set(detail.invalidated_clip_ids);
-      for(const clip of timelineState.clips)if(invalidated.has(String(clip.id)) && !clip.validated){clip.refine_approved=false;clip.refine_pending=false;}
+    if(detail.stale_clip_ids?.length){
+      // The upstream clip's new take is saved. These clips continue from it,
+      // so they regenerate next; their own saved takes stay until replaced.
+      const invalidated=new Set(detail.stale_clip_ids);
+      for(const clip of timelineState.clips){
+        if(!invalidated.has(String(clip.id)))continue;
+        // Only takes kept "until the upstream clip is saved" lose approval here;
+        // a firmly approved take is a boundary and is never listed.
+        if(clip.validated && clip.pending_upstream){clip.validated=false;delete clip.validated_generation;delete clip.pending_upstream;}
+        if(!clip.validated){clip.refine_approved=false;clip.refine_pending=false;}
+      }
       syncState(true);void refreshClipResults();
+    }
+    // The upstream take was replaced; anything still waiting on it was kept.
+    if(detail.phase==='completed' && !detail.reused && detail.saved===true){
+      let kept=false;
+      for(const clip of timelineState.clips)if(clip.pending_upstream===detail.clip_id){delete clip.pending_upstream;kept=true;}
+      if(kept){syncState(true);renderTimeline();}
     }
     if(detail.phase==='first_pass_ready') {const clip=timelineState.clips.find(c=>c.id===detail.clip_id);if(clip)clip.refine_pending=true;generatingClipId=null;progressLabel.textContent='First Pass Ready · Review And Approve';syncState(true);void refreshClipResults();renderTimeline();renderInspector();return;}
     if(detail.phase==='timeline_ready') { timelineState={...timelineState,...detail.timeline};syncState(true);renderTimeline();renderInspector();return; }
