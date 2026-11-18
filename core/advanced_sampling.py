@@ -12,13 +12,22 @@ def _install_scoped_remask(model, latent, sigmas):
     return patched
 
 
+def _progress(model):
+    """Same top-bar stages as sample_latent: load/LoRA label, then step counts."""
+    from .stage_progress import stage
+    from .loras import lora_patch_count
+    stage('H3 model · loading as needed and applying LoRA weights' if lora_patch_count(model)
+          else 'H3 model · loading as needed and initializing sampler')
+    return lambda step, total, _x0: stage('Sampling H3', step=int(step)+1, steps=int(total))
+
+
 def sample_stage(model, latent, steps, cfg, sampler, scheduler, positive, negative,
                  seed, denoise=1., sigmas=None, tile_count=1, tile_overlap=128):
     from .vendor.aimixer.director.core_sampling import sample_single_stage
     return sample_single_stage(model=model, positive=positive, negative=negative,
         latent=latent, seed=seed, cfg=cfg, steps=steps, sampler_name=sampler,
         scheduler=scheduler, denoise=denoise, sigmas=sigmas, apply_shift=False,
-        enable_tiling=tile_count > 1, tile_count=tile_count, tile_overlap=tile_overlap,
+        enable_tiling=tile_count > 1, tile_count=tile_count, tile_overlap=tile_overlap, on_step_preview=_progress(model),
         after_shift=_install_scoped_remask if latent.get("_director_continue_prefix_steps") else None)
 
 
@@ -38,7 +47,7 @@ def sample_selflift(model, positive, negative, latent, seed, steps, cfg, sampler
         scheduler=scheduler, pack=pack, vae=video_vae, canvas_width=width,
         canvas_height=height, shift_video=shift_video, shift_audio=shift_audio,
         sigmas=sigmas, shift_cache=current_resources() or ShiftedModelCache(), prev_low_carry=carry,
-        pin_frames=pin_frames, after_shift=_install_scoped_remask if latent.get("_director_continue_prefix_steps") else None)
+        pin_frames=pin_frames, on_step_preview=_progress(model), after_shift=_install_scoped_remask if latent.get("_director_continue_prefix_steps") else None)
 
 
 def resize_conditioning(positive, old_hw, new_hw):

@@ -33,6 +33,33 @@ class NativeProgressTests(unittest.TestCase):
         self.assertIn('LoRA · 1 ready',labels)
 
 
+class AdvancedSamplingProgressTests(unittest.TestCase):
+    def test_latent_carry_and_selflift_samplers_report_steps(self):
+        # Continuity (latent carry) and SelfLift use their own samplers; the
+        # top bar must still switch from "Loading" to "Sampling" with steps.
+        from unittest.mock import patch
+        from core import advanced_sampling
+        for name, target, call in (
+            ('carry', 'core.vendor.aimixer.director.core_sampling.sample_single_stage',
+             lambda: advanced_sampling.sample_stage(object(), {}, 4, 1., 'euler', 'simple', [], [], 1)),
+            ('selflift', 'core.vendor.aimixer.director.selflift.sample.sample_selflift_stage',
+             lambda: advanced_sampling.sample_selflift(object(), [], [], {}, 1, 4, 1., 'euler', 'simple',
+                                                       {'enabled': True}, None, 64, 64))):
+            with self.subTest(name):
+                sent=[];reporter=StageProgress(sent.append,lambda:0.0);reporter.node='1';token=_current.set(reporter)
+                def fake(**kwargs):
+                    for step in range(4): kwargs['on_step_preview'](step, 4, None)
+                    return {}
+                try:
+                    with patch(target, side_effect=fake), \
+                         patch('core.vendor.aimixer.director.selflift.pack.normalize_selflift_pack', return_value={}):
+                        call()
+                finally:_current.reset(token)
+                labels=[row['label'] for row in sent]
+                self.assertEqual(labels[0],'H3 model · loading as needed and initializing sampler')
+                self.assertEqual([(r['step'],r['steps']) for r in sent if r['label']=='Sampling H3'][-1],(4,4))
+
+
 class StageProgressTests(unittest.TestCase):
     def test_duplicates_throttle_and_final_update(self):
         sent, now = [], [0.]
