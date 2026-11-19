@@ -242,7 +242,8 @@
         "manual",
         1,
         "16:9",
-        "latest"
+        "latest",
+        1.0
       ],
       "widgets_values_named": {
         "width": 960,
@@ -257,7 +258,8 @@
         "canvas_policy": "manual",
         "canvas_megapixels": 1,
         "canvas_aspect": "16:9",
-        "decoded_output": "latest"
+        "decoded_output": "latest",
+        "chain_drift_correction": 1.0
       }
     },
     {
@@ -808,7 +810,15 @@
         "None",
         24.0,
         24.0,
-        "{}"
+        "{}",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        24.0
       ],
       "widgets_values_named": {
         "image_1_name": "",
@@ -825,7 +835,15 @@
         "refmod_2": "None",
         "video_1_fps": 24.0,
         "video_2_fps": 24.0,
-        "asset_edits": "{}"
+        "asset_edits": "{}",
+        "image_5_name": "",
+        "image_6_name": "",
+        "image_7_name": "",
+        "image_8_name": "",
+        "image_9_name": "",
+        "video_3_name": "",
+        "audio_3_name": "",
+        "video_3_fps": 24.0
       }
     },
     {

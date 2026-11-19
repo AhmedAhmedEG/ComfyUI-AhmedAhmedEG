@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, latent_channel_stats, anchor_chain_drift
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, latent_channel_stats, anchor_chain_drift
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -239,6 +239,8 @@ class MiniMaxH3MasterDirector:
         scheduler = str(kwargs.get("scheduler", cfg_dict.get("scheduler", "simple")))
         shift_video = float(kwargs.get("shift_video", cfg_dict.get("shift_video", 12.0)))
         shift_audio = float(kwargs.get("shift_audio", cfg_dict.get("shift_audio", 3.0)))
+        # Absent from configs built before the setting existed: keep them unchanged.
+        chain_drift = max(0.0, min(1.0, float(cfg_dict.get("chain_drift_correction", 0.0) or 0.0)))
         seed = int(kwargs.get("seed", cfg_dict.get("seed", 0)))
         execution_mode = str(kwargs.get("execution_mode", cfg_dict.get("execution_mode", "All-in-One Generation")))
         prompt_mode = str(kwargs.get("prompt_mode", cfg_dict.get("prompt_mode", "structured")))
@@ -450,6 +452,19 @@ class MiniMaxH3MasterDirector:
         except ImportError:
             from core.progress import shot_event
         run_report = []
+        # The first clip of each continuity chain anchors the chain's latent
+        # colour statistics (see anchor_chain_drift). Loaded lazily for clips
+        # reused without reading their latent.
+        chain_anchor = {"clip": None, "stats": None}
+        def set_chain_anchor(anchor_clip, latent_dict=None):
+            chain_anchor["clip"] = anchor_clip
+            chain_anchor["stats"] = latent_channel_stats(latent_dict) if latent_dict is not None else None
+        def chain_anchor_stats():
+            if chain_anchor["stats"] is None and chain_anchor["clip"] is not None:
+                saved = cache_mgr.load_clip_latent(chain_anchor["clip"])
+                if saved is not None:
+                    chain_anchor["stats"] = latent_channel_stats(saved)
+            return chain_anchor["stats"]
         def clear_dependent_approvals(ids):
             for item in clips:
                 if str(item['id']) in ids:
@@ -534,6 +549,8 @@ class MiniMaxH3MasterDirector:
                 previous_av = cached_latent
                 low_carry = cached_latent.get("_selflift_low_carry") if cached_latent else None
                 clip_chained_flags[clip_idx] = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("trim_prefix", 0))
+                if not clip_chained_flags[clip_idx] and cached_latent is not None:
+                    set_chain_anchor(clip_id, cached_latent)
                 previous_trim = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("previous_trim", 0))
                 if previous_trim and all_decoded_frames:
                     all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
@@ -580,6 +597,8 @@ class MiniMaxH3MasterDirector:
                     meta=cache_mgr._manifest.get('clips',{}).get(clip_id,{})
                     if expected and expected!=meta.get('generation'):
                         raise ValueError(f"Approved clip {clip_id!r} has been replaced. Refresh and review its current saved result.")
+                    if not int(meta.get('trim_prefix',0) or 0):
+                        set_chain_anchor(clip_id)  # chain start; stats loaded only if a later clip needs them
                     run_report.append({'clip_id':clip_id,'action':'cached','frames':meta.get('frame_count'),
                                        'media_load':'skipped_unneeded_predecessor'})
                     completed_clips.append(clip_item)
@@ -1095,6 +1114,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
+                    **({"chain_drift_correction": chain_drift} if is_chained_from_previous and chain_drift > 0 else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1305,6 +1325,18 @@ class MiniMaxH3MasterDirector:
                     spike_guard=refine.get("spike_guard",False),guard_sensitivity=refine.get("guard_sensitivity",4.3),guard_strength=refine.get("guard_strength",1.),
                     guard_mode=refine.get("guard_mode","burn_direction"), memory_planning=refine.get("memory_planning",True),memory_reserve_pct=refine.get("memory_reserve_pct",35.),
                 )
+
+            # Long continuity chains drift (contrast, saturation, grain compound
+            # hop after hop). Anchor continued clips to their chain's first clip
+            # before decoding, so the next clip also inherits the corrected latent.
+            if is_chained_from_previous and chain_drift > 0:
+                anchor_stats = chain_anchor_stats()
+                if anchor_stats is not None:
+                    sampled_latent = anchor_chain_drift(sampled_latent, anchor_stats, chain_drift)
+                else:
+                    set_chain_anchor(clip_id, sampled_latent)
+            elif not is_chained_from_previous:
+                set_chain_anchor(clip_id, sampled_latent)
 
             # Decode
             previous_av = sampled_latent

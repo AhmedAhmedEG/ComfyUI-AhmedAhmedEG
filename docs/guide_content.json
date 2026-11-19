@@ -1,5 +1,5 @@
 {
-  "version": "1.7.43",
+  "version": "1.7.44",
   "reviewed": "2026-10-23",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -751,6 +751,26 @@
             "step": null,
             "connection": false
           }
+        },
+        "chain_drift_correction": {
+          "what": "Stops long continuity chains from drifting in contrast, saturation and grain.",
+          "when": "Keep at 1 for chains of continued clips; lower it if a chain should deliberately change look (for example a scene getting darker).",
+          "effect": "Each continued clip’s latent colour statistics are pulled toward the first clip of its chain before decoding, so the drift cannot build up.",
+          "caution": "Only affects continued clips. Changing it regenerates unapproved continued clips; 0 turns it off.",
+          "advanced": true,
+          "contract": {
+            "name": "chain_drift_correction",
+            "type": "FLOAT",
+            "required": false,
+            "default": 1.0,
+            "choices": [],
+            "dynamic": false,
+            "description": "Stops contrast, saturation and grain from building up over long continuity chains by pulling each continued clip's latent colour statistics back toward the first clip of its chain. 0 = off, 1 = full.",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "connection": false
+          }
         }
       },
       "output_descriptions": [
@@ -1338,6 +1358,326 @@
             "max": null,
             "step": null,
             "connection": true
+          }
+        },
+        "image_5_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "image_5_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for image_5. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "image_6_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "image_6_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for image_6. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "image_7_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "image_7_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for image_7. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "image_8_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "image_8_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for image_8. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "image_9_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "image_9_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for image_9. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "video_3_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "video_3_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for video_3. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "audio_3_name": {
+          "what": "Legacy display-name storage for the matching reference slot.",
+          "when": "Use Name in the asset editor; older workflows can still contain this value.",
+          "effect": "Changes the human label, not pixels, stable reference IDs or Picture-token numbering.",
+          "caution": "This native widget is normally hidden to avoid duplicate editing surfaces.",
+          "advanced": true,
+          "contract": {
+            "name": "audio_3_name",
+            "type": "STRING",
+            "required": false,
+            "default": "",
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional display name for audio_3. Does not change reference tokens or IDs.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": false
+          }
+        },
+        "image_5": {
+          "what": "An image reference for this slot",
+          "when": "Assign a picture for the intended character, place, style or keyframe.",
+          "effect": "Carries IMAGE data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "image_5",
+            "type": "IMAGE",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Reference image 5.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "image_6": {
+          "what": "An image reference for this slot",
+          "when": "Assign a picture for the intended character, place, style or keyframe.",
+          "effect": "Carries IMAGE data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "image_6",
+            "type": "IMAGE",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Reference image 6.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "image_7": {
+          "what": "An image reference for this slot",
+          "when": "Assign a picture for the intended character, place, style or keyframe.",
+          "effect": "Carries IMAGE data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "image_7",
+            "type": "IMAGE",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Reference image 7.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "image_8": {
+          "what": "An image reference for this slot",
+          "when": "Assign a picture for the intended character, place, style or keyframe.",
+          "effect": "Carries IMAGE data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "image_8",
+            "type": "IMAGE",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Reference image 8.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "image_9": {
+          "what": "An image reference for this slot",
+          "when": "Assign a picture for the intended character, place, style or keyframe.",
+          "effect": "Carries IMAGE data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "image_9",
+            "type": "IMAGE",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Reference image 9.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "video_3": {
+          "what": "A native VIDEO or supported video frame batch",
+          "when": "Use as a reference or source on a compatible clip; an IMAGE frame batch needs explicit FPS/audio.",
+          "effect": "Carries VIDEO,IMAGE data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "video_3",
+            "type": "VIDEO,IMAGE",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Native VIDEO or decoded IMAGE frame batch.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "audio_3": {
+          "what": "A standalone audio reference",
+          "when": "Select it on a compatible reference-guided clip with the required visual conditioning.",
+          "effect": "Carries AUDIO data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "audio_3",
+            "type": "AUDIO",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Reference audio 3.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "video_3_audio": {
+          "what": "Sound paired with the matching frame-batch video",
+          "when": "Attach its loader soundtrack; it does not create a separate standalone audio reference.",
+          "effect": "Carries AUDIO data to this operation.",
+          "caution": "Use a matching output type and compatible media/model family.",
+          "advanced": true,
+          "contract": {
+            "name": "video_3_audio",
+            "type": "AUDIO",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional soundtrack paired with video_3.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        },
+        "video_3_fps": {
+          "what": "The actual FPS of a connected IMAGE video frame batch.",
+          "when": "Match the loader output rate if it supplies frames rather than native VIDEO.",
+          "effect": "The pack resamples frame timing to H3’s 34 fps before trim and model preparation.",
+          "caution": "Native VIDEO supplies its own rate. This does not set output generation FPS.",
+          "advanced": false,
+          "contract": {
+            "name": "video_3_fps",
+            "type": "FLOAT",
+            "required": false,
+            "default": 24.0,
+            "choices": [],
+            "dynamic": false,
+            "description": "Actual rate of video_3's frame batch. Match the loader's output rate.",
+            "min": 1.0,
+            "max": 240.0,
+            "step": null,
+            "connection": false
           }
         }
       },

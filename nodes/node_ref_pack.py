@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from typing import Any, Dict, List, Optional
 import torch
 
 log = logging.getLogger("MiniMaxH3MasterDirector.ref_pack")
 
 MMX_REF_PACK = "MMX_REF_PACK"
+# H3's per-clip maximum (MiniMaxH3ReferenceToVideo): 9 images, 3 videos, 3 audios.
+IMAGE_SLOTS, VIDEO_SLOTS, AUDIO_SLOTS = 9, 3, 3
 CATEGORY = "ComfyUI-AhmedAhmedEG"
 
 
@@ -60,6 +63,23 @@ class MiniMaxH3RefPack:
                 "video_2_fps": ("FLOAT", {"default":24.0,"min":1.0,"max":240.0,"tooltip":"Actual rate of video_2's frame batch. Match the loader's output rate."}),
                 "asset_edits": ("STRING", {"default":"{}", "multiline":True, "tooltip":"Pack-owned trims, crop, roles and file references; edited in the asset panel."}),
                 "refmod_library": ("MMX_REFMOD_LIBRARY", {"tooltip":"RefMod selections configured in the separate library node."}),
+                # Added later: H3 accepts up to 9 images, 3 videos and 3 audios per clip.
+                "image_5_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_5. Does not change reference tokens or IDs."}),
+                "image_6_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_6. Does not change reference tokens or IDs."}),
+                "image_7_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_7. Does not change reference tokens or IDs."}),
+                "image_8_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_8. Does not change reference tokens or IDs."}),
+                "image_9_name": ("STRING", {"default": "", "tooltip": "Optional display name for image_9. Does not change reference tokens or IDs."}),
+                "video_3_name": ("STRING", {"default": "", "tooltip": "Optional display name for video_3. Does not change reference tokens or IDs."}),
+                "audio_3_name": ("STRING", {"default": "", "tooltip": "Optional display name for audio_3. Does not change reference tokens or IDs."}),
+                "image_5": ("IMAGE", {"tooltip": "Reference image 5."}),
+                "image_6": ("IMAGE", {"tooltip": "Reference image 6."}),
+                "image_7": ("IMAGE", {"tooltip": "Reference image 7."}),
+                "image_8": ("IMAGE", {"tooltip": "Reference image 8."}),
+                "image_9": ("IMAGE", {"tooltip": "Reference image 9."}),
+                "video_3": ("VIDEO,IMAGE", {"tooltip": "Native VIDEO or decoded IMAGE frame batch."}),
+                "audio_3": ("AUDIO", {"tooltip": "Reference audio 3."}),
+                "video_3_audio": ("AUDIO", {"tooltip": "Optional soundtrack paired with video_3."}),
+                "video_3_fps": ("FLOAT", {"default":24.0,"min":1.0,"max":240.0,"tooltip":"Actual rate of video_3's frame batch. Match the loader's output rate."}),
             },
         }
 
@@ -98,12 +118,10 @@ class MiniMaxH3RefPack:
         id_prefix = "" if pack_index == 1 else f"p{pack_index}_"
 
         # 2. Add image references
-        img_slots = [
-            (image_1, "image_1", "img_1"),
-            (image_2, "image_2", "img_2"),
-            (image_3, "image_3", "img_3"),
-            (image_4, "image_4", "img_4"),
-        ]
+        given = {"image_1": image_1, "image_2": image_2, "image_3": image_3, "image_4": image_4,
+                 "video_1": video_1, "video_2": video_2, "audio_1": audio_1, "audio_2": audio_2}
+        given.update({k: v for k, v in kwargs.items() if re.fullmatch(r"(image|video|audio)_\d+", k)})
+        img_slots = [(given.get(f"image_{i}"), f"image_{i}", f"img_{i}") for i in range(1, IMAGE_SLOTS + 1)]
         for img, slot_name, alt_id in img_slots:
             if img is not None:
                 assigned_id = f"{id_prefix}{slot_name}"
@@ -120,10 +138,7 @@ class MiniMaxH3RefPack:
                 base_index += 1
 
         # 3. Add video references
-        vid_slots = [
-            (video_1, "video_1", "vid_1"),
-            (video_2, "video_2", "vid_2"),
-        ]
+        vid_slots = [(given.get(f"video_{i}"), f"video_{i}", f"vid_{i}") for i in range(1, VIDEO_SLOTS + 1)]
         for vid, slot_name, alt_id in vid_slots:
             if vid is not None:
                 audio = kwargs.get(f"{slot_name}_audio")
@@ -156,10 +171,7 @@ class MiniMaxH3RefPack:
                 base_index += 1
 
         # 4. Add audio references
-        aud_slots = [
-            (audio_1, "audio_1", "aud_1"),
-            (audio_2, "audio_2", "aud_2"),
-        ]
+        aud_slots = [(given.get(f"audio_{i}"), f"audio_{i}", f"aud_{i}") for i in range(1, AUDIO_SLOTS + 1)]
         for aud, slot_name, alt_id in aud_slots:
             if aud is not None:
                 assigned_id = f"{id_prefix}{slot_name}"

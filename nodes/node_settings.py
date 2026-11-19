@@ -47,6 +47,7 @@ class MiniMaxH3DirectorSettings:
                 "canvas_megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.1, "tooltip": "Used only by Auto canvas."}),
                 "canvas_aspect": (["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3", "auto"], {"default": "16:9", "tooltip": "Used only by Auto canvas; auto follows source aspect."}),
                 "decoded_output": (["full","latest"], {"default":"latest","tooltip":"Latest returns the last clip as raw frames; all generated clips still save for Smart Preview and Project Video. Full assembles every output clip and uses disk-backed storage for large batches."}),
+                "chain_drift_correction": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05, "tooltip": "Stops contrast, saturation and grain from building up over long continuity chains by pulling each continued clip's latent colour statistics back toward the first clip of its chain. 0 = off, 1 = full."}),
             },
         }
 
@@ -80,6 +81,7 @@ class MiniMaxH3DirectorSettings:
         canvas_megapixels: float = 1.0,
         canvas_aspect: str = "16:9",
         decoded_output: str = "latest",
+        chain_drift_correction: float = 1.0,
         **kwargs,
     ) -> Tuple[Dict[str, Any]]:
         if generation_mode is not None:
@@ -91,6 +93,7 @@ class MiniMaxH3DirectorSettings:
         if decoded_output not in ('full','latest'):raise ValueError('Unknown decoded output policy.')
         cfg_dict = {
             "decoded_output":decoded_output,
+            "chain_drift_correction": max(0.0, min(1.0, float(chain_drift_correction))),
             "resolution": {"mode": canvas_policy, "width": int(width), "height": int(height),
                            "megapixels": float(canvas_megapixels), "aspect": canvas_aspect},
             "width": int(width),

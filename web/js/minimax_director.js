@@ -2778,7 +2778,9 @@ function mountDirectorUI(node) {
         };
 
         let assetEditor={};try{assetEditor=JSON.parse(getVal('asset_edits','{}'));}catch{}
-        for (const [slot, type, short] of [["image_1","image","img_1"],["image_2","image","img_2"],["image_3","image","img_3"],["image_4","image","img_4"],["video_1","video","vid_1"],["video_2","video","vid_2"],["audio_1","audio","aud_1"],["audio_2","audio","aud_2"]]) {
+        // H3's per-clip maximum: 9 images, 3 videos, 3 audios (matches the Reference Pack sockets).
+        const packSlots=[...Array.from({length:9},(_,i)=>[`image_${i+1}`,'image',`img_${i+1}`]),...Array.from({length:3},(_,i)=>[`video_${i+1}`,'video',`vid_${i+1}`]),...Array.from({length:3},(_,i)=>[`audio_${i+1}`,'audio',`aud_${i+1}`])];
+        for (const [slot, type, short] of packSlots) {
           const input = rpNode.inputs?.find(row => row.name === slot);
           if (input?.link == null || !app.graph.links[input.link]) continue;
           const asset = getConnectedAsset(slot);
@@ -3155,7 +3157,12 @@ function mountDirectorUI(node) {
         // A newer save exists (another tab, an undo to before the last save,
         // or an older copy of the workflow). Let the user choose explicitly.
         const when=new Date(current.updated_at*1000).toLocaleString();
-        showProjectFeedback('error',`“${current.name}” was saved more recently (${when}, ${current.clip_count} clips) than this timeline knows about.`);
+        // Same project ID (saved clips are attached to it), but this timeline
+        // was not opened from that saved copy, so replacing it needs consent.
+        const typedName=projectName.value.trim();
+        showProjectFeedback('error',current.name!==typedName
+          ? `This project ID already has a server save named “${current.name}” (${when}, ${current.clip_count} clips). Overwrite it to save as “${typedName}”; saved clips stay attached.`
+          : `“${current.name}” was saved more recently on the server (${when}, ${current.clip_count} clips) than this timeline knows about.`);
         const choices=document.createElement('span');choices.className='mmx-feedback-actions';
         const overwrite=document.createElement('button');overwrite.textContent='Overwrite with this version';
         overwrite.onclick=()=>{if(confirm(`Replace the saved “${current.name}” (${when}) with the timeline shown here?`))void saveProjectNow(current.revision);};

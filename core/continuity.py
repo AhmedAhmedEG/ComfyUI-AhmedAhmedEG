@@ -94,6 +94,52 @@ def trim_continuity_audio_prefix(
     return {"waveform": trimmed_wf, "sample_rate": sr}
 
 
+def _video_channel_axes(video: torch.Tensor):
+    # [B,C,T,H,W] or [C,T,H,W]: statistics per channel over everything else.
+    return (0, 2, 3, 4) if video.ndim == 5 else tuple(i for i in range(video.ndim) if i != 0)
+
+
+def latent_channel_stats(latent_dict: Dict[str, Any]):
+    """Per-channel (mean, std) of a clip's video latent, used as a chain anchor."""
+    video, _ = extract_streams_from_av_latent(latent_dict)
+    v = video.detach().float()
+    axes = _video_channel_axes(v)
+    return v.mean(dim=axes).cpu(), v.std(dim=axes).cpu()
+
+
+def anchor_chain_drift(latent_dict: Dict[str, Any], anchor, strength: float) -> Dict[str, Any]:
+    """Pull a continued clip's video latent toward its chain's first clip (AdaIN).
+
+    Each continued clip starts from the previous clip's output, so a small
+    contrast/saturation/grain bias compounds hop after hop. Matching per-channel
+    mean/std to the chain's first clip stops that build-up; every clip is
+    anchored to the same reference, so seams stay consistent. Audio is untouched.
+    """
+    strength = float(strength or 0.0)
+    if anchor is None or strength <= 0.0:
+        return latent_dict
+    samples = latent_dict.get("samples")
+    streams, nested = unpack_av_samples(samples)
+    video = streams[0]
+    v = video.float()
+    axes = _video_channel_axes(v)
+    shape = [1] * v.ndim
+    shape[1 if v.ndim == 5 else 0] = -1
+    mean, std = v.mean(dim=axes, keepdim=True), v.std(dim=axes, keepdim=True).clamp_min(1e-6)
+    a_mean = anchor[0].to(v.device, v.dtype).view(shape)
+    a_std = anchor[1].to(v.device, v.dtype).view(shape)
+    matched = (v - mean) / std * a_std + a_mean
+    streams[0] = (v + min(strength, 1.0) * (matched - v)).to(video.dtype)
+    out = dict(latent_dict)
+    if not nested:
+        out["samples"] = streams[0]
+    elif isinstance(samples, (tuple, list)):
+        out["samples"] = type(samples)(streams)
+    else:
+        out["samples"] = type(samples)(tuple(streams))
+    return out
+
+
 def match_color_temperature_and_grade(
     current_frames: torch.Tensor,
     prev_tail_frames: torch.Tensor,
