@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.40"
+__version__ = "1.7.41"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -551,7 +551,7 @@ if getattr(PromptServer, "instance", None) is not None:
                 body["master_node_id"], body.get("expected_revision"))
             return web.json_response({"project": project})
         except ProjectConflict as exc:
-            return web.json_response({"error": str(exc)}, status=409)
+            return web.json_response({"error": str(exc), "current": exc.current}, status=409)
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
 

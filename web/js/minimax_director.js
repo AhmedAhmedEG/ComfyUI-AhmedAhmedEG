@@ -8,6 +8,15 @@ function escapeHtml(value) {
 }
 
 const DIRECTOR_DRAFTS='minimax-director-drafts-v1';
+// Browser drafts recover unsaved edits after a page reload. Within one page
+// session the workflow itself is authoritative: ComfyUI's undo/redo rebuilds
+// every node from an older graph snapshot, and re-applying the newer draft
+// then silently cancelled the undo (and desynchronized the undo history).
+const sessionMountedDirectors=new Set();
+// The server revision this page last saved/opened per project. It is not an
+// edit: undoing to a snapshot from before the last save must not make this
+// tab's own next save look like a conflict.
+const sessionRevisions=new Map();
 function readDirectorDraft(state,owner){
   if(!state?.project_id)return null;
   try{
@@ -2281,23 +2290,9 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-placement select { width:150px!important; }
 .mmx-director-root .mmx-project-audio-fade { display:flex;align-items:center;justify-content:space-between;gap:12px; }
 .mmx-director-root .mmx-project-audio-fade input { width:100px; }
-.mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:0;border:0; }
-.mmx-director-root .mmx-project-workspace .mmx-project-actions > .mmx-field { padding:0;border:0;background:transparent;justify-content:flex-start; }
-.mmx-director-root .mmx-project-workspace .mmx-project-actions button { display:flex;align-items:center;justify-content:center;text-align:center;width:100%;box-sizing:border-box;min-height:40px; }
-.mmx-director-root .mmx-project-workspace button.mmx-project-danger { background:#3b2329;border-color:#bf5967;color:#ffd0d6;box-shadow:0 0 12px #e45c6d2b,inset 0 0 10px #e45c6d0d; }
-.mmx-director-root .mmx-project-workspace button.mmx-project-danger:hover { background:#512932;border-color:#f0808d;box-shadow:0 0 16px #e45c6d55; }
 .mmx-director-root .mmx-project-workspace small { display:none; }
-.mmx-director-root .mmx-project-workspace .mmx-export-control { display:flex;align-items:stretch;min-height:40px;border:1px solid #596979;border-radius:5px;background:#344353;overflow:hidden; }
-.mmx-director-root .mmx-project-workspace .mmx-export-control button { flex:1;min-width:0;border:0;border-radius:0;background:transparent; }
-.mmx-director-root .mmx-project-workspace .mmx-export-control button:hover { background:#405267; }
-.mmx-director-root .mmx-project-workspace .mmx-export-options { display:flex;flex-direction:row;align-items:center;justify-content:center;gap:7px;margin:0;padding:0 10px;border:0;border-left:1px solid #596979;border-radius:0;background:transparent;font-size:12px;white-space:nowrap;cursor:pointer; }
-.mmx-director-root .mmx-project-workspace .mmx-export-options input { margin:0;flex-shrink:0; }
 .mmx-director-root .mmx-project-workspace .mmx-section-intro { display:none; }
 .mmx-director-root .mmx-project-workspace .mmx-section > summary { padding:12px 0 0; }
-.mmx-director-root .mmx-project-library { display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0;border:0; }
-.mmx-director-root .mmx-project-library .mmx-project-name-field { display:flex;flex-direction:row;align-items:center;gap:12px;flex:1;min-width:260px;padding:0;border:0;background:transparent; }
-.mmx-director-root .mmx-project-name-field input { flex:1;min-width:120px; }
-.mmx-director-root .mmx-project-library button { min-height:40px;padding:0 18px; }
 .mmx-director-root .mmx-project-library button, .mmx-server-project-dialog-actions button { cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s; }
 .mmx-director-root .mmx-project-library button:hover:not(:disabled), .mmx-server-project-dialog-actions button:hover:not(:disabled) { background:#435d76;border-color:#8ab9df;box-shadow:0 0 12px #78b7eb33; }
 .mmx-director-root .mmx-project-library button:active:not(:disabled), .mmx-server-project-dialog-actions button:active:not(:disabled) { background:#263e53;box-shadow:inset 0 2px 5px #0006; }
@@ -2308,12 +2303,6 @@ const embeddedCSS = `
 .mmx-director-root .mmx-project-actions button:active:not(:disabled) { background:#263e53;box-shadow:inset 0 2px 5px #0006; }
 .mmx-director-root .mmx-project-actions button:focus-visible { outline:2px solid #8ab9df;outline-offset:3px; }
 .mmx-director-root .mmx-project-actions button:disabled { opacity:.65;cursor:wait; }
-.mmx-director-root .mmx-project-actions button.mmx-project-danger:hover:not(:disabled) { background:#512932;border-color:#f0808d;box-shadow:0 0 16px #e45c6d55; }
-.mmx-director-root .mmx-project-feedback { flex-basis:100%;padding:9px 12px;border:1px solid #596979;border-radius:5px;background:#1d2833;color:#c9e5fa;font-size:13px; }
-.mmx-director-root .mmx-project-feedback:empty { display:none; }
-.mmx-director-root .mmx-project-feedback[data-state="success"] { color:#b6edcb;border-color:#4e9270;background:#20382c; }
-.mmx-director-root .mmx-project-feedback[data-state="error"], .mmx-server-project-note[data-state="error"] { color:#ffb9c2;border-color:#b95f6c; }
-.mmx-director-root .mmx-server-project-status { flex-basis:100%;font-size:12px;color:#9fb5c7; }
 .mmx-picker-heading { color:#c6d8e7;font-size:12px;margin:14px 0 6px; }
 .mmx-picker-intro { color:#adbac7;font-size:12px; }
 .mmx-type-picker { width:min(880px,calc(100vw - 48px));max-width:880px;max-height:calc(100vh - 48px); }
@@ -2335,8 +2324,46 @@ const embeddedCSS = `
 .mmx-director-root .mmx-shared-prompt textarea { box-sizing:border-box;width:100%;height:72px;min-height:64px;resize:vertical;border:1px solid #4c5966;border-radius:6px;padding:10px 12px;background:#1d2229;color:#ecedf0;font:inherit; }
 .mmx-director-root .mmx-shared-prompt-header .mmx-project-placement { font-size:12px; }
 .mmx-director-root .mmx-project-workspace .mmx-project-group { flex-direction:row;align-items:center;flex-wrap:wrap;gap:24px; }
-@container (max-width:800px) { .mmx-director-root .mmx-project-workspace > .mmx-section-body { grid-template-columns:1fr; } .mmx-director-root .mmx-project-group + .mmx-project-group { border-left:0;border-top:1px solid #414e5a;padding:14px 0 0; } .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @container (max-width:600px) { .mmx-project-workspace > summary span { display:none; } }
+/* Project panel (redesigned) */
+.mmx-director-root .mmx-project-workspace > .mmx-section-body { gap:14px;padding:14px 16px 16px; }
+.mmx-director-root .mmx-project-library { display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0;border:0; }
+.mmx-director-root .mmx-project-library .mmx-project-name-field { display:flex;flex-direction:row;align-items:center;gap:10px;flex:1;min-width:240px;padding:0;border:0;background:transparent; }
+.mmx-director-root .mmx-project-library .mmx-project-name-field > span { font-size:12px;color:#9fb2c3;white-space:nowrap; }
+.mmx-director-root .mmx-project-name-field input { flex:1;min-width:120px;height:34px;padding:0 10px;border:1px solid #46525e;border-radius:6px;background:#1b2026;color:#e8edf2;font-size:13px; }
+.mmx-director-root .mmx-project-name-field input:focus { outline:none;border-color:#7eafcf;box-shadow:0 0 0 2px #7eafcf33; }
+.mmx-director-root .mmx-project-library > button { height:34px;min-height:34px;padding:0 14px;border:1px solid #4b5866;border-radius:6px;background:#2c343d;color:#dfe7ee;font-size:12.5px;font-weight:600; }
+.mmx-director-root .mmx-project-library > button.mmx-primary-action { background:#2f5574;border-color:#5f93bd;color:#eef6fc; }
+.mmx-director-root .mmx-project-library > button.mmx-primary-action:hover:not(:disabled) { background:#3a6890;border-color:#8ab9df; }
+.mmx-director-root .mmx-server-project-status { display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font-size:11.5px;white-space:nowrap;background:#2a3036;color:#a9b6c2;border:1px solid #3f4953; }
+.mmx-director-root .mmx-server-project-status::before { content:'';width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.9; }
+.mmx-director-root .mmx-server-project-status[data-state="saved"] { color:#8fd6ad;border-color:#3d6b52;background:#1f3128; }
+.mmx-director-root .mmx-server-project-status[data-state="changed"] { color:#e8c06a;border-color:#6e5a2d;background:#2f2918; }
+.mmx-director-root .mmx-project-feedback { flex-basis:100%;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:8px 12px;border:1px solid #3f4c58;border-left:3px solid #7eafcf;border-radius:6px;background:#1d242b;color:#c9dcec;font-size:12.5px;line-height:1.4; }
+.mmx-director-root .mmx-project-feedback:empty { display:none; }
+.mmx-director-root .mmx-project-feedback[data-state="success"] { color:#b6edcb;border-color:#38563f;border-left-color:#5fbf86;background:#1c2b22; }
+.mmx-director-root .mmx-project-feedback[data-state="error"] { color:#ffc9cf;border-color:#5c3a40;border-left-color:#e06b7a;background:#2a1d21; }
+.mmx-director-root .mmx-project-feedback[data-state="busy"] { border-left-color:#e8c06a; }
+.mmx-server-project-note[data-state="error"] { color:#ffb9c2;border-color:#b95f6c; }
+.mmx-director-root .mmx-feedback-actions { display:inline-flex;gap:8px;margin-left:auto; }
+.mmx-director-root .mmx-feedback-actions button { height:28px;padding:0 10px;border:1px solid #5b6977;border-radius:5px;background:#2c343d;color:#e3eaf0;font-size:12px;cursor:pointer; }
+.mmx-director-root .mmx-feedback-actions button:hover { border-color:#8ab9df;background:#36414c; }
+.mmx-director-root .mmx-project-workspace .mmx-project-actions { display:grid;grid-template-columns:2fr 1fr 1.4fr;gap:12px;padding:0;border:0; }
+.mmx-director-root .mmx-project-card { display:flex;flex-direction:column;gap:10px;min-width:0;padding:12px;border:1px solid #39434d;border-radius:8px;background:#1f252b; }
+.mmx-director-root .mmx-project-card h4 { margin:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8ea2b4; }
+.mmx-director-root .mmx-project-card-buttons { display:flex;flex-wrap:wrap;gap:8px; }
+.mmx-director-root .mmx-project-card-buttons button { flex:1 1 110px;height:34px;min-height:34px;padding:0 12px;border:1px solid #4b5866;border-radius:6px;background:#2c343d;color:#dfe7ee;font-size:12.5px;font-weight:600;white-space:nowrap;box-shadow:none; }
+.mmx-director-root .mmx-project-card-buttons button[hidden] { display:none; }
+.mmx-director-root .mmx-project-card-danger { border-color:#4a3338;background:#231d20; }
+.mmx-director-root .mmx-project-card-danger h4 { color:#c98d96; }
+.mmx-director-root .mmx-project-workspace .mmx-project-card-buttons button.mmx-project-danger { background:#2f2327;border-color:#6d4148;color:#f3c3ca;box-shadow:none; }
+.mmx-director-root .mmx-project-workspace .mmx-project-card-buttons button.mmx-project-danger:hover:not(:disabled) { background:#43272e;border-color:#d0707d;color:#ffe0e4;box-shadow:none; }
+.mmx-director-root .mmx-export-choices { display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-top:8px;border-top:1px dashed #39434d;font-size:12px;color:#9fb2c3; }
+.mmx-director-root .mmx-export-choices > span { font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7d90a1; }
+.mmx-director-root .mmx-project-workspace .mmx-export-choices .mmx-field { display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px!important;margin:0;padding:0;border:0;background:transparent;font-size:12px;white-space:nowrap;cursor:pointer;color:#c8d4de; }
+.mmx-director-root .mmx-project-workspace .mmx-export-choices input { width:14px!important;min-width:14px;height:14px;margin:0;accent-color:#7eafcf; }
+@container (max-width:900px) { .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:1fr 1fr; } .mmx-director-root .mmx-project-card-files { grid-column:1/-1; } }
+@container (max-width:560px) { .mmx-director-root .mmx-project-workspace .mmx-project-actions { grid-template-columns:1fr; } }
 
 /* Approval, inspection and execution have distinct visual states. */
 .mmx-director-root .mmx-shot-block.validated {background:#244337!important;border-color:#66b38b!important;}
@@ -2541,8 +2568,11 @@ function mountDirectorUI(node) {
   window.addEventListener('pagehide',flushDraft);document.addEventListener('visibilitychange',hideDraft);
   const projectSignature=()=>JSON.stringify({timeline:{...timelineState,server_revision:undefined,draft_updated_at:undefined},builder:builderState});
   const updateServerStatus=()=>{
-    if(serverStatus)serverStatus.textContent=savedProjectSignature && savedProjectSignature===projectSignature()
-      ? "Saved On Server" : timelineState.server_revision ? "Server Project · Save Your Changes" : "Not Saved On Server";
+    if(serverStatus){
+      const state=savedProjectSignature && savedProjectSignature===projectSignature() ? 'saved' : timelineState.server_revision ? 'changed' : 'unsaved';
+      serverStatus.dataset.state=state;
+      serverStatus.textContent=({saved:'Saved',changed:'Unsaved changes',unsaved:'Not saved on server'})[state];
+    }
     if(serverStatus)projectScope.textContent=timelineState.project_name || 'All Clips · Projects & Files';
   };
 
@@ -2800,8 +2830,13 @@ function mountDirectorUI(node) {
       if (timelineWidget && timelineWidget.value) {
         const parsed = typeof timelineWidget.value === "string" ? JSON.parse(timelineWidget.value) : timelineWidget.value;
         if (parsed && typeof parsed === "object") {
-          const draft=draftRestored?null:readDirectorDraft(parsed,String(node.id));draftRestored=true;
+          const sessionKey=`${parsed.project_id}::${node.id}`;
+          const draft=draftRestored || sessionMountedDirectors.has(sessionKey)?null:readDirectorDraft(parsed,String(node.id));
+          draftRestored=true;if(parsed.project_id)sessionMountedDirectors.add(sessionKey);
           timelineState = { ...timelineState, ...(draft?.timeline || parsed) };
+          const pid=timelineState.project_id;
+          if(pid && sessionRevisions.has(pid))timelineState.server_revision=sessionRevisions.get(pid);
+          else if(pid && timelineState.server_revision)sessionRevisions.set(pid,timelineState.server_revision);
           if(draft && builderWidget)builderWidget.value=draft.builder;
           if (!Array.isArray(timelineState.clips)) {
             timelineState.clips = [
@@ -2894,7 +2929,7 @@ function mountDirectorUI(node) {
   const requestJson = async (url, body) => {
     const response = await api.fetchApi(url, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+    if (!response.ok) throw Object.assign(new Error(result.error || `Request failed (${response.status})`),{status:response.status,result});
     return result;
   };
 
@@ -3054,18 +3089,28 @@ function mountDirectorUI(node) {
     const intro=document.createElement("p");intro.className="mmx-section-intro";intro.textContent=description;body.append(intro);
     for (const child of [...section.childNodes]) if (child!==summary) body.append(child);
     if (section===projectTools) {
+      // Three labelled cards instead of a wall of equal full-width buttons:
+      // files, recovery, and destructive actions kept apart.
       const actions=document.createElement("div");actions.className="mmx-project-actions";
-      const actionOrder=["new","import","export","restore","reset","delete-results"];
-      const buttons=[...body.children].filter(child=>child.tagName==='BUTTON' && child!==cancelExport).sort((a,b)=>actionOrder.indexOf(a.dataset.projectAction)-actionOrder.indexOf(b.dataset.projectAction));
-      for (const button of buttons) {
-        const card=document.createElement("div");card.className="mmx-field";
-        const help=document.createElement("small");help.textContent=button.title || "Clear the current timeline after confirmation.";
-        card.append(button,help);actions.append(card);
-        if(button===exportBtn){
-          const exportControl=document.createElement('div');exportControl.className='mmx-export-control';
-          exportControl.append(button,cancelExport,body.querySelector('.mmx-export-options'),body.querySelector('.mmx-export-result-options'));card.prepend(exportControl);
+      const buttons=[...body.children].filter(child=>child.tagName==='BUTTON' && child!==cancelExport);
+      const cards=[['files','Files',['new','import','export']],['recovery','Recovery',['restore']],['danger','Clear',['reset','delete-results']]];
+      for (const [key,title,names] of cards) {
+        const card=document.createElement('section');card.className=`mmx-project-card mmx-project-card-${key}`;
+        const heading=document.createElement('h4');heading.textContent=title;
+        const row=document.createElement('div');row.className='mmx-project-card-buttons';
+        for (const name of names) {
+          const button=buttons.find(b=>b.dataset.projectAction===name);if(!button)continue;
+          row.append(button);if(button===exportBtn)row.append(cancelExport);
         }
+        card.append(heading,row);
+        if(key==='files'){
+          const choices=document.createElement('div');choices.className='mmx-export-choices';
+          const caption=document.createElement('span');caption.textContent='Export includes';
+          choices.append(caption,body.querySelector('.mmx-export-options'),body.querySelector('.mmx-export-result-options'));card.append(choices);
+        }
+        actions.append(card);
       }
+      for (const button of buttons) if(button.parentElement===body)actions.querySelector('.mmx-project-card-buttons').append(button);
       body.append(actions);
     }
     section.append(body);
@@ -3085,11 +3130,11 @@ function mountDirectorUI(node) {
   const showProjectFeedback=(state,message)=>{projectFeedback.dataset.state=state;projectFeedback.textContent=message;};
   const saveProject=document.createElement('button');saveProject.textContent='Save Project';
   saveProject.title='Save the named timeline and workflow on this server. Latents stay in the existing server cache.';
-  saveProject.onclick=async()=>{
+  const saveProjectNow=async(overwriteRevision)=>{
     if(saveProject.disabled)return;
-    if(!projectName.value.trim()){showProjectFeedback('error','Enter A Project Name Before Saving.');projectName.focus();return;}
+    if(!projectName.value.trim()){showProjectFeedback('error','Enter a project name before saving.');projectName.focus();return;}
     saveProject.disabled=true;saveProject.textContent='Saving…';saveProject.setAttribute('aria-busy','true');
-    showProjectFeedback('busy','Saving Project On Server…');
+    showProjectFeedback('busy','Saving project on server…');
     try{
       timelineState.project_name=projectName.value.trim();syncState();
       const graph=app.rootGraph || app.graph;
@@ -3098,13 +3143,28 @@ function mountDirectorUI(node) {
       const capturedSignature=projectSignature();
       const result=await requestJson('/minimax_director/project/save',{
         project_id:snapshot.project_id,name:snapshot.project_name,timeline:snapshot,
-        workflow:graph.serialize(),master_node_id:node.id,expected_revision:snapshot.server_revision || null});
+        workflow:graph.serialize(),master_node_id:node.id,
+        expected_revision:overwriteRevision ?? (snapshot.server_revision || null)});
       if(timelineState.project_id===snapshot.project_id){
-        timelineState.server_revision=result.project.revision;savedProjectSignature=capturedSignature;syncState();
+        timelineState.server_revision=result.project.revision;sessionRevisions.set(snapshot.project_id,result.project.revision);savedProjectSignature=capturedSignature;syncState();
       }
-      showProjectFeedback('success',`Saved “${snapshot.project_name}” On Server · ${new Date().toLocaleTimeString()}`);
-    }catch(error){showProjectFeedback('error',`Save Failed: ${error.message}`);}finally{saveProject.disabled=false;saveProject.textContent='Save Project';saveProject.removeAttribute('aria-busy');}
+      showProjectFeedback('success',`Saved “${snapshot.project_name}” on server · ${new Date().toLocaleTimeString()}`);
+    }catch(error){
+      const current=error.status===409 ? error.result?.current : null;
+      if(current?.revision){
+        // A newer save exists (another tab, an undo to before the last save,
+        // or an older copy of the workflow). Let the user choose explicitly.
+        const when=new Date(current.updated_at*1000).toLocaleString();
+        showProjectFeedback('error',`“${current.name}” was saved more recently (${when}, ${current.clip_count} clips) than this timeline knows about.`);
+        const choices=document.createElement('span');choices.className='mmx-feedback-actions';
+        const overwrite=document.createElement('button');overwrite.textContent='Overwrite with this version';
+        overwrite.onclick=()=>{if(confirm(`Replace the saved “${current.name}” (${when}) with the timeline shown here?`))void saveProjectNow(current.revision);};
+        const reopen=document.createElement('button');reopen.textContent='Open saved version';reopen.onclick=()=>openProject.click();
+        choices.append(overwrite,reopen);projectFeedback.append(choices);
+      }else showProjectFeedback('error',`Save failed: ${error.message}`);
+    }finally{saveProject.disabled=false;saveProject.textContent='Save Project';saveProject.removeAttribute('aria-busy');}
   };
+  saveProject.onclick=()=>saveProjectNow();
   const openProject=document.createElement('button');openProject.textContent='Open Project';
   openProject.title='Choose a named project saved on this server and reopen its workflow and cached results.';
   openProject.onclick=async()=>{
@@ -3136,6 +3196,7 @@ function mountDirectorUI(node) {
         note.dataset.state='busy';note.textContent='Opening Saved Workflow…';
         try{
           const {project}=await requestJson(`/minimax_director/project/load?project_id=${encodeURIComponent(select.value)}`);
+          if(project?.project_id && project.timeline?.server_revision)sessionRevisions.set(project.project_id,project.timeline.server_revision);
           const workflow=project.workflow;
           const master=workflow?.nodes?.find(row=>String(row.id)===String(project.master_node_id));
           if(!master || !app.loadGraphData)throw new Error('This saved project has no reopenable Master workflow.');
@@ -3183,7 +3244,7 @@ function mountDirectorUI(node) {
     finally{clearVram.disabled=false;clearVram.textContent='Clear VRAM';clearVram.removeAttribute('aria-busy');}
   };
   projectHeading.append(clearVram);
-  library.append(nameField,saveProject,openProject,serverStatus,projectFeedback);projectTools.append(library);
+  saveProject.classList.add('mmx-primary-action');library.append(nameField,serverStatus,saveProject,openProject,projectFeedback);projectTools.append(library);
   const addProjectAction = (label, handler) => {
     const button = document.createElement("button"); button.textContent = label;
     button.dataset.projectAction=({"Delete Saved Results":"delete-results","Restore Last Autosave":"restore","New Project":"new"})[label];

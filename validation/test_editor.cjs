@@ -516,8 +516,9 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal([...filesPanel.querySelectorAll('button')].filter(el=>el.textContent==='Export Project').length,1);
   assert.equal([...filesPanel.querySelectorAll('button')].filter(el=>el.textContent==='Import Project').length,1);
   assert(filesPanel.querySelector('.mmx-export-media'),'Export format is configured at its sole action');
-  assert(filesPanel.querySelector('.mmx-export-control button')===button('Export Project'),'Media option shares the export control');
-  assert(filesPanel.querySelector('.mmx-export-control .mmx-export-options input')===filesPanel.querySelector('.mmx-export-media'),'Checkbox is attached beside Export Project');
+  assert(filesPanel.querySelector('.mmx-project-card-files .mmx-project-card-buttons button[data-project-action="export"]')===button('Export Project'),'Export sits in the Files card');
+  assert(filesPanel.querySelector('.mmx-project-card-files .mmx-export-choices .mmx-export-options input')===filesPanel.querySelector('.mmx-export-media'),'Export options sit with Export Project');
+  assert.equal(filesPanel.querySelectorAll('.mmx-project-card-danger .mmx-project-danger').length,2,'Destructive actions are grouped apart');
   assert(!editorRoot.textContent.includes('Export with media') && !editorRoot.textContent.includes('Import media pack'));
   const previousFetch=w.api.fetchApi, calls=[];
   w.URL.createObjectURL=()=> 'blob:test';w.URL.revokeObjectURL=()=>{};
@@ -551,7 +552,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(projectFeedback.textContent.includes('queue is idle'));
   assert(!clearVram.disabled);w.api.fetchApi=previousFetch;
   nameInput.value='';await button('Save Project').onclick();
-  assert(projectFeedback.textContent.includes('Enter A Project Name'));
+  assert(projectFeedback.textContent.includes('Enter a project name'));
   assert.equal(projectFeedback.dataset.state,'error');
   nameInput.value='My Named Film';nameInput.dispatchEvent(new w.Event('input'));
   let savedBody;
@@ -577,11 +578,23 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const savedTimeline=JSON.parse(timeline.value);
   assert.equal(savedTimeline.project_name,'My Named Film','Ordinary workflow serialization retains the project name');
   assert.equal(savedTimeline.server_revision,'revision_1');
-  assert.equal(editorRoot.querySelector('.mmx-server-project-status').textContent,'Saved On Server');
+  assert.equal(editorRoot.querySelector('.mmx-server-project-status').textContent,'Saved');assert.equal(editorRoot.querySelector('.mmx-server-project-status').dataset.state,'saved');
   w.api.fetchApi=async()=>{throw new Error('Server Unavailable');};
   await saveControl.onclick();
-  assert.equal(projectFeedback.dataset.state,'error');assert(projectFeedback.textContent.includes('Save Failed: Server Unavailable'));
+  assert.equal(projectFeedback.dataset.state,'error');assert(projectFeedback.textContent.includes('Save failed: Server Unavailable'));
   assert(!saveControl.disabled);assert(!saveControl.hasAttribute('aria-busy'));
+  // A newer save (other tab / older workflow copy) offers explicit choices.
+  let conflictBody;w.api.fetchApi=async(url,options={})=>{conflictBody=JSON.parse(options.body||'{}');
+    if(conflictBody.expected_revision==='revision_9')return {ok:true,status:200,json:async()=>({project:{...serverDocument,revision:'revision_10'}})};
+    return {ok:false,status:409,json:async()=>({error:'A newer save of this project exists on the server.',current:{project_id:'editor',name:'My Named Film',revision:'revision_9',updated_at:2,clip_count:3}})};};
+  await saveControl.onclick();
+  assert.equal(projectFeedback.dataset.state,'error');assert(projectFeedback.textContent.includes('saved more recently'));
+  const overwrite=[...projectFeedback.querySelectorAll('button')].find(b=>b.textContent==='Overwrite with this version');
+  assert(overwrite && [...projectFeedback.querySelectorAll('button')].some(b=>b.textContent==='Open saved version'),'Conflict offers overwrite or reopen');
+  const conflictConfirm=w.confirm;w.confirm=()=>true;overwrite.click();await new Promise(r=>setTimeout(r,50));w.confirm=conflictConfirm;
+  assert.equal(conflictBody.expected_revision,'revision_9','Overwrite targets exactly the newer save the user was shown');
+  assert.equal(projectFeedback.dataset.state,'success');assert.equal(JSON.parse(timeline.value).server_revision,'revision_10');
+  w.api.fetchApi=async()=>{throw new Error('Server Unavailable');};
   await button('Open Project').onclick();
   assert(projectFeedback.textContent.includes('Could Not Load Projects: Server Unavailable'));
   w.api.fetchApi=namedFetch;
@@ -785,11 +798,21 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.equal(w.readDirectorDraft({project_id:'contract_ui'},'different-node'),null);
   assert.equal(w.readDirectorDraft({project_id:'contract_ui',draft_updated_at:recovered.draft_updated_at+1000},'99'),null,'Newer workflow state wins over old browser drafts');
   contractNode.onRemoved();assert.strictEqual(listeners.size,0);
+  // A page reload is a fresh module: re-evaluate it so session state is empty.
+  w.eval(fs.readFileSync('web/js/minimax_director.js','utf8').replace(/^import .*;\r?\n/gm,''));
   const reloadTimeline={name:'timeline_data',value:JSON.stringify(approved)};
   const reloadNode={...contractNode,widgets:[reloadTimeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],__mmxDirectorMounted:false,__mmxDisposed:false,__mmxShotListener:null,onRemoved:undefined};
   w.extension.nodeCreated(reloadNode);await new Promise(r=>setTimeout(r,200));
   assert.equal(JSON.parse(reloadTimeline.value).clips[0].seed,'99','Reloading an older unsaved workflow restores the newer browser draft');
   assert.equal(JSON.parse(reloadTimeline.value).clips[0].validated,true,'Reload preserves explicit approval');
   reloadNode.onRemoved();assert.strictEqual(listeners.size,0);
+  // Ctrl+Z in the same page rebuilds the node from an older graph snapshot:
+  // that snapshot must win over the newer browser draft, or undo is cancelled.
+  const undoSnapshot=JSON.parse(JSON.stringify(approved));undoSnapshot.clips[0].seed='12';
+  const undoTimeline={name:'timeline_data',value:JSON.stringify(undoSnapshot)};
+  const undoNode={...contractNode,widgets:[undoTimeline,{name:'builder_state',value:'{}'},{name:'generation_mode',value:'Next clip',type:'combo'}],__mmxDirectorMounted:false,__mmxDisposed:false,__mmxShotListener:null,onRemoved:undefined};
+  w.extension.nodeCreated(undoNode);await new Promise(r=>setTimeout(r,200));
+  assert.equal(JSON.parse(undoTimeline.value).clips[0].seed,'12','Undo restores the older timeline instead of the browser draft');
+  undoNode.onRemoved();assert.strictEqual(listeners.size,0);
   dom.window.close();console.log('Editor mount, migration, uint64 persistence, editable timecode, persistent zoom, file continuation, actual source splitting, and cleanup passed');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

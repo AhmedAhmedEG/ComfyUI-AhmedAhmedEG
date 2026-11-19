@@ -18,7 +18,9 @@ MAX_DOCUMENT_BYTES = 16 * 1024**2
 
 
 class ProjectConflict(ValueError):
-    pass
+    def __init__(self, message, current=None):
+        super().__init__(message)
+        self.current = current  # summary of the newer saved project, if any
 
 
 class ServerProjectStore:
@@ -91,8 +93,10 @@ class ServerProjectStore:
         if len(payload) > MAX_DOCUMENT_BYTES:
             raise ValueError("Project metadata exceeds 16 MiB. Tensor data belongs in the server cache.")
         with _LOCK:
-            if path.exists() and self.load(project_id)["revision"] != expected_revision:
-                raise ProjectConflict("This project was saved in another session. Reopen it before saving to avoid overwriting newer work.")
+            if path.exists():
+                current = self.load(project_id)
+                if current["revision"] != expected_revision:
+                    raise ProjectConflict("A newer save of this project exists on the server (from another tab, an undo, or an older copy of the workflow).", self.summary(current))
             if not path.exists() and expected_revision:
                 raise ProjectConflict("The saved project no longer exists. Start a new project before saving.")
             self.root.mkdir(parents=True, exist_ok=True)

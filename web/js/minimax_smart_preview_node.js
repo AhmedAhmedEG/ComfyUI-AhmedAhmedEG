@@ -2,6 +2,12 @@ import {app} from "../../scripts/app.js";
 import {api} from "../../scripts/api.js";
 import {installSmartPreview} from "./minimax_preview.js";
 
+// The latest Master state this page received, per preview node and project.
+// ComfyUI's undo/redo rebuilds nodes from an older snapshot (older stored
+// timeline, write permission reset); without this the preview fell back to a
+// read-only view of an outdated clip list and showed nothing until reload.
+const sessionTimelines=new Map();
+
 function mount(node) {
   if (node.__mmxPlayer) return;
   node.size = [Math.max(640, node.size?.[0] || 0), Math.max(440, node.size?.[1] || 0)];
@@ -15,13 +21,26 @@ function mount(node) {
     const link = app.graph?.links?.[input?.link];
     return link && app.graph.getNodeById(link.origin_id);
   };
-  const getTimeline = () => {
-    const master=connectedMaster();
-    let projectId='';
+  const masterProject = master => {
     try {
       const text = master?.widgets?.find(value => value.name === "timeline_data")?.value;
-      if (text) projectId=(typeof text === "string" ? JSON.parse(text) : text).project_id || '';
+      if (text) return (typeof text === "string" ? JSON.parse(text) : text).project_id || '';
     } catch {}
+    return '';
+  };
+  const accept = state => {
+    node.properties.mmx_preview_timeline=state;receivedMasterInput=true;
+    sessionTimelines.set(`${node.id}::${state.project_id}`,state);
+  };
+  // Same page session, same connected Master project: keep what it sent us.
+  const restoreSession = () => {
+    const project=masterProject(connectedMaster());
+    const state=project && sessionTimelines.get(`${node.id}::${project}`);
+    if(state){node.properties.mmx_preview_timeline=state;receivedMasterInput=true;}
+  };
+  const getTimeline = () => {
+    const master=connectedMaster();
+    const projectId=masterProject(master);
     const accepted=node.properties.mmx_preview_timeline;
     if(master && accepted && (receivedMasterInput || accepted.project_id===projectId))return accepted;
     return {project_id:projectId,clips:[]};
@@ -50,16 +69,16 @@ function mount(node) {
   widget.computeSize = () => [640, 400];
   widget.serialize = false;
   const configured = node.onConfigure;
-  node.onConfigure = function (...args) {receivedMasterInput=false;const result=configured?.apply(this,args);ensureOutputs();player.restore();return result;};
+  node.onConfigure = function (...args) {receivedMasterInput=false;const result=configured?.apply(this,args);restoreSession();ensureOutputs();player.restore();return result;};
   const connection = node.onConnectionsChange;
-  node.onConnectionsChange = function (...args) {receivedMasterInput=false;const result=connection?.apply(this,args);player.contextChanged();return result;};
+  node.onConnectionsChange = function (...args) {receivedMasterInput=false;const result=connection?.apply(this,args);restoreSession();player.contextChanged();return result;};
   const previous = node.onExecuted;
   node.onExecuted = function (data) {
     previous?.apply(this, arguments);
     if (data?.mmx_project?.[0]) {
       const state=JSON.parse(data.mmx_project[0]);
       if(state?.project_id && Array.isArray(state.clips)){
-        node.properties.mmx_preview_timeline=state;receivedMasterInput=true;
+        accept(state);
       }
     }
     player.refresh();
@@ -68,7 +87,7 @@ function mount(node) {
     const origin=connectedMaster();
     if(!origin || String(event.detail?.node).split(':').at(-1)!==String(origin.id))return;
     if(event.detail.phase==='timeline_ready' && event.detail.timeline?.project_id){
-      node.properties.mmx_preview_timeline=event.detail.timeline;receivedMasterInput=true;player.refresh();return;
+      accept(event.detail.timeline);player.refresh();return;
     }
     if (event.detail?.project_id !== getTimeline().project_id) return;
     if(!receivedMasterInput)return;
