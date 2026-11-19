@@ -23,21 +23,13 @@ def model_graph_signature(graph,link,seen=None):
         allowed={'UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','H3SLAAttention','ComfySwitchNode',
                  'PrimitiveBoolean','PrimitiveInt','PrimitiveFloat',
                  # Fast H3 branch: stock attention patches with literal settings.
-                 'ModelAttentionBackend','BlockSparseAttention','MiniMaxH3ModelPreset'}
-        if kind not in allowed or link[1]!=0 and kind!='MiniMaxH3ModelPreset':raise UnsupportedGraph('Unknown model modifier')
+                 'ModelAttentionBackend','BlockSparseAttention','MiniMaxH3SigmaShift'}
+        if kind not in allowed or link[1]!=0:raise UnsupportedGraph('Unknown model modifier')
         def value(item):
             if isinstance(item,(list,tuple)):
                 return model_graph_signature(graph,item,seen)
             if item is None or isinstance(item,(str,int,float,bool)):return item
             raise UnsupportedGraph('Unknown model setting')
-        if kind=='MiniMaxH3ModelPreset':
-            # Only the selected branch reaches the Master: model (0) or video VAE (1).
-            from .model_preset import selected_inputs
-            preset=inputs.get('preset')
-            if not isinstance(preset,str) or link[1] not in (0,1):raise UnsupportedGraph('Dynamic model preset')
-            name=selected_inputs(preset,[k for k,v in inputs.items() if isinstance(v,(list,tuple))])[link[1]]
-            if not isinstance(inputs.get(name),(list,tuple)):raise UnsupportedGraph('Model preset branch is not connected')
-            return {'type':kind,'preset':preset,'output':link[1],'value':value(inputs[name])}
         if kind=='ComfySwitchNode':
             switch=inputs['switch']
             if isinstance(switch,(list,tuple)):
@@ -109,7 +101,7 @@ class PreflightCache:
             master_inputs=self.graph[self.node_id].get('inputs',{})
             for name,kind in (('clip','CLIPLoader'),('video_vae','VAELoader'),('audio_vae','VAELoader')):
                 link=master_inputs.get(name)
-                if not isinstance(link,(list,tuple)) or len(link)!=2 or self.graph.get(str(link[0]),{}).get('class_type') not in (kind,'MiniMaxH3ModelPreset'):
+                if not isinstance(link,(list,tuple)) or len(link)!=2 or self.graph.get(str(link[0]),{}).get('class_type') not in (kind,'ComfySwitchNode'):
                     auxiliaries={};break
                 auxiliaries[name]=model_graph_signature(self.graph,link)
                 value=self.inputs.get(name)

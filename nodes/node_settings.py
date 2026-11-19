@@ -43,9 +43,7 @@ class MiniMaxH3DirectorSettings:
 
             },
             "optional": {
-                "settings_optional": (MMX_DIRECTOR_CONFIG, {"tooltip": "Optional previous configuration to chain or override."}),
-                "model_preset": ("MMX_SAMPLING_PRESET", {"tooltip": "Connect Model Preset.sampling. Its values replace steps (and for Fast H3 also cfg, sampler, scheduler and shifts) so the selected model always samples correctly."}),
-                "canvas_policy": (["manual", "original", "auto"], {"default": "manual", "tooltip": "Manual uses width/height; Original follows source dimensions; Auto uses megapixels/aspect."}),
+                "settings_optional": (MMX_DIRECTOR_CONFIG, {"tooltip": "Optional previous configuration to chain or override."}),                "canvas_policy": (["manual", "original", "auto"], {"default": "manual", "tooltip": "Manual uses width/height; Original follows source dimensions; Auto uses megapixels/aspect."}),
                 "canvas_megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.1, "tooltip": "Used only by Auto canvas."}),
                 "canvas_aspect": (["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3", "auto"], {"default": "16:9", "tooltip": "Used only by Auto canvas; auto follows source aspect."}),
                 "decoded_output": (["full","latest"], {"default":"latest","tooltip":"Latest returns the last clip as raw frames; all generated clips still save for Smart Preview and Project Video. Full assembles every output clip and uses disk-backed storage for large batches."}),
@@ -82,7 +80,6 @@ class MiniMaxH3DirectorSettings:
         canvas_megapixels: float = 1.0,
         canvas_aspect: str = "16:9",
         decoded_output: str = "latest",
-        model_preset: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Tuple[Dict[str, Any]]:
         if generation_mode is not None:
@@ -112,16 +109,6 @@ class MiniMaxH3DirectorSettings:
             "context_length": str(context_length),
             "preview_mode": str(preview_mode),
         }
-
-        # A connected Model Preset owns the values its model requires.
-        if model_preset is not None:
-            if not isinstance(model_preset, dict):
-                raise ValueError("model_preset must come from MiniMax H3 Model Preset.")
-            for key, cast in (("steps", int), ("cfg", float), ("sampler", str), ("scheduler", str),
-                              ("shift_video", float), ("shift_audio", float)):
-                if key in model_preset:
-                    cfg_dict[key] = cast(model_preset[key])
-            cfg_dict["model_preset"] = str(model_preset.get("preset", ""))
 
         # Legacy API callers can still supply a fallback. New UI workflows own
         # seeds exclusively on their clips, rather than exposing a second seed.

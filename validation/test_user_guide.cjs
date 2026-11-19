@@ -7,7 +7,7 @@ const photos=JSON.parse(fs.readFileSync(path.join(docs,'screenshots.json'),'utf8
 const python=process.env.H3_GUIDE_PYTHON||(fs.existsSync(path.join(root,'.validation/Scripts/python.exe'))?path.join(root,'.validation/Scripts/python.exe'):'python');
 const schema=JSON.parse(execFileSync(python,['-X','utf8','tools/documentation_schema.py'],{cwd:root,encoding:'utf8'}));
 const nodes=manifest.filter(p=>p.startsWith('nodes/'));
-assert.equal(nodes.length,Object.keys(schema).length);assert.equal(nodes.length,28);
+assert.equal(nodes.length,Object.keys(schema).length);assert.equal(nodes.length,27);
 const screenshots=Object.values(photos).filter(p=>p.kind==='screenshot');assert(screenshots.length>=9,'At least nine current screenshots');assert.equal(new Set(screenshots.map(p=>p.file)).size,screenshots.length,'Screenshot files are distinct');
 const errors=[],js=fs.readFileSync(path.join(docs,'assets/documentation.js'),'utf8'),index=fs.readFileSync(path.join(docs,'assets/search-index.js'),'utf8');
 let totalOptions=0,filtersChecked=false;
@@ -44,7 +44,7 @@ for(const relative of manifest){
   }
  }
  if(relative==='index.html'){
-  assert.equal(d.querySelectorAll('.node-card').length,28);w.eval(index);w.eval(js);
+  assert.equal(d.querySelectorAll('.node-card').length,27);w.eval(index);w.eval(js);
   const search=d.getElementById('nav-search');search.value='confirm_first_pass';search.dispatchEvent(new w.Event('input'));assert(d.querySelector('#search-results a[href*="#option-confirm_first_pass"]'),'Full-guide search reaches a setting');
   search.value='0.5 megapixels';search.dispatchEvent(new w.Event('input'));assert(d.querySelectorAll('#search-results a').length>0,'Editor/workflow contents searchable');
   search.value='zzzznotfound';search.dispatchEvent(new w.Event('input'));assert(!d.getElementById('search-empty').hidden);
@@ -54,5 +54,5 @@ for(const relative of manifest){
  if(relative==='getting-started.html'){assert(d.querySelector('a[download]'));for(const text of ['FL2VA','REF2VA','56 frames','24 fps','0.92'])assert(d.body.textContent.includes(text));}
  dom.window.close();
 }
-assert.equal(totalOptions,276);assert(filtersChecked);assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
+assert.equal(totalOptions,267);assert(filtersChecked);assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
 console.log(`Guide passed: ${nodes.length} chapters, ${totalOptions} source inputs/settings, ${screenshots.length} real screenshots plus a wiring diagram, offline links/anchors, full-text search, option filters, lightbox, keyboard and legacy redirects.`);

@@ -29,7 +29,6 @@ from .node_output_processing import MiniMaxH3OutputProcessing
 from .node_pixel_upscale import MiniMaxH3PixelUpscale
 from .node_ref_pack import MiniMaxH3RefPack
 from .node_smart_preview import MiniMaxH3SmartPreview
-from .node_model_preset import MiniMaxH3ModelPreset
 
 # Single public Master Node name; implementation class stays internal.
 MiniMaxH3MasterNode = MiniMaxH3MasterDirector
@@ -45,7 +44,6 @@ NODE_CLASS_MAPPINGS = {
 
     # Dedicated Settings & Configuration
     "MiniMaxH3DirectorSettings": MiniMaxH3DirectorSettings,
-    "MiniMaxH3ModelPreset": MiniMaxH3ModelPreset,
 
     # Core modules (SelfLift, Refine, FaceRefine, Semantic Bridge, Cache)
     "MiniMaxH3DirectorSelfLift": MiniMaxH3DirectorSelfLift,
@@ -83,7 +81,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3MasterNode": "MiniMax H3 Master Node",
 
     "MiniMaxH3DirectorSettings": "MiniMax H3 Director Settings",
-    "MiniMaxH3ModelPreset": "MiniMax H3 Model Preset",
 
     "MiniMaxH3DirectorSelfLift": "MiniMax H3 Director SelfLift",
     "MiniMaxH3DirectorRefine": "MiniMax H3 Director Refine",
@@ -113,8 +110,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 _MENU_GROUPS = {
     "Start here": [
         "MiniMaxH3MasterNode",
-        "MiniMaxH3DirectorSettings",
-        "MiniMaxH3ModelPreset"
+        "MiniMaxH3DirectorSettings"
     ],
     "Enhancements": [
         "MiniMaxH3DirectorSelfLift",
