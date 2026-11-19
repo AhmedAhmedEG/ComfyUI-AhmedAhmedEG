@@ -17,7 +17,7 @@ def section(title,body,anchor=None):
 def listing(rows,ordered=False):
     tag='ol' if ordered else 'ul'
     return f'<{tag}>'+''.join('<li>'+esc(row)+'</li>' for row in rows)+f'</{tag}>'
-GROUPS=[('Start here',['MasterNode','DirectorSettings','RefPack','SmartPreview']),('Improve a result',['DirectorSelfLift','DirectorRefine','DirectorFaceRefine','DirectorSemanticBridge','Cache']),('Write and organize',['PromptForge','LocalPromptModel','ApplyPromptDraft','ProjectImport','RefModLibrary']),('Export and finish',['ProjectVideo','VideoCombine','PixelUpscale','FrameInterpolation','OutputProcessing']),('Advanced graph tools',['DirectorGroupImageToVideo','DirectorGroupReferenceToVideo','DirectorGroupsCombine','TimelineBuilder','Checkpoint','TailFromLatent','AdvanceCheckpoint','ModelOverridePack'])]
+GROUPS=[('Start here',['MasterNode','DirectorSettings','ModelPreset','RefPack','SmartPreview']),('Improve a result',['DirectorSelfLift','DirectorRefine','DirectorFaceRefine','DirectorSemanticBridge','Cache']),('Write and organize',['PromptForge','LocalPromptModel','ApplyPromptDraft','ProjectImport','RefModLibrary']),('Export and finish',['ProjectVideo','VideoCombine','PixelUpscale','FrameInterpolation','OutputProcessing']),('Advanced graph tools',['DirectorGroupImageToVideo','DirectorGroupReferenceToVideo','DirectorGroupsCombine','TimelineBuilder','Checkpoint','TailFromLatent','AdvanceCheckpoint','ModelOverridePack'])]
 
 def build():
     data=json.loads((DOCS/'guide_content.json').read_text(encoding='utf-8'))

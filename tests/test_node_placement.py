@@ -55,8 +55,8 @@ class NodePlacement(unittest.TestCase):
         members=[name for names in _MENU_GROUPS.values() for name in names]
         self.assertEqual(len(members),len(set(members)))
         self.assertEqual(set(members),set(NODE_CLASS_MAPPINGS))
-        self.assertEqual(len(NODE_CLASS_MAPPINGS),27)
-        self.assertEqual(len(set(NODE_DISPLAY_NAME_MAPPINGS.values())),27)
+        self.assertEqual(len(NODE_CLASS_MAPPINGS),28)
+        self.assertEqual(len(set(NODE_DISPLAY_NAME_MAPPINGS.values())),28)
         master=NODE_CLASS_MAPPINGS['MiniMaxH3MasterNode']
         self.assertEqual((master.RETURN_TYPES[2],master.RETURN_NAMES[2]),('VHS_VIDEOINFO','video_info'))
         self.assertIn('Output',NODE_CLASS_MAPPINGS['MiniMaxH3PixelUpscale'].CATEGORY)

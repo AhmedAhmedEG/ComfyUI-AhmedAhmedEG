@@ -193,5 +193,10 @@
   "MiniMaxH3LocalPromptModel.device": {
     "cpu": "Run supported local prompt inference on the CPU; lower GPU use, often slower.",
     "cuda": "Run supported local prompt inference on the GPU; competes with H3 for memory."
+  },
+  "preset": {
+    "Base": "The base REF2VA model with the Base steps and the sampler, scheduler and CFG from Director Settings.",
+    "Lightning LoRA": "The REF2VA model with the Lightning/turbo LoRA, using Lightning steps (normally 8).",
+    "Fast H3": "The distilled Fast H3 model with its fixed settings: 8 steps, euler, simple, CFG 1, shift 12/3, and its int8 video VAE."
   }
 }
