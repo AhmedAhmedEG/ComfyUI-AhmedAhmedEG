@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, align_to_continued_context
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, align_to_continued_context
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -452,18 +452,26 @@ class MiniMaxH3MasterDirector:
         run_report = []
         # Baseline sharpness of the current continuity chain (its first clip).
         # Used to stop grain/sharpness ratcheting up through carried tails.
-        chain_sharpness = {"clip": None, "value": None}
+        chain_sharpness = {"clip": None, "value": None, "contrast": None}
+        def _measure_chain_start(latent_dict):
+            video = extract_streams_from_av_latent(latent_dict)[0]
+            chain_sharpness["value"] = latent_sharpness(video)
+            chain_sharpness["contrast"] = latent_contrast(video)
         def set_chain_start(start_clip, latent_dict=None):
             chain_sharpness["clip"] = start_clip
             chain_sharpness["value"] = None
+            chain_sharpness["contrast"] = None
             if latent_dict is not None:
-                chain_sharpness["value"] = latent_sharpness(extract_streams_from_av_latent(latent_dict)[0])
+                _measure_chain_start(latent_dict)
         def chain_baseline():
             if chain_sharpness["value"] is None and chain_sharpness["clip"] is not None:
                 saved = cache_mgr.load_clip_latent(chain_sharpness["clip"])
                 if saved is not None:
-                    chain_sharpness["value"] = latent_sharpness(extract_streams_from_av_latent(saved)[0])
+                    _measure_chain_start(saved)
             return chain_sharpness["value"]
+        def chain_contrast():
+            chain_baseline()
+            return chain_sharpness["contrast"]
         def clear_dependent_approvals(ids):
             for item in clips:
                 if str(item['id']) in ids:
@@ -1125,7 +1133,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **({"carry_sharpness_guard": 1, "seam_bias_removal": 1} if is_chained_from_previous else {}),
+                    **({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1} if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1337,9 +1345,9 @@ class MiniMaxH3MasterDirector:
                     guard_mode=refine.get("guard_mode","burn_direction"), memory_planning=refine.get("memory_planning",True),memory_reserve_pct=refine.get("memory_reserve_pct",35.),
                 )
 
-            # Remove this hop's render bias: the clip's first tokens re-render the
-            # previous tail (same moment); H3 renders guided frames a few percent
-            # more contrasty, and that compounded hop after hop.
+            # Seamless at the join, contrast tied to the chain's first clip: H3
+            # re-renders the overlap a few percent more contrasty, which used to
+            # compound hop after hop (see anchor_chain_contrast).
             if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry"):
                 try:
                     from ..core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
@@ -1348,10 +1356,12 @@ class MiniMaxH3MasterDirector:
                 try:
                     guide_blocks, *_ = _video_tail_blocks(carry_av, continuation_prefix,
                         end_frame=carry_av.get("_mmx_visible_end") if clip_duration_policy == "new" else None)
-                    sampled_latent, removed = align_to_continued_context(sampled_latent, torch.cat(guide_blocks, dim=2))
-                    log.info("Master Director: clip %s seam bias removed (contrast x%.3f -> 1.0).", clip_id, removed)
+                    guide_video = torch.cat(guide_blocks, dim=2)
+                    sampled_latent, seam_scale, end_scale = anchor_chain_contrast(
+                        sampled_latent, guide_video, chain_contrast(), int(guide_video.shape[2]))
+                    log.info("Master Director: clip %s contrast anchored (join x%.3f, end x%.3f).", clip_id, seam_scale, end_scale)
                 except Exception as exc:
-                    log.warning("Master Director: seam bias check skipped for clip %s: %s", clip_id, exc)
+                    log.warning("Master Director: contrast anchoring skipped for clip %s: %s", clip_id, exc)
 
             # A clip that does not continue another starts a new chain baseline;
             # a continued clip with no known baseline (e.g. after source footage) seeds one.

@@ -156,40 +156,70 @@ def guard_carried_sharpness(latent_dict: Dict[str, Any], baseline: float, tail_t
     return out, amount
 
 
-SEAM_BIAS_MAX_SCALE = 0.15
+CHAIN_CONTRAST_DEADBAND = 0.02
+CHAIN_CONTRAST_MAX = 0.10
 
 
-def align_to_continued_context(latent_dict: Dict[str, Any], guide_video: torch.Tensor):
-    """Remove the per-hop render bias of a continued clip.
+def latent_contrast(video: torch.Tensor) -> float:
+    """Overall spread of a video latent [B,C,T,H,W] around its per-channel means,
+    skipping the special first latent frame. Colour (channel means) is ignored."""
+    v = video.detach().float()
+    if v.ndim != 5:
+        return 0.0
+    if v.shape[2] > 1:
+        v = v[:, :, 1:]
+    return float((v - v.mean(dim=(0, 2, 3, 4), keepdim=True)).std())
 
-    The first tokens of a continued clip re-render the same moment as the
-    previous clip's tail tokens (``guide_video``). H3 renders guided frames a few
-    percent more contrasty with a small colour offset; the rest of the clip
-    continues from that, so the bias compounded hop after hop. The difference on
-    this identical content is pure bias: estimate it per channel (skipping the
-    special first latent frame) and remove it from the whole clip.
-    Returns (latent_dict, contrast_ratio_removed).
+
+def anchor_chain_contrast(latent_dict: Dict[str, Any], guide_video: torch.Tensor,
+                          anchor_contrast: float, prefix_tokens: int):
+    """Keep a continued clip seamless at the join and its contrast tied to the chain start.
+
+    H3 renders the re-rendered overlap a few percent more contrasty than the
+    previous tail; left alone that compounds (harsher clip after clip), while
+    removing it from the whole clip every hop overshoots the other way. So:
+      * at the join the clip is scaled to match the previous tail exactly
+        (measured on the identical overlap content) -> no visible step;
+      * it then eases (cosine) to a scale that brings the clip's spread back
+        to the chain's first clip, ignoring differences within +-2% and never
+        more than +-10%, so real scene changes are left mostly alone.
+    One scalar for all channels, around per-channel means: contrast only, no
+    colour shift. Returns (latent_dict, seam_scale, end_scale).
     """
-    if latent_dict is None or guide_video is None:
-        return latent_dict, 1.0
+    if latent_dict is None or guide_video is None or not anchor_contrast:
+        return latent_dict, 1.0, 1.0
     samples = latent_dict.get("samples")
     streams, nested = unpack_av_samples(samples)
     video = streams[0]
     guide = guide_video.float().to(video.device)
     if video.ndim != 5 or guide.ndim != 5 or guide.shape[1] != video.shape[1] or guide.shape[3:] != video.shape[3:]:
-        return latent_dict, 1.0
-    n = min(int(guide.shape[2]), int(video.shape[2]) - 1)
-    if n < 3:
-        return latent_dict, 1.0
+        return latent_dict, 1.0, 1.0
+    T = int(video.shape[2])
+    n = min(int(guide.shape[2]), T - 1)
+    p = max(0, min(int(prefix_tokens), T - 1))
+    if n < 3 or T - p < 2:
+        return latent_dict, 1.0, 1.0
     v = video.float()
-    rendered, target = v[:, :, 1:n], guide[:, :, 1:n]
     axes = (0, 2, 3, 4)
-    r_mean, r_std = rendered.mean(dim=axes), rendered.std(dim=axes).clamp_min(1e-6)
-    t_mean, t_std = target.mean(dim=axes), target.std(dim=axes)
-    scale = (t_std / r_std).clamp(1 - SEAM_BIAS_MAX_SCALE, 1 + SEAM_BIAS_MAX_SCALE)
-    shift = t_mean - scale * r_mean
-    view = [1, -1, 1, 1, 1]
-    streams[0] = (v * scale.view(view) + shift.view(view)).to(video.dtype)
+    centred = lambda x: x - x.mean(dim=axes, keepdim=True)
+    rendered_spread = float(centred(v[:, :, 1:n]).std().clamp_min(1e-6))
+    guide_spread = float(centred(guide[:, :, 1:n]).std())
+    lo, hi = 1 - CHAIN_CONTRAST_MAX, 1 + CHAIN_CONTRAST_MAX
+    seam = min(hi, max(lo, guide_spread / rendered_spread))
+    ratio = float(anchor_contrast) / max(1e-6, float(centred(v[:, :, max(p, 1):]).std()))
+    if abs(ratio - 1) <= CHAIN_CONTRAST_DEADBAND:
+        end = 1.0
+    else:
+        end = ratio - CHAIN_CONTRAST_DEADBAND if ratio > 1 else ratio + CHAIN_CONTRAST_DEADBAND
+    end = min(hi, max(lo, end))
+    import math
+    weights = torch.ones(T, dtype=v.dtype, device=v.device) * seam
+    span = max(1, T - 1 - p)
+    for t in range(p, T):
+        k = 0.5 - 0.5 * math.cos(math.pi * min(1.0, (t - p) / span))
+        weights[t] = seam + (end - seam) * k
+    mean = v.mean(dim=axes, keepdim=True)
+    streams[0] = (mean + (v - mean) * weights.view(1, 1, T, 1, 1)).to(video.dtype)
     out = dict(latent_dict)
     if not nested:
         out["samples"] = streams[0]
@@ -197,7 +227,7 @@ def align_to_continued_context(latent_dict: Dict[str, Any], guide_video: torch.T
         out["samples"] = type(samples)(streams)
     else:
         out["samples"] = type(samples)(tuple(streams))
-    return out, float(1.0 / scale.median())
+    return out, seam, end
 
 
 def match_color_temperature_and_grade(
