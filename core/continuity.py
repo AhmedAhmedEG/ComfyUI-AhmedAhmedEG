@@ -232,6 +232,45 @@ def anchor_chain_contrast(latent_dict: Dict[str, Any], guide_video: torch.Tensor
     return out, seam, end
 
 
+JOIN_COLOUR_MAX_SHIFT = 0.25
+
+
+def remove_join_colour_bias(latent_dict: Dict[str, Any], guide_video: torch.Tensor):
+    """Cancel the colour cast H3 adds each time it continues a clip.
+
+    The first tokens of a continued clip re-render the moment the previous clip
+    ended on (``guide_video``). Measured on test chains, that re-render comes out
+    a little bluer every hop, and the clip continues from it, so the cast adds up
+    join after join. The per-channel mean difference on that identical moment is
+    the hop's colour bias; it is removed from the whole clip as a constant offset
+    (no scaling: contrast is handled by anchor_chain_contrast), capped per channel.
+    Returns (latent_dict, bias_size).
+    """
+    if latent_dict is None or guide_video is None:
+        return latent_dict, 0.0
+    samples = latent_dict.get("samples")
+    streams, nested = unpack_av_samples(samples)
+    video = streams[0]
+    guide = guide_video.float().to(video.device)
+    if video.ndim != 5 or guide.ndim != 5 or guide.shape[1] != video.shape[1] or guide.shape[3:] != video.shape[3:]:
+        return latent_dict, 0.0
+    n = min(int(guide.shape[2]), int(video.shape[2]) - 1)
+    if n < 3:
+        return latent_dict, 0.0
+    v = video.float()
+    axes = (0, 2, 3, 4)
+    bias = (v[:, :, 1:n].mean(dim=axes) - guide[:, :, 1:n].mean(dim=axes)).clamp(-JOIN_COLOUR_MAX_SHIFT, JOIN_COLOUR_MAX_SHIFT)
+    streams[0] = (v - bias.view(1, -1, 1, 1, 1)).to(video.dtype)
+    out = dict(latent_dict)
+    if not nested:
+        out["samples"] = streams[0]
+    elif isinstance(samples, (tuple, list)):
+        out["samples"] = type(samples)(streams)
+    else:
+        out["samples"] = type(samples)(tuple(streams))
+    return out, float(bias.norm())
+
+
 def match_color_temperature_and_grade(
     current_frames: torch.Tensor,
     prev_tail_frames: torch.Tensor,

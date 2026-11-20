@@ -66,5 +66,31 @@ class ChainContrast(unittest.TestCase):
         self.assertAlmostEqual(end, 1.10, places=3)
 
 
+class JoinColourBias(unittest.TestCase):
+    def test_overlap_colour_offset_is_removed_from_the_whole_clip(self):
+        from core.continuity import remove_join_colour_bias
+        g = torch.Generator().manual_seed(9)
+        guide = torch.randn((1, 6, 7, 8, 8), generator=g)
+        clean = torch.cat([guide, torch.randn((1, 6, 20, 8, 8), generator=g)], dim=2)
+        cast = torch.tensor([0.08, -0.05, 0.0, 0.03, 0.0, -0.02]).view(1, -1, 1, 1, 1)
+        latent = {"samples": (clean + cast, torch.ones((1, 4, 9))), "_mmx_visible_end": 50}
+        out, size = remove_join_colour_bias(latent, guide)
+        video, audio = extract_streams_from_av_latent(out)
+        self.assertAlmostEqual(size, float(cast.norm()), places=3)
+        self.assertTrue(torch.allclose(video, clean, atol=1e-4), 'cast removed everywhere, content and contrast kept')
+        self.assertTrue(torch.equal(audio, torch.ones((1, 4, 9))))
+        self.assertEqual(out["_mmx_visible_end"], 50)
+
+    def test_cap_and_incompatible_inputs(self):
+        from core.continuity import remove_join_colour_bias, JOIN_COLOUR_MAX_SHIFT
+        guide = torch.zeros((1, 3, 7, 4, 4))
+        clip = torch.cat([guide, torch.zeros((1, 3, 5, 4, 4))], dim=2) + 1.0
+        out, _ = remove_join_colour_bias({"samples": clip}, guide)
+        self.assertAlmostEqual(float(out["samples"].mean()), 1.0 - JOIN_COLOUR_MAX_SHIFT, places=5)
+        same = {"samples": clip}
+        self.assertIs(remove_join_colour_bias(same, torch.zeros((1, 2, 7, 4, 4)))[0], same)
+        self.assertIs(remove_join_colour_bias(same, None)[0], same)
+
+
 if __name__ == '__main__':
     unittest.main()

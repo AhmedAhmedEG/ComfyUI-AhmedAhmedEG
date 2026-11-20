@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -1133,7 +1133,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1} if is_chained_from_previous else {}),
+                    **({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1} if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1360,6 +1360,8 @@ class MiniMaxH3MasterDirector:
                     sampled_latent, seam_scale, end_scale = anchor_chain_contrast(
                         sampled_latent, guide_video, chain_contrast(), int(guide_video.shape[2]))
                     log.info("Master Director: clip %s contrast anchored (join x%.3f, end x%.3f).", clip_id, seam_scale, end_scale)
+                    sampled_latent, colour_bias = remove_join_colour_bias(sampled_latent, guide_video)
+                    log.info("Master Director: clip %s join colour bias removed (size %.3f).", clip_id, colour_bias)
                 except Exception as exc:
                     log.warning("Master Director: contrast anchoring skipped for clip %s: %s", clip_id, exc)
 
