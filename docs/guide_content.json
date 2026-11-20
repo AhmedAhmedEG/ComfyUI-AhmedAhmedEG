@@ -1,5 +1,5 @@
 {
-  "version": "1.7.52",
+  "version": "1.7.53",
   "reviewed": "2026-11-20",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -1673,18 +1673,24 @@
       ]
     },
     "MiniMaxH3SmartPreview": {
-      "purpose": "Review the latest completed clip or the current full sequence in the browser.",
-      "use": "Watch results update after each completed clip without exporting the entire movie after every run.",
+      "purpose": "Review the latest clip, all clips, or any clips you pick, at any saved stage, in the browser.",
+      "use": "Watch results update after each completed clip, and send exactly the clips you choose to the images/audio outputs (for example to frame interpolation) without exporting the whole movie.",
       "wiring": [
         "Master.project_state → Smart Preview.project_state"
       ],
       "steps": [
         "Connect the project_state output from the Master you want to inspect.",
-        "Choose Latest clip to review one result, or Full video to inspect the sequence and its joins.",
-        "Use the stage selector for available First Pass or Refine stages; keep Final Output for the normal result.",
-        "Choose preview resolution, autoplay and Save preview as needed. These do not change generation settings."
+        "Under Clips, choose Latest, All, or click individual clips to add or remove them. Clips with no saved result at the chosen stage are dimmed.",
+        "Under Stage, pick Final or another stage this project really has (First pass, Before refine, Refine pass N). The row only appears when there is more than one stage.",
+        "The line under the player states what plays and what the images/audio outputs carry: the same clips, stage and resolution.",
+        "Choose resolution, Autoplay, Loop and Save preview as needed. These do not change generation settings."
       ],
       "examples": [
+        {
+          "goal": "Interpolate only some clips",
+          "setup": "Click clips 2, 4 and 5, wire images/audio/fps into Frame Interpolation and run.",
+          "expect": "Only those three clips, in timeline order, reach the interpolation node; the outputs line confirms the selection."
+        },
         {
           "goal": "Review a four-clip run as it progresses",
           "setup": "Leave the preview connected and choose Full video.",

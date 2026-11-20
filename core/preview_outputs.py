@@ -2,14 +2,14 @@
 from pathlib import Path
 
 
-def load_preview_outputs(state,scope='latest',quality='original',stream='final',*,want_images=True):
+def load_preview_outputs(state,scope='latest',quality='original',stream='final',*,want_images=True,clip_ids=None):
     import torch
     from .preview import create_preview_plan
     from .cache_manager import ProjectCacheManager,load_frame_tensor
     from .media_io import resolve_input_path
     from .audio_post import slice_audio_frames,join_timeline_audio
     from .output_retention import assemble_frames
-    info=create_preview_plan(state,scope,quality=quality,stream=stream)
+    info=create_preview_plan(state,scope,quality=quality,stream=stream,clip_ids=clip_ids)
     if not info.get('found'):raise ValueError('Generate a clip before using Smart Preview outputs.')
     manager=ProjectCacheManager(state['project_id'])
     import json

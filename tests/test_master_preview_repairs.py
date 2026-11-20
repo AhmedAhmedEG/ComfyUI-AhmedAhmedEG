@@ -252,3 +252,32 @@ class MasterPreviewRepairs(unittest.TestCase):
         incoming[0]['prompt'] = 'new'
         result = merge_authored_timeline({'clips': clips}, {'clips': incoming})
         self.assertEqual([c['validated'] for c in result['clips']], [True, True, True])
+
+
+class SmartPreviewChosenClips(unittest.TestCase):
+    def test_chosen_clips_play_in_timeline_order_and_report_stages(self):
+        with master() as case:
+            clips = [{'id': c, 'name': c.upper(), 'type': 'T2V', 'duration': 1} for c in ('a', 'b', 'c')]
+            state = json.loads(case.execute(clips)[-1])
+            info = create_preview_plan(state, 'clips', case.temp.name, clip_ids=['c', 'a'])
+            self.assertTrue(info['found'])
+            self.assertEqual(info['clip_ids'], ['a', 'c'])
+            self.assertEqual(info['label'], '2 chosen clips')
+            self.assertEqual(info['streams'], ['final'])
+            self.assertEqual([(c['id'], c['ready']) for c in info['clips']], [('a', True), ('b', True), ('c', True)])
+            other = create_preview_plan(state, 'clips', case.temp.name, clip_ids=['b'])
+            self.assertNotEqual(other['key'], info['key'])
+            empty = create_preview_plan(state, 'clips', case.temp.name, clip_ids=[])
+            self.assertFalse(empty['found'])
+            self.assertIn('Choose', empty['label'])
+
+    def test_outputs_follow_the_chosen_clips(self):
+        from core.preview_outputs import load_preview_outputs
+        with master() as case:
+            clips = [{'id': c, 'type': 'T2V', 'duration': 1} for c in ('a', 'b')]
+            state = json.loads(case.execute(clips)[-1])
+            with patch('core.preview.ProjectCacheManager', lambda pid, base=None: ProjectCacheManager(pid, case.temp.name)), \
+                 patch('core.cache_manager.ProjectCacheManager', lambda pid, base=None: ProjectCacheManager(pid, case.temp.name)):
+                one, _, _ = load_preview_outputs(state, 'clips', clip_ids=['b'])
+                both, _, _ = load_preview_outputs(state, 'full')
+            self.assertLess(one.shape[0], both.shape[0])

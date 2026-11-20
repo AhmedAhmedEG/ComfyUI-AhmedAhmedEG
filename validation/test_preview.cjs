@@ -46,7 +46,7 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
   const quality=w.document.querySelector('.mmx-preview-quality');quality.value='540p';quality.onchange();await tick();
   assert.equal(calls.at(-1).quality,'540p');assert(video.src.includes('540p'));
   assert(downloads.some(p=>p.includes('full-revision')),'Full movie is prebuffered without playback');
-  assert.deepEqual([...select.options].map(o=>o.value),['latest','full']);
+  assert.deepEqual([...select.options].map(o=>o.value),['latest','full','clips']);
   assert(!w.document.querySelector('.mmx-preview-take'));
   const retained=video.src;failed=true;await player.refresh();assert.equal(video.src,retained,'A temporary status failure must not discard buffered video');
   assert(w.document.querySelector('.mmx-preview-status').textContent.includes('Connection interrupted'));

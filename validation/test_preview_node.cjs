@@ -19,6 +19,14 @@ assert.equal(JSON.parse(node.widgets[0].value).scope,'full','Existing scope sele
 const previousRequests=requests.length;
 node.onExecuted({mmx_project:[JSON.stringify(timeline)]});await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(requests.length,previousRequests+1);assert.equal(requests.at(-1).master_input,true,'Executed input enables preview updates');
+const chips=()=>[...w.document.querySelectorAll('.mmx-pv-chip')];
+assert.deepEqual(chips().map(c=>c.textContent),['Latest','All','1Clip 1'],'Latest, All and one chip per clip');
+chips()[2].click();await new Promise(resolve=>setTimeout(resolve,10));
+assert.deepEqual(JSON.parse(node.widgets[0].value).clip_ids,['one']);assert.equal(JSON.parse(node.widgets[0].value).scope,'clips','Clicking a clip outputs exactly that clip');
+assert.deepEqual(requests.at(-1).clip_ids,['one']);
+assert(w.document.querySelector('.mmx-pv-outputs').textContent.includes('1 chosen clip'));
+assert.equal(w.document.querySelectorAll('.mmx-pv-pill').length,0,'No stage choices when only the final stage exists');
+chips()[1].click();await new Promise(resolve=>setTimeout(resolve,10));assert.equal(JSON.parse(node.widgets[0].value).scope,'full');
 node.outputs=[];
 node.properties.mmx_preview_timeline={project_id:'demo',clips:[]};node.onConfigure();await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(requests.at(-1).master_input,true,'Undo/redo in the same page keeps what the connected Master sent');assert.equal(requests.at(-1).timeline.clips.length,1,'Undo does not fall back to an older stored clip list');

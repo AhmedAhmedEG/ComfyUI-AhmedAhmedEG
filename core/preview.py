@@ -10,7 +10,24 @@ from .cache_manager import ProjectCacheManager, safe_component, load_frame_tenso
 from .media_io import resolve_input_path
 
 
-def cached_preview_plan(project_id, scope='latest', base_dir=None, quality='original', stream='final'):
+def _clean_clip_ids(clip_ids):
+    return [safe_component(str(c)) for c in (clip_ids or []) if str(c or '').strip()][:1000]
+
+
+def available_streams(manifest):
+    """Stages that actually exist in this project's saved results, in display order."""
+    clips = manifest.get("clips", {}) or {}
+    out = ["final"]
+    if any((v or {}).get("has_frames") for v in (manifest.get("first_pass", {}) or {}).values()):
+        out.append("first_pass")
+    if any((v or {}).get("has_pre_refine") for v in clips.values()):
+        out.append("pre_refine")
+    passes = sorted({int(r["pass"]) for v in clips.values() for r in (v or {}).get("refine_passes", []) or [] if str(r.get("pass", "")).isdigit()})
+    out.extend(f"pass:{n}" for n in passes)
+    return out
+
+
+def cached_preview_plan(project_id, scope='latest', base_dir=None, quality='original', stream='final', clip_ids=None):
     """Restore only existing encodes. Opening a viewer must not create cache files."""
     from types import SimpleNamespace
     from .cache_manager import get_cache_root_dir
@@ -23,6 +40,8 @@ def cached_preview_plan(project_id, scope='latest', base_dir=None, quality='orig
         try:
             plan = json.loads(path.read_text(encoding='utf-8'))
             if any(plan.get(k) != v for k,v in [('project_id',project_id),('scope',scope),('quality',quality),('stream',stream)]):
+                continue
+            if scope == 'clips' and plan.get('clip_ids') != _clean_clip_ids(clip_ids):
                 continue
             playback = None
             try: playback = playback_manifest(manager, plan, read_only=True)
@@ -40,9 +59,10 @@ def cached_preview_plan(project_id, scope='latest', base_dir=None, quality='orig
         'label':'Waiting for Master output. Existing preview caches are kept.'}
 
 
-def create_preview_plan(state, scope="latest", base_dir=None, quality="original", stream="final", run_context=None):
-    if scope not in ("latest", "full"):
-        raise ValueError("Preview scope must be latest or full.")
+def create_preview_plan(state, scope="latest", base_dir=None, quality="original", stream="final", run_context=None, clip_ids=None):
+    """scope: "latest" (newest saved clip), "full" (every saved clip) or "clips" (the chosen ``clip_ids``)."""
+    if scope not in ("latest", "full", "clips"):
+        raise ValueError("Preview scope must be latest, full or clips.")
     if quality not in ("original", "540p", "720p", "1080p"):
         raise ValueError("Unknown preview resolution.")
     if stream not in ("final","first_pass","pre_refine") and not (stream.startswith("pass:") and stream[5:].isdigit()):
@@ -52,11 +72,15 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
     if not isinstance(shots, list) or len(shots) > 1000:
         raise ValueError("Invalid preview timeline.")
     rows = []
+    chosen = _clean_clip_ids(clip_ids)
     shots_to_read = shots
+    statuses = []
     live = run_context
     for index, shot in enumerate(shots_to_read):
         cid = safe_component(shot.get("id", f"clip_{index+1}"))
         meta = manager._manifest.get("clips", {}).get(cid, {})
+        status = {"id": cid, "name": shot.get("name", cid), "index": index, "ready": False}
+        statuses.append(status)
         frames_kind="frames";audio_kind="audio";direct_frames=direct_audio=None
         if stream=="first_pass":
             meta=manager._manifest.get("first_pass",{}).get(cid,{})
@@ -75,10 +99,12 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         if not meta.get("has_frames"):
             source = shot.get("source")
             if scope == "full" and shot.get("locked") and source and (isinstance(source, str) or source.get("filename") and not source.get("ref_id")):
+                status["ready"] = True
                 rows.append({"clip_id": cid, "name": shot.get("name", cid), "source": shot,
                              "updated_at": 0, "trim_prefix": 0, "index": index})
             continue
         generation = meta.get("generation")
+        status["ready"] = True
         rows.append({"clip_id": cid, "name": shot.get("name", cid),
             "frames": direct_frames or os.path.basename(manager._clip_artifact_path(cid, frames_kind, generation)),
             "audio": direct_audio or (os.path.basename(manager._clip_artifact_path(cid, audio_kind, generation)) if meta.get("has_audio") else None),
@@ -88,11 +114,16 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
             "index": index})
     if scope == "latest":
         rows = [max(rows, key=lambda row: row["updated_at"])] if rows else []
+    elif scope == "clips":
+        rows = [row for row in rows if row["clip_id"] in chosen]
+    common = {"clips": statuses, "streams": available_streams(manager._manifest)}
     if not rows:
+        label = ("None of the chosen clips has a saved result at this stage." if scope == "clips" and chosen
+                 else "Choose one or more clips." if scope == "clips" else "No completed clips yet. Generate a shot first.")
         return {"found": False, "scope": scope, "run_active": live is not None,
                 "project_id": manager.project_id, "stream": stream,
                 "invalidated_clip_ids": manager._manifest.get('invalidated_clips', []),
-                "label": "No completed clips yet. Generate a shot first."}
+                "label": label, **common}
     # Trim a predecessor's handoff only when its immediate successor is present.
     for left, right in zip(rows, rows[1:]):
         if right.get("index", -2) == left.get("index", -1) + 1:
@@ -104,6 +135,7 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
                 trim = min(trim, max(0, int(left["frame_count"]) - int(left.get("trim_prefix", 0)) - 1))
             left["trim_tail"] = trim
     plan = {"version": 6, "project_id": manager.project_id, "scope": scope, "quality": quality, "stream":stream,"rows": rows,
+        **({"clip_ids": chosen} if scope == "clips" else {}),
         "source_state": {k: state[k] for k in ("width", "height", "resolution", "references") if k in state},
         "gain_match": bool(state.get("audio_gain_match", True)), "fade_ms": float(state.get("audio_fade_ms", 15))}
     key = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -125,8 +157,10 @@ def create_preview_plan(state, scope="latest", base_dir=None, quality="original"
         "stream": stream, "clip_generations": {row['clip_id']: row.get('generation') for row in rows if row.get('generation')},
         "clip_ids": [row["clip_id"] for row in rows], "clip_count": len(rows), "total_clips": len(shots),
         "missing_clips": [{"id": s["id"], "name": s.get("name", s["id"])} for s in shots if s.get("id") not in {row["clip_id"] for row in rows}] if scope == "full" else [],
-        "run_active": live is not None,
-        "label": rows[0]["name"] if scope != "full" else f"{len(rows)}/{len(shots)} completed clips"}
+        "run_active": live is not None, **common,
+        "label": rows[0]["name"] if scope == "latest" else
+                 f"{len(rows)}/{len(shots)} completed clips" if scope == "full" else
+                 (rows[0]["name"] if len(rows) == 1 else f"{len(rows)} chosen clips")}
 
 
 def preview_path(project_id, key, base_dir=None):

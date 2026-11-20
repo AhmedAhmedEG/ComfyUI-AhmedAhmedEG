@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.52"
+__version__ = "1.7.53"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -129,13 +129,15 @@ if getattr(PromptServer, "instance", None) is not None:
             master_state = master_preview_input(timeline['project_id']) if body.get('master_input', False) else None
             if master_state is None:
                 result = await asyncio.to_thread(cached_preview_plan, timeline['project_id'],
-                    body.get('scope','latest'), quality=body.get('quality','original'),stream=body.get('stream','final'))
+                    body.get('scope','latest'), quality=body.get('quality','original'),stream=body.get('stream','final'),
+                    clip_ids=body.get('clip_ids'))
                 return web.json_response(result, headers={'Cache-Control':'no-store'})
             timeline = master_state
             context = preview_run_context(timeline['project_id'], timeline.get('clips', []),
                 PromptServer.instance.prompt_queue, body.get('stream', 'final'))
             result = await asyncio.to_thread(create_preview_plan, timeline, body.get("scope", "latest"),
-                quality=body.get("quality", "original"),stream=body.get("stream","final"), run_context=context)
+                quality=body.get("quality", "original"),stream=body.get("stream","final"), run_context=context,
+                clip_ids=body.get("clip_ids"))
             return web.json_response(result)
         except (ValueError, KeyError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)

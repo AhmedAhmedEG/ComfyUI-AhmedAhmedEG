@@ -7,7 +7,7 @@ class MiniMaxH3SmartPreview:
     def INPUT_TYPES(cls):
         return {"required": {"project_state": ("STRING", {"forceInput": True,
             "tooltip": "Connect the Master's project_state output. Reads completed shot caches without exporting the full movie."})},
-            "optional":{"preview_settings":('STRING',{'default':'{}','multiline':False,'tooltip':'Viewer options saved by the preview panel (stream, scope, quality, autoplay, loop). Scope, quality and stream also choose what the images/audio outputs carry. Managed by the panel; no need to edit.'})},
+            "optional":{"preview_settings":('STRING',{'default':'{}','multiline':False,'tooltip':'Viewer options saved by the preview panel. The clips, stage and resolution you pick there are exactly what the images/audio outputs carry. Managed by the panel; no need to edit.'})},
             "hidden":{"prompt":"PROMPT","unique_id":"UNIQUE_ID"}}
 
     RETURN_TYPES = ('IMAGE','AUDIO','FLOAT')
@@ -35,5 +35,6 @@ class MiniMaxH3SmartPreview:
             except ImportError:
                 from core.preview_outputs import load_preview_outputs
             options=json.loads(preview_settings or '{}')
-            outputs=load_preview_outputs(state,options.get('scope','latest'),options.get('quality','original'),options.get('stream','final'),want_images=0 in linked)
+            outputs=load_preview_outputs(state,options.get('scope','latest'),options.get('quality','original'),options.get('stream','final'),
+                want_images=0 in linked,clip_ids=options.get('clip_ids'))
         return {"ui": {"mmx_project": [json.dumps(state, ensure_ascii=False)]}, "result": outputs}
