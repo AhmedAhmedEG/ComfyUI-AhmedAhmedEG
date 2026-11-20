@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_look, pixel_look_stats, latent_sharpness, latent_contrast, anchor_chain_contrast
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_look, pixel_look_stats, latent_sharpness, latent_contrast, anchor_chain_contrast
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -452,7 +452,7 @@ class MiniMaxH3MasterDirector:
         run_report = []
         # Baseline sharpness of the current continuity chain (its first clip).
         # Used to stop grain/sharpness ratcheting up through carried tails.
-        chain_sharpness = {"clip": None, "value": None, "contrast": None, "pixels": None}
+        chain_sharpness = {"clip": None, "value": None, "contrast": None}
         def _measure_chain_start(latent_dict):
             video = extract_streams_from_av_latent(latent_dict)[0]
             chain_sharpness["value"] = latent_sharpness(video)
@@ -461,7 +461,6 @@ class MiniMaxH3MasterDirector:
             chain_sharpness["clip"] = start_clip
             chain_sharpness["value"] = None
             chain_sharpness["contrast"] = None
-            chain_sharpness["pixels"] = None
             if latent_dict is not None:
                 _measure_chain_start(latent_dict)
         def chain_baseline():
@@ -473,15 +472,6 @@ class MiniMaxH3MasterDirector:
         def chain_contrast():
             chain_baseline()
             return chain_sharpness["contrast"]
-        def chain_pixels():
-            # Look of the chain's first clip as delivered (its own Look edits undone).
-            if chain_sharpness["pixels"] is None and chain_sharpness["clip"] is not None:
-                start_frames = cache_mgr.load_clip_frames(chain_sharpness["clip"])
-                if start_frames is not None:
-                    start_item = next((c for c in clips if str(c.get("id")) == str(chain_sharpness["clip"])), {})
-                    sample = start_frames[torch.linspace(0, start_frames.shape[0] - 1, min(24, start_frames.shape[0])).long()].float()
-                    chain_sharpness["pixels"] = pixel_look_stats(undo_image_edits(sample, start_item.get("color")))
-            return chain_sharpness["pixels"]
         def clear_dependent_approvals(ids):
             for item in clips:
                 if str(item['id']) in ids:
@@ -1081,18 +1071,9 @@ class MiniMaxH3MasterDirector:
             # grain/contrast do not ratchet up hop after hop (delivered clips unchanged).
             carry_av = previous_av
             if continuation_prefix and previous_av is not None:
-                try:
-                    stage('Continuity · keeping the carried look at the chain start')
-                    carry_av, look_fix = guard_carried_look(previous_av, chain_pixels(), video_vae,
-                        lambda window: decode_video_latent(video_vae, window),
-                        end_frame=previous_av.get("_mmx_visible_end") if clip_duration_policy == "new" else None,
-                        window_frames=continuation_prefix)
-                    if look_fix:
-                        log.info("Master Director: carried context for clip %s corrected toward the chain start: %s.", clip_id,
-                                 ", ".join(f"{k} {v:.3f}" for k, v in look_fix.items()))
-                except Exception as exc:
-                    carry_av = previous_av
-                    log.warning("Master Director: carried look check skipped for clip %s: %s", clip_id, exc)
+                carry_av, softened = guard_carried_sharpness(previous_av, chain_baseline())
+                if softened:
+                    log.info("Master Director: carried context for clip %s softened %.2f to the chain's baseline sharpness.", clip_id, softened)
             if not latent_carry and continuation_prefix:
                 try:
                     from ..core.motion_context import apply_motion_context
@@ -1152,7 +1133,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **({"carry_look_guard": 1, "chain_contrast_anchor": 1} if is_chained_from_previous else {}),
+                    **({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1} if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1399,8 +1380,6 @@ class MiniMaxH3MasterDirector:
             log_memory_boundary('before_decode', clip_id, decoded_output)
             shot_event(unique_id, project_id, clip_id, 'decoding', index=clip_idx+1, total=len(clips))
             decoded_frames = decode_video_latent(video_vae, v_stream)
-            if chain_sharpness["clip"] == clip_id and chain_sharpness["pixels"] is None and canon_mode != MODE_INPAINT:
-                chain_sharpness["pixels"] = pixel_look_stats(decoded_frames)
             if source is not None:
                 decoded_frames = decoded_frames[:source["frames"].shape[0]]
             elif continuation_prefix:

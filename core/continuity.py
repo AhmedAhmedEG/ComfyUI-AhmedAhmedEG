@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import torch
 
@@ -154,133 +154,6 @@ def guard_carried_sharpness(latent_dict: Dict[str, Any], baseline: float, tail_t
     else:
         out["samples"] = type(samples)(tuple(streams))
     return out, amount
-
-
-LOOK_DETAIL_TOLERANCE = 1.03
-LOOK_MAX_BLUR = 0.85
-LOOK_CONTRAST_DEADBAND, LOOK_CONTRAST_MAX = 0.03, 0.10
-LOOK_SATURATION_DEADBAND, LOOK_SATURATION_MAX = 0.05, 0.10
-LOOK_WINDOW_FRAMES = 22  # the default context run; callers pass the actual one
-
-
-def _luma(f: torch.Tensor) -> torch.Tensor:
-    return 0.299 * f[..., 0] + 0.587 * f[..., 1] + 0.114 * f[..., 2]
-
-
-def _detail(f: torch.Tensor) -> float:
-    y = _luma(f)
-    lap = (4 * y[:, 1:-1, 1:-1] - y[:, :-2, 1:-1] - y[:, 2:, 1:-1] - y[:, 1:-1, :-2] - y[:, 1:-1, 2:]).abs().mean()
-    return float(lap / y.std().clamp_min(1e-6))
-
-
-def _sample(frames: torch.Tensor, count: int = 24) -> torch.Tensor:
-    f = frames[..., :3]
-    if f.shape[0] > count:
-        f = f[torch.linspace(0, f.shape[0] - 1, count).long()]
-    return f.float()
-
-
-def pixel_look_stats(frames: torch.Tensor) -> Dict[str, float]:
-    """Fine detail (contrast-normalised Laplacian), luma contrast and saturation of IMAGE frames [N,H,W,3]."""
-    f = _sample(frames)
-    return {"detail": _detail(f), "contrast": float(_luma(f).std()),
-            "saturation": float((f.max(-1).values - f.min(-1).values).mean())}
-
-
-def _pixel_blur(frames: torch.Tensor) -> torch.Tensor:
-    import torch.nn.functional as F
-    x = frames.permute(0, 3, 1, 2)
-    c = x.shape[1]
-    k = torch.tensor([1.0, 4.0, 6.0, 4.0, 1.0], dtype=x.dtype, device=x.device) / 16
-    x = F.conv2d(F.pad(x, (2, 2, 0, 0), mode="replicate"), k.view(1, 1, 1, 5).repeat(c, 1, 1, 1), groups=c)
-    x = F.conv2d(F.pad(x, (0, 0, 2, 2), mode="replicate"), k.view(1, 1, 5, 1).repeat(c, 1, 1, 1), groups=c)
-    return x.permute(0, 2, 3, 1)
-
-
-def _toward(ratio: float, deadband: float, cap: float) -> float:
-    if abs(ratio - 1) <= deadband:
-        return 1.0
-    ratio = ratio - deadband if ratio > 1 else ratio + deadband
-    return min(1 + cap, max(1 - cap, ratio))
-
-
-def correct_look_toward(frames: torch.Tensor, baseline: Dict[str, float]):
-    """Bring frames' contrast, saturation (both ways, gently) and fine detail
-    (down only) back toward the chain start's. Returns (frames, report)."""
-    f = frames[..., :3].float()
-    stats = pixel_look_stats(f)
-    report = {}
-    k = _toward(baseline["contrast"] / max(stats["contrast"], 1e-6), LOOK_CONTRAST_DEADBAND, LOOK_CONTRAST_MAX)
-    if k != 1.0:
-        m = _luma(f).mean()
-        f = m + (f - m) * k
-        report["contrast"] = k
-    sat = float((_sample(f).max(-1).values - _sample(f).min(-1).values).mean())
-    k = _toward(baseline["saturation"] / max(sat, 1e-6), LOOK_SATURATION_DEADBAND, LOOK_SATURATION_MAX)
-    if k != 1.0:
-        y = _luma(f).unsqueeze(-1)
-        f = y + (f - y) * k
-        report["saturation"] = k
-    target = baseline["detail"] * LOOK_DETAIL_TOLERANCE
-    probe = _sample(f, 8)
-    if _detail(probe) > target:
-        soft_probe = _pixel_blur(probe)
-        lo, hi = 0.0, LOOK_MAX_BLUR
-        for _ in range(12):
-            mid = (lo + hi) / 2
-            if _detail(probe + mid * (soft_probe - probe)) > target:
-                lo = mid
-            else:
-                hi = mid
-        f = f + hi * (_pixel_blur(f) - f)
-        report["detail"] = hi
-    return f.clamp(0, 1), report
-
-
-def guard_carried_look(latent_dict: Dict[str, Any], baseline: Dict[str, float], vae, decode,
-                       end_frame: Optional[int] = None, window_frames: int = LOOK_WINDOW_FRAMES):
-    """Stop grain, contrast and saturation compounding through the carried context.
-
-    H3 adds a little fine detail and contrast every time it continues a clip, and
-    the next clip continues from that, so it ratchets. The carried tail is
-    decoded, corrected in pixels toward the chain's first clip, and only the
-    difference ``encode(corrected) - encode(original)`` is added to the latent:
-    the VAE's own encode bias appears in both and cancels. Delivered clips are
-    unchanged; only what the next clip continues from is touched.
-    Returns (latent_dict_for_carry, report).
-    """
-    if latent_dict is None or not baseline:
-        return latent_dict, {}
-    try:
-        from .vendor.aimixer.director.h3_motion_context import _phase_aligned_tail_start, steps_for_frames
-    except ImportError:
-        from core.vendor.aimixer.director.h3_motion_context import _phase_aligned_tail_start, steps_for_frames
-    samples = latent_dict.get("samples")
-    streams, nested = unpack_av_samples(samples)
-    video = streams[0]
-    steps = steps_for_frames(int(window_frames))
-    if video.ndim != 5 or steps is None or steps > int(video.shape[2]):
-        return latent_dict, {}
-    start, _pin_end, _gap = _phase_aligned_tail_start(int(video.shape[2]), steps, end_frame)
-    window = video[:, :, start:start + steps]
-    frames = decode(window)[..., :3].float()
-    corrected, report = correct_look_toward(frames, baseline)
-    if not report:
-        return latent_dict, {}
-    delta = (vae.encode(corrected) - vae.encode(frames)).float().cpu()
-    if tuple(delta.shape) != tuple(window.shape):
-        return latent_dict, {}
-    out_video = video.float().clone()
-    out_video[:, :, start:start + steps] += delta
-    streams[0] = out_video.to(video.dtype)
-    out = dict(latent_dict)
-    if not nested:
-        out["samples"] = streams[0]
-    elif isinstance(samples, (tuple, list)):
-        out["samples"] = type(samples)(streams)
-    else:
-        out["samples"] = type(samples)(tuple(streams))
-    return out, report
 
 
 CHAIN_CONTRAST_DEADBAND = 0.02
