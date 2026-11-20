@@ -1,11 +1,11 @@
 {
-  "version": "1.7.51",
-  "reviewed": "2026-10-23",
+  "version": "1.7.52",
+  "reviewed": "2026-11-20",
   "title": "H3 Director — User Guide",
   "nodes": {
     "MiniMaxH3MasterNode": {
       "purpose": "Build and generate a sequence of clips from one timeline.",
-      "use": "Start here for prompts, per-clip references, continuity, approval and clip LoRAs.",
+      "use": "Start here for prompts, per-clip references, continuity, memory, approval and clip LoRAs.",
       "wiring": [
         "Director Settings.config → Master.config",
         "Reference Pack.ref_pack → Master.ref_pack",
@@ -35,6 +35,11 @@
           "goal": "Replace a middle clip",
           "setup": "Unapprove the clip. Continuity-dependent later approvals are invalidated while their cached results remain until replacement.",
           "expect": "A run regenerates the eligible clips and replaces their current results. Approved independent results remain reusable."
+        },
+        {
+          "goal": "Carry a room or outfit across a cut",
+          "setup": "On a REF2V clip open Memory and choose an earlier clip, whole or a part of it, with a short note such as 'the kitchen, wide view'.",
+          "expect": "That moment becomes a reference video and a visible note is added to the prompt; the earlier clip must be generated first."
         }
       ],
       "notes": [
@@ -44,7 +49,9 @@
         "The yellow outline is selection. Saved-result indicators, approval and the active generation animation have different meanings.",
         "Identical reruns reuse one active sampling configuration sharing native base weights. Model, adapter or sigma changes replace it. CPU adapter file reuse is bounded to 256 MiB and eight files; oversized adapters are not kept in an extra file cache. ComfyUI still controls residency and its Free Memory control clears this handle. Prompt/seed changes do not invalidate model configuration.",
         "Clear VRAM in the always-visible Project header requests native GPU model unloading when the queue is idle. Saved clips, encoded references and project files remain. The next generation loads the model again. Clip boundaries preserve native reusable weight buffers; ComfyUI still owns end-of-node cleanup and memory-pressure eviction.",
-        "The floating Server monitor shows server CPU, GPU utilization and VRAM. Drag its header to move it; minimize to pause readings. Toggle it in ComfyUI Settings → MiniMax H3 → Monitor. Position and GPU choice persist in this browser; GPU readings include other applications on the server. Shared GPU RAM is resident GPU-accessible system memory read directly through WSL, when supported; a dash means unavailable. No SSH dependency is used."
+        "The floating Server monitor shows server CPU, GPU utilization and VRAM. Drag its header to move it; minimize to pause readings. Toggle it in ComfyUI Settings → MiniMax H3 → Monitor. Position and GPU choice persist in this browser; GPU readings include other applications on the server. Shared GPU RAM is resident GPU-accessible system memory read directly through WSL, when supported; a dash means unavailable. No SSH dependency is used.",
+        "Structured Prompt is a view of the clip's prompt text: free-written text appears in the main section, and editing a section rewrites the text with official section headings. Raw and Structured always show the same prompt.",
+        "Clip memory uses the reference video slots (up to 3 videos and 15 seconds in total per clip, together with Reference Pack videos). The note it adds is shown under the prompt and in the Memory tab."
       ],
       "options": {
         "video_vae": {

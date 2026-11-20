@@ -136,6 +136,7 @@ def apply_latent_continue(
     audio_vae=None,
     audio_context_length: int | None = None,
     seam_min_mask: float | None = None,
+    freeze_prefix: bool = False,
 ) -> tuple[dict, int, int]:
     """Copy prev AV tail into ``latent`` samples + noise_mask. No conditioning edits.
 
@@ -265,6 +266,9 @@ def apply_latent_continue(
     out["samples"] = _nested(patched_video, patched_audio, template)
     seam = clamp_seam_min_mask(SEAM_MIN_MASK if seam_min_mask is None else seam_min_mask)
     weights = prefix_token_weights(t_tail, seam_min=seam)
+    if freeze_prefix:
+        # Every carried token stays exactly as saved (mask 0), like a plain masked continuation.
+        seam, weights = 0.0, tuple(0.0 for _ in weights)
     video_mask = _spatial_video_mask(
         int(patched_video.shape[2]),
         t_tail,

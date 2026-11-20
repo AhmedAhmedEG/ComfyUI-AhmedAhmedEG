@@ -880,6 +880,26 @@ class MiniMaxH3MasterDirector:
                 guide_frames = None
                 is_chained_from_previous = False
                 clip_chained_flags[clip_idx] = False
+            # Clip memory: earlier moments of this film become extra reference
+            # videos, introduced by a visible note in the prompt.
+            memory_note_text = ""
+            if clip_item.get("memory") and not group:
+                if canon_mode not in ("REF2VA", "RV2V"):
+                    raise ValueError("Clip memory needs a REF2V or RV2V clip; it passes earlier moments as reference videos.")
+                try:
+                    from ..core.visual_memory import memory_windows, memory_note
+                except ImportError:
+                    from core.visual_memory import memory_windows, memory_note
+                manifest_clips = cache_mgr._manifest.get("clips", {})
+                windows = memory_windows(clip_item, clips, clip_idx, cache_mgr.load_clip_frames,
+                    trim_prefix=lambda cid: manifest_clips.get(cid, {}).get("trim_prefix", 0))
+                first_memory_video = len(ref_videos) + 1
+                for offset, window in enumerate(windows):
+                    ref_videos[f"ref_video_{first_memory_video + offset}"] = window["frames"]
+                memory_note_text = memory_note(windows, first_memory_video)
+                if windows:
+                    log.info("Master Director: clip %s remembers %s.", clip_id,
+                        ", ".join(f"{w['name']} {w['start']:.2f}-{w['end']:.2f}s" for w in windows))
             audio_mode = clip_item.get("audio_mode", timeline.get("audio_mode", "generate"))
             if str(audio_mode).lower() not in ("generate", "source", "keep_source", "original", "mute"):
                 raise ValueError(f"Unknown clip audio mode: {audio_mode!r}")
@@ -955,6 +975,14 @@ class MiniMaxH3MasterDirector:
             tag_map = build_refmod_tag_map(clip_refmod_items, len(ref_images), len(ref_videos), len(ref_audios))
             clip_prompt_mode = clip_item.get("prompt_mode", prompt_mode)
             clip_structured = clip_item.get("structured_prompt")
+            if clip_item.get("prompt_mode") == "structured" and str(clip_prompt_text or "").strip():
+                # The prompt text is the source of truth; the stored sections
+                # are only a view of it and may be stale in older projects.
+                try:
+                    from ..core.prompt_engine import structured_fields_from_text
+                except ImportError:
+                    from core.prompt_engine import structured_fields_from_text
+                clip_structured = structured_fields_from_text(clip_prompt_text, canon_mode in ("REF2VA", "V2V", "RV2V"))
 
             if clip_prompt_mode == "structured" and isinstance(clip_structured, dict) and any(str(v).strip() for v in clip_structured.values()):
                 c_soundscape = clip_structured.get("overall_soundscape") or clip_structured.get("soundscape", "")
@@ -1017,6 +1045,12 @@ class MiniMaxH3MasterDirector:
             policy = timeline.get("shared_prompt_policy", "prepend")
             if policy not in ("prepend", "append"):
                 raise ValueError("Shared prompt policy must be prepend or append.")
+            if memory_note_text:
+                try:
+                    from ..core.visual_memory import inject_memory_note
+                except ImportError:
+                    from core.visual_memory import inject_memory_note
+                resolved_prompt = inject_memory_note(resolved_prompt, memory_note_text)
             if shared_prompt:
                 resolved_prompt = "\n".join([shared_prompt, resolved_prompt] if policy == "prepend" else [resolved_prompt, shared_prompt])
             resolved_prompt = clean_mentions(resolved_prompt)
@@ -1070,7 +1104,11 @@ class MiniMaxH3MasterDirector:
             # Carry a copy whose sharpness cannot exceed the chain's baseline, so
             # grain/contrast do not ratchet up hop after hop (delivered clips unchanged).
             carry_av = previous_av
-            if continuation_prefix and previous_av is not None:
+            # Pure carry: continue from the saved latent exactly as it is, fully
+            # frozen, with none of the chain corrections below (what other H3
+            # continuation tools do). Experimental A/B switch.
+            pure_carry = bool(clip_item.get("pure_carry", timeline.get("pure_carry", False)))
+            if continuation_prefix and previous_av is not None and not pure_carry:
                 carry_av, softened = guard_carried_sharpness(previous_av, chain_baseline())
                 if softened:
                     log.info("Master Director: carried context for clip %s softened %.2f to the chain's baseline sharpness.", clip_id, softened)
@@ -1097,7 +1135,8 @@ class MiniMaxH3MasterDirector:
                     context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None,
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
                     pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
-                    seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
+                    seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)),
+                    freeze_prefix=pure_carry)
                 continuity_source = "latent_carry"
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
@@ -1133,7 +1172,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1} if is_chained_from_previous else {}),
+                    **(({"pure_carry": 1} if pure_carry else {"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1}) if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1348,7 +1387,7 @@ class MiniMaxH3MasterDirector:
             # Seamless at the join, contrast tied to the chain's first clip: H3
             # re-renders the overlap a few percent more contrasty, which used to
             # compound hop after hop (see anchor_chain_contrast).
-            if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry"):
+            if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry") and not pure_carry:
                 try:
                     from ..core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
                 except ImportError:

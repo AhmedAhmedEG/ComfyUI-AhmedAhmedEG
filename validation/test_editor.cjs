@@ -174,8 +174,31 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const adapterStrength=loraEditor.querySelector('input[type=number]');adapterStrength.value='1.2';adapterStrength.onchange();
   const editedAdapter=JSON.parse(timeline.value).clips[0];assert.equal(editedAdapter.loras[0].strength,1.2);assert.equal(editedAdapter.validated,true,'Adapter edits preserve explicit approval');assert.equal(editedAdapter.refine_approved,true,'Adapter edits preserve explicit first-pass approval');
   timeline.value=savedLoraState;node.__mmxDirectorRefresh();
+  // Structured prompt is a view of the raw text: plain text lands in the main
+  // section, and editing a section writes the sections back into the text.
+  {
+    const fixture=JSON.parse(savedLoraState);
+    fixture.clips=[{...fixture.clips[0],id:'sp1',name:'One',type:'REF2VA',prompt:'She walks in.',prompt_mode:'structured',ref_ids:[]},
+      {...fixture.clips[0],id:'sp2',name:'Two',type:'REF2VA',prompt:'Later.',prompt_mode:'raw',ref_ids:[],memory:[{clip_id:'sp1',start:0.5,end:1.5,note:'the hall'}]}];
+    timeline.value=JSON.stringify(fixture);node.__mmxDirectorRefresh();
+    w.document.querySelector('.mmx-shot-block')?.click();
+    const areas=[...w.document.querySelectorAll('.mmx-sp-input')];
+    assert.equal(areas.length,6,'REF2V clips show the six official sections');
+    assert.equal(areas[3].value,'She walks in.','Free-written text appears in the main section');
+    areas[1].value='[reference generation] Hall.';areas[1].oninput();
+    const sp=JSON.parse(timeline.value).clips[0];
+    assert.equal(sp.prompt,'summary:\n[reference generation] Hall.\n\ndetailed_description:\nShe walks in.','Section edits are written back into the prompt text');
+    assert.equal(sp.structured_prompt.summary,'[reference generation] Hall.');
+    w.document.querySelectorAll('.mmx-shot-block')[1]?.click();
+    chooseTool('Memory').click();
+    assert.equal(w.document.querySelectorAll('.mmx-memory-card').length,1,'Memory rows render as cards');
+    const preview=w.document.querySelector('.mmx-memory-preview pre').textContent;
+    assert(preview.startsWith('<Video 1> is an earlier moment of this film (the hall).'),'The automatic prompt note is shown');
+    assert(w.document.querySelector('.mmx-memory-auto-note'),'The prompt area shows the automatic note too');
+    timeline.value=savedLoraState;node.__mmxDirectorRefresh();
+  }
   assert.equal(chooseTool('Project'),null,'Project is not a clip-specific tool');
-  assert.equal(w.document.querySelectorAll('.mmx-section').length,4,'Project configuration has one surface');
+  assert.equal(w.document.querySelectorAll('.mmx-section').length,5,'Project configuration has one surface (plus Continuity, Look, LoRAs and Memory tools)');
   const globalProject=w.document.querySelector('.mmx-project-workspace');
   assert.equal(globalProject.parentElement.className,'mmx-director-root');
   assert(globalProject.compareDocumentPosition(w.document.querySelector('.mmx-multitrack-panel')) & w.Node.DOCUMENT_POSITION_FOLLOWING,'Project precedes the timeline');

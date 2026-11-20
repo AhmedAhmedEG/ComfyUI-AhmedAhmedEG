@@ -2211,7 +2211,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-inspector-title > span { font-size:13px!important;color:#b5c3d2!important; }
 .mmx-director-root .mmx-inspector-title input,.mmx-director-root .mmx-mode-select { padding:7px 9px!important;border-color:#4c5662!important;border-radius:5px!important; }
 .mmx-director-root .mmx-validate-toggle { font-size:12px;padding:7px 9px;background:transparent!important;border:0; }
-.mmx-director-root .mmx-edit-workspace { display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:18px;align-items:start; }
+.mmx-director-root .mmx-edit-workspace { display:grid;grid-template-columns:minmax(0,1.5fr) minmax(380px,1fr);gap:18px;align-items:start; }
 .mmx-director-root .mmx-edit-main { min-width:0;display:flex;flex-direction:column;gap:16px; }
 .mmx-director-root .mmx-prompt-inspector { border:0;padding:0;gap:9px; }
 .mmx-director-root .mmx-prompt-toolbar { padding:0;min-height:34px; }
@@ -2325,6 +2325,97 @@ const embeddedCSS = `
 .mmx-director-root .mmx-shared-prompt-header .mmx-project-placement { font-size:12px; }
 .mmx-director-root .mmx-project-workspace .mmx-project-group { flex-direction:row;align-items:center;flex-wrap:wrap;gap:24px; }
 @container (max-width:600px) { .mmx-project-workspace > summary span { display:none; } }
+/* Range rows in the clip tools: label and value on one line, slider below. */
+.mmx-director-root .mmx-edit-tools .mmx-field:has(> input[type=range]) { display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 10px;font-size:12px;color:#b9c6d2; }
+.mmx-director-root .mmx-edit-tools .mmx-field:has(> input[type=range]) > input[type=range] { grid-column:1/-1;grid-row:2;width:100%;margin:0;accent-color:var(--mmx-accent,#a396ff); }
+.mmx-director-root .mmx-edit-tools .mmx-field:has(> input[type=range]) > span { grid-column:2;grid-row:1;min-width:42px;padding:1px 6px;border:1px solid #39434d;border-radius:5px;background:#1b2026;color:#e8edf2;text-align:right;font-variant-numeric:tabular-nums;font-size:11.5px; }
+/* Clip LoRA cards */
+.mmx-director-root .mmx-lora-list { display:flex;flex-direction:column;gap:8px;margin:4px 0 10px; }
+.mmx-director-root .mmx-lora-empty { padding:12px;border:1px dashed #3f4953;border-radius:8px;color:#8ea2b4;font-size:12px;text-align:center; }
+.mmx-director-root .mmx-lora-card { display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid var(--mmx-accent,#a396ff);border-radius:8px;background:#1f252b;transition:opacity .15s,border-color .15s; }
+.mmx-director-root .mmx-lora-card[data-enabled="false"] { border-left-color:#4b5866;opacity:.6; }
+.mmx-director-root .mmx-lora-card-head { display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:8px; }
+.mmx-director-root .mmx-lora-switch { position:relative;display:inline-flex;width:32px;height:18px;flex:none;cursor:pointer; }
+.mmx-director-root .mmx-lora-switch input { position:absolute;inset:0;width:100%!important;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1; }
+.mmx-director-root .mmx-lora-switch-track { width:32px;height:18px;border-radius:9px;background:#3a444e;transition:background .15s;position:relative; }
+.mmx-director-root .mmx-lora-switch-track::after { content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#cfd8e0;transition:transform .15s; }
+.mmx-director-root .mmx-lora-switch input:checked + .mmx-lora-switch-track { background:var(--mmx-accent,#a396ff); }
+.mmx-director-root .mmx-lora-switch input:checked + .mmx-lora-switch-track::after { transform:translateX(14px);background:#fff; }
+.mmx-director-root .mmx-lora-switch input:focus-visible + .mmx-lora-switch-track { outline:2px solid var(--mmx-accent,#a396ff);outline-offset:2px; }
+.mmx-director-root .mmx-lora-card select.mmx-lora-file { width:100%;min-width:0;height:30px;min-height:30px;padding:0 6px!important;line-height:28px;font-size:12.5px!important;border:1px solid #46525e;border-radius:6px;background:#1b2026;color:#e8edf2;font-size:12.5px;text-overflow:ellipsis; }
+.mmx-director-root .mmx-lora-icon { width:28px;height:28px;min-height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #4b5866;border-radius:6px;background:#2c343d;color:#dfe7ee;font-size:13px;font-weight:700;line-height:1;cursor:pointer; }
+.mmx-director-root .mmx-lora-icon:hover:not(:disabled) { border-color:#8ab9df;background:#36414c; }
+.mmx-director-root .mmx-lora-icon:disabled { opacity:.4;cursor:default; }
+.mmx-director-root .mmx-lora-remove { font-size:16px; }
+.mmx-director-root .mmx-lora-remove:hover:not(:disabled) { border-color:#d0707d;background:#43272e;color:#ffe0e4; }
+.mmx-director-root .mmx-lora-card-body { display:grid;grid-template-columns:auto minmax(0,1fr) 68px;align-items:center;gap:10px;padding-left:40px; }
+.mmx-director-root .mmx-lora-strength-label { font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#8ea2b4; }
+.mmx-director-root .mmx-lora-slider { width:100%;margin:0;accent-color:var(--mmx-accent,#a396ff); }
+.mmx-director-root .mmx-lora-card input.mmx-lora-strength { width:68px!important;height:28px;min-height:28px;padding:0 6px!important;line-height:26px;border:1px solid #46525e;border-radius:6px;background:#1b2026;color:#e8edf2;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-lora-info { display:flex;gap:10px;align-items:flex-start;padding:8px;border-top:1px dashed #39434d;max-height:220px;overflow:auto; }
+.mmx-director-root .mmx-lora-info[hidden] { display:none; }
+.mmx-director-root .mmx-lora-info img { max-width:140px;border-radius:6px; }
+.mmx-director-root .mmx-lora-info pre { margin:0;white-space:pre-wrap;word-break:break-word;font-size:11px;color:#b9c6d2; }
+.mmx-director-root .mmx-lora-add { width:100%;height:34px;border:1px dashed #4b5866;border-radius:8px;background:transparent;color:#c8d4de;font-size:12.5px;font-weight:600;cursor:pointer; }
+.mmx-director-root .mmx-lora-add:hover:not(:disabled) { border-color:var(--mmx-accent,#a396ff);color:#fff;background:rgba(147,129,248,.07); }
+.mmx-director-root .mmx-lora-add:disabled { opacity:.5;cursor:default; }
+@container (max-width:420px) { .mmx-director-root .mmx-lora-card-body { padding-left:0; } }
+/* Structured prompt: one card per official section, synced with the raw text */
+.mmx-director-root .mmx-sp-bar { display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:2px 0 8px; }
+.mmx-director-root .mmx-sp-bar .mmx-quick-tags { display:flex;flex-wrap:wrap;gap:6px;min-width:0; }
+.mmx-director-root .mmx-sp-fill { flex:none;height:28px;padding:0 12px;border:1px solid #4b5866;border-radius:6px;background:#2c343d;color:#dfe7ee;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap; }
+.mmx-director-root .mmx-sp-fill:hover:not(:disabled) { border-color:var(--mmx-accent,#a396ff);background:#36414c; }
+.mmx-director-root .mmx-sp-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:start;overflow:auto;min-height:0;flex:1; }
+.mmx-director-root .mmx-sp-card { grid-column:1/-1;display:flex;flex-direction:column;gap:6px;padding:9px 11px 10px;border:1px solid #39434d;border-radius:8px;background:#1b2026;cursor:text;transition:border-color .12s,box-shadow .12s; }
+.mmx-director-root .mmx-sp-card.mmx-sp-half { grid-column:auto; }
+.mmx-director-root .mmx-sp-card:focus-within { border-color:var(--mmx-accent,#a396ff);box-shadow:0 0 0 2px rgba(163,150,255,.15); }
+.mmx-director-root .mmx-sp-head { display:flex;align-items:baseline;justify-content:space-between;gap:8px; }
+.mmx-director-root .mmx-sp-title { font-size:12.5px;font-weight:700;color:#e2e8f0; }
+.mmx-director-root .mmx-sp-key { font:10.5px ui-monospace,Consolas,monospace;color:#7d90a1;background:none;padding:0; }
+.mmx-director-root textarea.mmx-sp-input { width:100%;min-height:20px;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;outline:none;resize:none;overflow:hidden;color:#e8edf2;font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;user-select:text; }
+.mmx-director-root textarea.mmx-sp-input::placeholder { color:#5f6f7e; }
+.mmx-director-root .mmx-sp-hidden-note { grid-column:1/-1;margin:0;font-size:11.5px;color:#9fb2c3; }
+.mmx-director-root .mmx-quick-tag-btn.mmx-tag-memory { color:#7fd8c4;background:rgba(45,180,150,.08);border-color:rgba(45,180,150,.3); }
+.mmx-director-root .mmx-memory-auto-note { margin-top:8px;border:1px solid #2f5a52;border-radius:8px;background:#172522; }
+.mmx-director-root .mmx-memory-auto-note summary { padding:6px 10px;font-size:12px;font-weight:600;color:#9fe3d2;cursor:pointer; }
+.mmx-director-root .mmx-memory-auto-note pre, .mmx-director-root .mmx-memory-preview pre { margin:0;padding:8px 10px;white-space:pre-wrap;word-break:break-word;font:11.5px/1.5 ui-monospace,Consolas,monospace;color:#c6ece2;user-select:text; }
+@container (max-width:900px) { .mmx-director-root .mmx-sp-grid { grid-template-columns:1fr; } }
+
+/* Clip memory */
+.mmx-director-root .mmx-memory { display:flex;flex-direction:column;gap:10px; }
+.mmx-director-root .mmx-memory-card { display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid #2db496;border-radius:8px;background:#1f252b; }
+.mmx-director-root .mmx-memory-card[data-enabled="false"] { opacity:.6;border-left-color:#4b5866; }
+.mmx-director-root .mmx-memory-card.mmx-memory-invalid { border-left-color:#e06b7a; }
+.mmx-director-root .mmx-memory-head { display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;gap:8px; }
+.mmx-director-root .mmx-memory-tag { font:600 11px ui-monospace,Consolas,monospace;color:#7fd8c4;background:rgba(45,180,150,.1);border:1px solid rgba(45,180,150,.35);border-radius:5px;padding:2px 6px;white-space:nowrap; }
+.mmx-director-root .mmx-memory-card select.mmx-memory-source { width:100%;min-width:0;height:30px;min-height:30px;padding:0 6px!important;line-height:28px;font-size:12.5px!important;border:1px solid #46525e;border-radius:6px;background:#1b2026;color:#e8edf2; }
+.mmx-director-root .mmx-memory-modes { display:inline-flex;align-self:flex-start;padding:2px;border:1px solid #39434d;border-radius:7px;background:#1b2026; }
+.mmx-director-root .mmx-memory-modes button { height:26px;padding:0 12px;border:0;border-radius:5px;background:transparent;color:#9fb2c3;font-size:12px;font-weight:600;cursor:pointer; }
+.mmx-director-root .mmx-memory-modes button.active { background:#2c4a44;color:#dff7f1; }
+.mmx-director-root .mmx-memory-strip { position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:.85;pointer-events:none; }
+.mmx-director-root .mmx-memory-pending { position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#e8c06a;pointer-events:none; }
+.mmx-director-root .mmx-memory-track:has(.mmx-memory-strip) { height:46px; }
+.mmx-director-root .mmx-memory-track:has(.mmx-memory-strip) .mmx-memory-window { background:rgba(45,180,150,.18);box-shadow:0 0 0 999px rgba(10,14,18,.55); }
+.mmx-director-root .mmx-memory-track { position:relative;height:26px;border-radius:6px;background:repeating-linear-gradient(90deg,#252c33 0 10px,#222930 10px 20px);border:1px solid #39434d;overflow:hidden; }
+.mmx-director-root .mmx-memory-window { position:absolute;top:0;bottom:0;background:rgba(45,180,150,.35);border-left:2px solid #2db496;border-right:2px solid #2db496;pointer-events:none; }
+.mmx-director-root .mmx-memory-track:has(.mmx-memory-strip) input.mmx-memory-thumb::-webkit-slider-thumb { height:46px;margin-top:0; }
+.mmx-director-root .mmx-memory-track:has(.mmx-memory-strip) input.mmx-memory-thumb::-moz-range-thumb { height:42px; }
+.mmx-director-root input.mmx-memory-thumb { position:absolute;inset:0;width:100%;height:100%;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none; }
+.mmx-director-root input.mmx-memory-thumb::-webkit-slider-runnable-track { background:none;height:100%; }
+.mmx-director-root input.mmx-memory-thumb::-webkit-slider-thumb { -webkit-appearance:none;pointer-events:auto;width:12px;height:26px;margin-top:0;border-radius:4px;background:#dff7f1;border:2px solid #2db496;cursor:ew-resize; }
+.mmx-director-root input.mmx-memory-thumb::-moz-range-thumb { pointer-events:auto;width:10px;height:28px;border-radius:4px;background:#dff7f1;border:2px solid #2db496;cursor:ew-resize; }
+.mmx-director-root input.mmx-memory-thumb::-moz-range-track { background:none; }
+.mmx-director-root .mmx-memory-readout { font:11.5px ui-monospace,Consolas,monospace;color:#9fb2c3; }
+.mmx-director-root .mmx-memory-card input.mmx-memory-note { width:100%;height:30px;min-height:30px;padding:0 8px!important;border:1px solid #46525e;border-radius:6px;background:#1b2026;color:#e8edf2;font-size:12.5px!important; }
+.mmx-director-root .mmx-memory-problem { margin:0;font-size:12px;color:#ffc9cf; }
+.mmx-director-root .mmx-memory-budget { font-size:12px;color:#9fb2c3; }
+.mmx-director-root .mmx-memory-budget.over { color:#ffb36b; }
+.mmx-director-root .mmx-memory-actions { display:flex;flex-direction:column;gap:6px; }
+.mmx-director-root .mmx-memory-empty { margin:0;font-size:12px;color:#8ea2b4; }
+.mmx-director-root .mmx-memory-preview { border:1px solid #2f5a52;border-radius:8px;background:#172522; }
+.mmx-director-root .mmx-memory-preview-title { padding:6px 10px 0;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7fd8c4; }
+.mmx-director-root .mmx-memory-badge { flex:none;padding:1px 6px;border-radius:5px;background:rgba(45,180,150,.18);border:1px solid rgba(45,180,150,.45);color:#9fe3d2;font-size:10.5px;font-weight:700;white-space:nowrap; }
+.mmx-director-root .mmx-tab-count { display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;margin-left:5px;padding:0 4px;border-radius:8px;background:#2db496;color:#08201b;font-size:10px;font-weight:800; }
 /* Project panel (redesigned) */
 .mmx-director-root .mmx-project-workspace > .mmx-section-body { gap:14px;padding:14px 16px 16px; }
 .mmx-director-root .mmx-project-library { display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0;border:0; }
@@ -3840,6 +3931,75 @@ function mountDirectorUI(node) {
     ].filter(Boolean).join("\n\n");
   };
 
+  // The clip's prompt text is the single source of truth. The Structured
+  // editor is a view of it: it parses the text into the official sections
+  // (same rules as core/prompt_engine.parse_prompt_sections) and writes every
+  // edit back into the text, so Raw and Structured can never disagree.
+  const PROMPT_SECTION_KEYS = ["subject_definitions","summary","retention_analysis","detailed_description","integrated_multimodal_description","overall_soundscape","non_diegetic_music"];
+  const PROMPT_SECTION_ALIASES = {soundscape:"overall_soundscape",music:"non_diegetic_music",imd:"integrated_multimodal_description"};
+  const PROMPT_SECTION_RE = new RegExp(`^[ \\t]*(${[...PROMPT_SECTION_KEYS,...Object.keys(PROMPT_SECTION_ALIASES)].join("|")})[ \\t]*:[ \\t]*`, "gim");
+  const parsePromptSections = (text) => {
+    text = String(text || "");
+    const hits = [...text.matchAll(PROMPT_SECTION_RE)];
+    if (!hits.length) return {found:false, fields:{}, preamble:text.trim()};
+    const fields = {};
+    hits.forEach((hit, i) => {
+      const raw = hit[1].toLowerCase(), key = PROMPT_SECTION_ALIASES[raw] || raw;
+      const end = i + 1 < hits.length ? hits[i + 1].index : text.length;
+      const body = text.slice(hit.index + hit[0].length, end).replace(/^\n+/, "").replace(/\n+$/, "").replace(/\s+$/, "");
+      fields[key] = fields[key] ? `${fields[key]}\n${body}` : body;
+    });
+    return {found:true, fields, preamble:text.slice(0, hits[0].index).trim()};
+  };
+  const REFERENCE_SECTIONS = [
+    {key:"subject_definitions", title:"Subjects", hint:"Who or what each reference is, e.g. <Subject 1> is the woman in <Picture 1>.", rows:3},
+    {key:"summary", title:"Summary", hint:"One line: the task and the scene, e.g. [reference generation] A rainy street at night.", rows:2},
+    {key:"retention_analysis", title:"Keep from references", hint:"What must stay as in the references, e.g. <Subject 1>: fully_preserved - face and costume.", rows:3},
+    {key:"detailed_description", title:"Action and camera", hint:"The continuous action, camera moves and lighting, in order.", rows:6, main:true},
+    {key:"overall_soundscape", title:"Sound", hint:"Diegetic sound: voices, ambience, effects.", rows:2, half:true},
+    {key:"non_diegetic_music", title:"Music", hint:"Score style, or N/A.", rows:2, half:true},
+  ];
+  const KEYFRAME_SECTIONS = [
+    {key:"integrated_multimodal_description", title:"Description", hint:"The action, camera moves, lighting and dialogue, in order.", rows:7, main:true},
+    {key:"overall_soundscape", title:"Sound", hint:"Diegetic sound: voices, ambience, effects.", rows:2, half:true},
+    {key:"non_diegetic_music", title:"Music", hint:"Score style, or N/A.", rows:2, half:true},
+  ];
+  const isReferencePromptMode = clip => ["REF2V","V2V","RV2V"].includes(clipCode(clip));
+  const promptSectionsFor = clip => isReferencePromptMode(clip) ? REFERENCE_SECTIONS : KEYFRAME_SECTIONS;
+  const structuredFieldsFromText = (text, sections) => {
+    const {found, fields, preamble} = parsePromptSections(text);
+    const main = sections.find(s => s.main).key;
+    if (!found) return {[main]: preamble};
+    if (preamble) fields[main] = [preamble, fields[main] || ""].filter(Boolean).join("\n");
+    return fields;
+  };
+  const compilePromptSections = (fields) => PROMPT_SECTION_KEYS
+    .filter(key => String(fields[key] || "").trim())
+    .map(key => `${key}:\n${String(fields[key]).trim()}`).join("\n\n");
+  const storedSections = fields => ({...fields, soundscape:fields.overall_soundscape || "", music:fields.non_diegetic_music || "", imd:fields.integrated_multimodal_description || ""});
+
+  // Clip memory (see core/visual_memory.py): earlier clips, or parts of them,
+  // passed as reference videos with a visible note added to the prompt.
+  const MEMORY_INSTRUCTION = "These videos are earlier moments of this same film. Keep the people, clothing, setting, lighting and style they show. The camera, framing and action of this clip follow its own description; do not replay those moments.";
+  const MEMORY_MAX_SECONDS = 15;
+  const memorySupported = clip => ["REF2V","RV2V"].includes(clipCode(clip));
+  const memoryRows = clip => (Array.isArray(clip.memory) ? clip.memory : []).filter(row => row && row.enabled !== false && row.clip_id);
+  const memoryFirstVideo = clip => activeReferences(clip).filter(row => row.type === "video").length + 1;
+  const memorySlots = clip => Math.max(0, 3 - activeReferences(clip).filter(row => row.type === "video").length);
+  const clipById = id => timelineState.clips.find(c => c.id === id);
+  const memoryWindowSeconds = row => { const src = clipById(row.clip_id); const total = Number(src?.duration) || 0; const start = Math.max(0, Number(row.start) || 0); const end = row.end == null ? total : Math.min(total, Number(row.end)); return Math.max(0, end - start); };
+  const memoryNoteFor = clip => {
+    const rows = memoryRows(clip);
+    if (!rows.length || !memorySupported(clip)) return "";
+    const first = memoryFirstVideo(clip);
+    const lines = rows.map((row, i) => {
+      const note = String(row.note || "").split(/\s+/).filter(Boolean).join(" ").slice(0, 200);
+      const src = clipById(row.clip_id);
+      return `<Video ${first + i}> is an earlier moment of this film (${note || src?.name || src?.id || row.clip_id || "an earlier clip"}).`;
+    });
+    return [...lines, MEMORY_INSTRUCTION].join("\n");
+  };
+
   // Render Multi-Track Timeline & Clips
   const clipCode = clip => clip.locked ? 'VIDEO' : ({T2VA:'T2V',I2VA:'I2V',FL2VA:'FL2V',L2VA:'L2V',REF2VA:'REF2V','Image Inpaint':'IMG','IMAGE INPAINT':'IMG'})[clip.type] || clip.type || 'T2V';
   const referenceTypes = clip => {
@@ -3999,6 +4159,13 @@ function mountDirectorUI(node) {
       shotTopBar.appendChild(modeBadge);
       shotTopBar.appendChild(title);
       shotTopBar.appendChild(durTag);
+      const remembered = memorySupported(clip) ? memoryRows(clip) : [];
+      if (remembered.length) {
+        const mem = document.createElement("span"); mem.className = "mmx-memory-badge";
+        mem.textContent = `◷ ${remembered.length}`;
+        mem.title = "Remembers: " + remembered.map(r => clipById(r.clip_id)?.name || r.clip_id).join(", ");
+        shotTopBar.appendChild(mem);
+      }
       const savedResult=cachedClipResults[clip.id];
       if(savedResult?.has_latent){
         const saved=document.createElement('span');saved.className='mmx-saved-badge';
@@ -4660,60 +4827,237 @@ function mountDirectorUI(node) {
     loraPanel.appendChild(loraHeading);
     shotSections.appendChild(loraPanel);
     if (!Array.isArray(activeClip.loras)) activeClip.loras = [];
+    const MAX_CLIP_LORAS = 8;
     const loraRows = document.createElement("div");
+    loraRows.className = "mmx-lora-list";
     loraPanel.appendChild(loraRows);
     const commitLoRAEdit=()=>{
       syncState();renderTimeline();
     };
+    const loraLabel = value => String(value || "").split(/[\\/]/).pop().replace(/\.safetensors$/i, "");
+    let loraNamesPromise = null;
+    const loraNamesReady = () => loraNamesPromise ||= api.fetchApi("/minimax_director/loras").then(async response => {
+      const names = await response.json();
+      if (!response.ok || !Array.isArray(names)) throw new Error(names.error || "Cannot list LoRAs");
+      return names;
+    });
+    const addLora = document.createElement("button");
+    addLora.type = "button"; addLora.className = "mmx-lora-add";
     const drawLoras = () => {
       loraRows.replaceChildren();
+      if (!activeClip.loras.length) {
+        const empty = document.createElement("div"); empty.className = "mmx-lora-empty";
+        empty.textContent = "No LoRAs on this clip. The model runs as loaded in the workflow.";
+        loraRows.appendChild(empty);
+      }
       activeClip.loras.forEach((row, index) => {
-        const controls = document.createElement("div");
-        controls.style.cssText = "display:flex;gap:6px;margin:6px 0;align-items:center";
+        const card = document.createElement("div");
+        card.className = "mmx-lora-card";
+        const isOn = () => (row.enabled ?? row.active ?? true) !== false;
+        card.dataset.enabled = String(isOn());
+
+        // Header: on/off switch, file picker, info, remove.
+        const head = document.createElement("div"); head.className = "mmx-lora-card-head";
+        const toggle = document.createElement("label"); toggle.className = "mmx-lora-switch";
+        toggle.title = "Use this LoRA on the clip";
         const enabled = document.createElement("input");
         enabled.type = "checkbox";
-        enabled.checked = (row.enabled ?? row.active ?? true) !== false;
-        enabled.onchange = () => { row.enabled = enabled.checked; commitLoRAEdit(); };
+        enabled.checked = isOn();
+        enabled.setAttribute("aria-label", "Enabled");
+        enabled.onchange = () => { row.enabled = enabled.checked; delete row.active; card.dataset.enabled = String(enabled.checked); commitLoRAEdit(); };
+        const knob = document.createElement("span"); knob.className = "mmx-lora-switch-track";
+        toggle.append(enabled, knob);
+
         const name = document.createElement("select");
-        name.style.cssText = "flex:1;min-width:0";
+        name.className = "mmx-lora-file"; name.setAttribute("aria-label", "LoRA file");
+        name.title = row.name || "Choose a LoRA";
         const current = document.createElement("option");
-        current.value = row.name || ""; current.textContent = row.name || "Choose a LoRA";
+        current.value = row.name || ""; current.textContent = row.name ? loraLabel(row.name) : "Choose a LoRA…";
         name.appendChild(current);
-        api.fetchApi("/minimax_director/loras").then(async response => {
-          const names = await response.json();
-          if (!response.ok || !Array.isArray(names)) throw new Error(names.error || "Cannot list LoRAs");
+        loraNamesReady().then(names => {
           for (const value of names) if (value !== row.name) {
             const option = document.createElement("option"); option.value = value; option.textContent = value; name.appendChild(option);
           }
         }).catch(error => { name.title = error.message; });
-        name.onchange = () => { row.name = name.value; commitLoRAEdit(); };
-        const info = document.createElement("button"); info.textContent = "Info";
-        info.onclick = async () => {
-          try {
-            const result = await requestJson(`/minimax_director/loras/info?name=${encodeURIComponent(row.name || "")}`);
-            const details = document.createElement("details"); details.open = true;
-            const summary = document.createElement("summary"); summary.textContent = result.name; details.appendChild(summary);
-            const metadata = document.createElement("pre"); metadata.style.whiteSpace = "pre-wrap"; metadata.textContent = JSON.stringify(result.metadata, null, 2); details.appendChild(metadata);
-            if (result.has_preview) { const preview = document.createElement("img"); preview.style.maxWidth = "200px"; preview.src = api.apiURL(`/minimax_director/loras/info?preview=1&name=${encodeURIComponent(row.name)}`); details.appendChild(preview); }
-            loraPanel.appendChild(details);
-          } catch (error) { alert(error.message); }
-        };
+        name.onchange = () => { row.name = name.value; commitLoRAEdit(); drawLoras(); };
+
+        const info = document.createElement("button");
+        info.type = "button"; info.className = "mmx-lora-icon"; info.textContent = "i";
+        info.title = "Show LoRA metadata"; info.setAttribute("aria-label", "Info"); info.disabled = !row.name;
+        const remove = document.createElement("button");
+        remove.type = "button"; remove.className = "mmx-lora-icon mmx-lora-remove"; remove.textContent = "×";
+        remove.title = "Remove this LoRA"; remove.setAttribute("aria-label", "Remove");
+        remove.onclick = () => { activeClip.loras.splice(index, 1); commitLoRAEdit(); drawLoras(); };
+        head.append(toggle, name, info, remove);
+
+        // Body: strength slider plus exact number.
+        const body = document.createElement("div"); body.className = "mmx-lora-card-body";
+        const strengthLabel = document.createElement("span"); strengthLabel.className = "mmx-lora-strength-label"; strengthLabel.textContent = "Strength";
+        const slider = document.createElement("input");
+        slider.type = "range"; slider.min = "-2"; slider.max = "2"; slider.step = "0.05";
+        slider.className = "mmx-lora-slider"; slider.setAttribute("aria-label", "Model strength slider");
         const strength = document.createElement("input");
         strength.type = "number"; strength.min = "-10"; strength.max = "10"; strength.step = "0.05";
-        strength.value = row.strength ?? 1; strength.style.width = "65px";
-        strength.onchange = () => { const amount=Number(strength.value);if(!Number.isFinite(amount)||amount < -10 || amount > 10){strength.setCustomValidity("Enter a strength from -10 to 10.");strength.reportValidity();return;}strength.setCustomValidity("");row.strength = amount; commitLoRAEdit(); };
-        const remove = document.createElement("button"); remove.textContent = "Remove";
-        remove.onclick = () => { activeClip.loras.splice(index, 1); commitLoRAEdit(); drawLoras(); };
-        controls.className="mmx-form-row";controls.style.cssText="";controls.append(field("Enabled",enabled),field("LoRA file",name),field("Model strength",strength),info,remove); loraRows.appendChild(controls);
+        strength.className = "mmx-lora-strength"; strength.setAttribute("aria-label", "Model strength");
+        const setShown = amount => { strength.value = amount; slider.value = Math.max(-2, Math.min(2, amount)); };
+        setShown(row.strength ?? 1);
+        slider.oninput = () => { strength.value = Number(slider.value).toFixed(2); };
+        slider.onchange = () => { row.strength = Number(slider.value); strength.setCustomValidity(""); commitLoRAEdit(); };
+        strength.onchange = () => { const amount=Number(strength.value);if(!Number.isFinite(amount)||amount < -10 || amount > 10){strength.setCustomValidity("Enter a strength from -10 to 10.");strength.reportValidity();return;}strength.setCustomValidity("");row.strength = amount; slider.value = Math.max(-2, Math.min(2, amount)); commitLoRAEdit(); };
+        body.append(strengthLabel, slider, strength);
+        card.append(head, body);
+
+        // Metadata drawer, toggled inside the card.
+        const details = document.createElement("div"); details.className = "mmx-lora-info"; details.hidden = true;
+        info.onclick = async () => {
+          if (!details.hidden) { details.hidden = true; info.setAttribute("aria-expanded", "false"); return; }
+          try {
+            const result = await requestJson(`/minimax_director/loras/info?name=${encodeURIComponent(row.name || "")}`);
+            details.replaceChildren();
+            if (result.has_preview) { const preview = document.createElement("img"); preview.src = api.apiURL(`/minimax_director/loras/info?preview=1&name=${encodeURIComponent(row.name)}`); details.appendChild(preview); }
+            const metadata = document.createElement("pre"); metadata.textContent = JSON.stringify(result.metadata, null, 2); details.appendChild(metadata);
+            details.hidden = false; info.setAttribute("aria-expanded", "true");
+          } catch (error) { alert(error.message); }
+        };
+        card.appendChild(details);
+        loraRows.appendChild(card);
       });
+      const count = activeClip.loras.length;
+      addLora.textContent = count >= MAX_CLIP_LORAS ? `LoRA limit reached (${MAX_CLIP_LORAS})` : `+ Add LoRA  ·  ${count}/${MAX_CLIP_LORAS}`;
+      addLora.disabled = count >= MAX_CLIP_LORAS;
     };
-    const addLora = document.createElement("button"); addLora.textContent = "Add LoRA";
     addLora.onclick = () => {
-      if (activeClip.loras.length >= 8) return;
+      if (activeClip.loras.length >= MAX_CLIP_LORAS) return;
       activeClip.loras.push({ name: "", strength: 1, enabled: true }); commitLoRAEdit(); drawLoras();
     };
     loraPanel.appendChild(addLora); drawLoras();
     finishSection(loraPanel,"Optional model adapters applied only to this clip. Choose a compatible H3 LoRA and its strength.");
+
+    // Memory: earlier clips (whole, or a part) shown to H3 as reference videos.
+    const memoryPanel = document.createElement("details");
+    const memoryHeading = document.createElement("summary"); memoryHeading.textContent = "Clip memory";
+    memoryPanel.appendChild(memoryHeading); shotSections.appendChild(memoryPanel);
+    if (!Array.isArray(activeClip.memory)) activeClip.memory = [];
+    const memoryBody = document.createElement("div"); memoryBody.className = "mmx-memory";
+    memoryPanel.appendChild(memoryBody);
+    const fmtSec = v => `${(Math.round(Number(v) * 100) / 100).toFixed(2)} s`;
+    const commitMemory = (redraw = true) => { syncState(); renderTimeline(); if (redraw) renderInspector(); };
+    const drawMemory = () => {
+      memoryBody.replaceChildren();
+      const index = timelineState.clips.indexOf(activeClip);
+      const earlier = timelineState.clips.slice(0, Math.max(0, index)).filter(c => !c.locked || Number(c.duration) > 0);
+      if (!memorySupported(activeClip)) {
+        const p = document.createElement("p"); p.className = "mmx-memory-empty";
+        p.textContent = "Memory works on REF2V and RV2V clips: it passes earlier moments as reference videos.";
+        memoryBody.appendChild(p); return;
+      }
+      const slots = memorySlots(activeClip);
+      activeClip.memory.forEach((row, i) => {
+        const src = clipById(row.clip_id);
+        const srcIndex = timelineState.clips.indexOf(src);
+        const problem = !src ? "That clip was deleted." : srcIndex >= index ? "Move this clip after its memory source, or choose an earlier clip." : "";
+        const card = document.createElement("div"); card.className = "mmx-memory-card" + (problem ? " mmx-memory-invalid" : "");
+        card.dataset.enabled = String(row.enabled !== false);
+        const head = document.createElement("div"); head.className = "mmx-memory-head";
+        const tag = document.createElement("span"); tag.className = "mmx-memory-tag";
+        const pos = memoryRows(activeClip).indexOf(row);
+        tag.textContent = pos >= 0 ? `<Video ${memoryFirstVideo(activeClip) + pos}>` : "off";
+        const pick = document.createElement("select"); pick.className = "mmx-memory-source"; pick.setAttribute("aria-label", "Remembered clip");
+        if (!src) { const o = document.createElement("option"); o.value = row.clip_id; o.textContent = "Missing clip"; pick.appendChild(o); }
+        for (const c of earlier) { const o = document.createElement("option"); o.value = c.id; o.textContent = `${timelineState.clips.indexOf(c) + 1} · ${c.name || c.id} · ${fmtSec(c.duration || 0)}`; pick.appendChild(o); }
+        if (src && srcIndex >= index) { const o = document.createElement("option"); o.value = src.id; o.textContent = `${src.name || src.id} (after this clip)`; pick.appendChild(o); }
+        pick.value = row.clip_id;
+        pick.onchange = () => { row.clip_id = pick.value; row.start = 0; row.end = null; commitMemory(); };
+        const toggle = document.createElement("label"); toggle.className = "mmx-lora-switch"; toggle.title = "Use this memory";
+        const on = document.createElement("input"); on.type = "checkbox"; on.checked = row.enabled !== false; on.setAttribute("aria-label", "Use this memory");
+        on.onchange = () => { row.enabled = on.checked; commitMemory(); };
+        const knob = document.createElement("span"); knob.className = "mmx-lora-switch-track"; toggle.append(on, knob);
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "mmx-lora-icon mmx-lora-remove"; remove.textContent = "×"; remove.title = "Forget this moment"; remove.setAttribute("aria-label", "Remove memory");
+        remove.onclick = () => { activeClip.memory.splice(i, 1); commitMemory(); };
+        head.append(toggle, tag, pick, remove);
+        card.appendChild(head);
+
+        // Whole clip or a part of it, on a small track of the source clip.
+        const total = Math.max(0.2, Number(src?.duration) || 0.2);
+        const whole = row.end == null && !(Number(row.start) > 0);
+        const modes = document.createElement("div"); modes.className = "mmx-memory-modes"; modes.setAttribute("role", "radiogroup");
+        for (const [label, isWhole] of [["Whole clip", true], ["Part of it", false]]) {
+          const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("role", "radio");
+          b.setAttribute("aria-checked", String(whole === isWhole)); b.className = whole === isWhole ? "active" : "";
+          b.onclick = () => { if (isWhole) { row.start = 0; row.end = null; } else if (whole) { row.start = Math.max(0, total - Math.min(2, total)); row.end = total; } commitMemory(); };
+          modes.appendChild(b);
+        }
+        card.appendChild(modes);
+        const track = document.createElement("div"); track.className = "mmx-memory-track";
+        const saved = src ? cachedClipResults[src.id] : null;
+        if (saved?.has_frames) {
+          const strip = document.createElement("img"); strip.className = "mmx-memory-strip"; strip.alt = ""; strip.draggable = false;
+          strip.src = api.apiURL(`/minimax_director/clip/filmstrip?project_id=${encodeURIComponent(timelineState.project_id)}&clip_id=${encodeURIComponent(src.id)}&count=10&height=56&g=${encodeURIComponent(saved.generation ?? "")}`);
+          strip.onerror = () => strip.remove();
+          track.appendChild(strip);
+        } else if (src) {
+          const pending = document.createElement("span"); pending.className = "mmx-memory-pending"; pending.textContent = "Not generated yet · generate it before this clip";
+          track.appendChild(pending);
+        }
+        const windowEl = document.createElement("div"); windowEl.className = "mmx-memory-window";
+        track.appendChild(windowEl);
+        const startIn = document.createElement("input"), endIn = document.createElement("input");
+        for (const el of [startIn, endIn]) { el.type = "range"; el.min = "0"; el.max = String(total); el.step = String(1 / 24); el.className = "mmx-memory-thumb"; }
+        startIn.setAttribute("aria-label", "Start of remembered part"); endIn.setAttribute("aria-label", "End of remembered part");
+        startIn.value = String(Number(row.start) || 0); endIn.value = String(row.end == null ? total : Number(row.end));
+        const readout = document.createElement("div"); readout.className = "mmx-memory-readout";
+        const paint = () => {
+          const s = Number(startIn.value), e = Number(endIn.value);
+          windowEl.style.left = `${(whole ? 0 : s) / total * 100}%`; windowEl.style.width = `${(whole ? total : Math.max(0, e - s)) / total * 100}%`;
+          readout.textContent = whole ? `All ${fmtSec(total)}` : `${fmtSec(s)} → ${fmtSec(e)}  ·  ${fmtSec(Math.max(0, e - s))}`;
+        };
+        const settle = () => { let s = Number(startIn.value), e = Number(endIn.value); if (e - s < 0.25) { if (document.activeElement === startIn) s = Math.max(0, e - 0.25); else e = Math.min(total, s + 0.25); } startIn.value = String(s); endIn.value = String(e); row.start = Math.round(s * 1000) / 1000; row.end = Math.round(e * 1000) / 1000; paint(); };
+        startIn.oninput = endIn.oninput = () => { settle(); };
+        startIn.onchange = endIn.onchange = () => { settle(); commitMemory(false); drawMemory(); };
+        if (!whole) { track.classList.add("mmx-memory-track-part"); track.append(startIn, endIn); }
+        card.append(track, readout);
+        paint();
+
+        const note = document.createElement("input"); note.type = "text"; note.className = "mmx-memory-note"; note.maxLength = 200;
+        note.placeholder = "What this moment shows, e.g. the living room, wide view (optional)";
+        note.value = row.note || ""; note.setAttribute("aria-label", "Memory note");
+        note.onchange = () => { row.note = note.value; commitMemory(); };
+        card.appendChild(note);
+        if (problem) { const warn = document.createElement("p"); warn.className = "mmx-memory-problem"; warn.textContent = problem; card.appendChild(warn); }
+        memoryBody.appendChild(card);
+      });
+
+      const used = memoryRows(activeClip);
+      const seconds = used.reduce((sum, row) => sum + memoryWindowSeconds(row), 0);
+      const budget = document.createElement("div"); budget.className = "mmx-memory-budget" + (seconds > MEMORY_MAX_SECONDS ? " over" : "");
+      budget.textContent = `${used.length} of ${slots} video slots · ${fmtSec(seconds)} of ${MEMORY_MAX_SECONDS} s reference video time` + (seconds > MEMORY_MAX_SECONDS ? " — shorten a part" : "");
+      if (activeClip.memory.length) memoryBody.appendChild(budget);
+
+      const actions = document.createElement("div"); actions.className = "mmx-memory-actions";
+      const full = activeClip.memory.length >= slots;
+      const prev = earlier[earlier.length - 1];
+      const addPrev = document.createElement("button"); addPrev.type = "button"; addPrev.className = "mmx-lora-add";
+      addPrev.textContent = prev ? `+ Remember the previous clip (${prev.name || prev.id})` : "+ Remember the previous clip";
+      addPrev.disabled = !prev || full;
+      addPrev.onclick = () => { activeClip.memory.push({clip_id: prev.id, start: 0, end: null, note: "", enabled: true}); commitMemory(); };
+      const addAny = document.createElement("button"); addAny.type = "button"; addAny.className = "mmx-lora-add";
+      addAny.textContent = "+ Remember another earlier clip"; addAny.disabled = !earlier.length || full;
+      addAny.onclick = () => { const pick = earlier.find(c => !activeClip.memory.some(r => r.clip_id === c.id)) || earlier[0]; activeClip.memory.push({clip_id: pick.id, start: 0, end: null, note: "", enabled: true}); commitMemory(); };
+      actions.append(addPrev, addAny);
+      if (!earlier.length) { const p = document.createElement("p"); p.className = "mmx-memory-empty"; p.textContent = "This is the first clip; memory needs an earlier clip."; actions.appendChild(p); }
+      else if (full) { const p = document.createElement("p"); p.className = "mmx-memory-empty"; p.textContent = slots ? `All ${slots} video slots are used.` : "This clip already uses all 3 reference video slots."; actions.appendChild(p); }
+      memoryBody.appendChild(actions);
+
+      const noteText = memoryNoteFor(activeClip);
+      if (noteText) {
+        const box = document.createElement("div"); box.className = "mmx-memory-preview";
+        const title = document.createElement("div"); title.className = "mmx-memory-preview-title"; title.textContent = "Added to this clip's prompt automatically";
+        const pre = document.createElement("pre"); pre.textContent = noteText;
+        box.append(title, pre); memoryBody.appendChild(box);
+      }
+    };
+    drawMemory();
+    finishSection(memoryPanel, "Show H3 earlier moments of this film so people, places and style carry over: a whole earlier clip or a part of it becomes a reference video, and a note saying so is added to the prompt. The earlier clip must be generated first.");
 
     // Duration controls in the clip header.
     const timingRow = document.createElement("div");
@@ -5031,100 +5375,75 @@ function mountDirectorUI(node) {
     promptWrap.appendChild(promptToolbar);
 
     if (activeClip.prompt_mode === "structured") {
-      // Structured Prompt Sub-Toolbar (Scaffold from Refs & Clear)
-      const structToolbar = document.createElement("div");
-      structToolbar.style.display = "flex";
-      structToolbar.style.justifyContent = "space-between";
-      structToolbar.style.alignItems = "center";
-      structToolbar.style.padding = "4px 0";
-
-      const scaffoldBtn = document.createElement("button");
-      scaffoldBtn.className = "mmx-action-btn primary";
-      scaffoldBtn.style.fontSize = "10px";
-      scaffoldBtn.style.padding = "2px 8px";
-      scaffoldBtn.innerHTML = "✨ Scaffold from Refs";
-      scaffoldBtn.title = "Automatically prefill structured fields based on assigned references";
-      scaffoldBtn.disabled=externallyAuthored;
-      scaffoldBtn.onclick = () => {
-        const scaffold = scaffoldStructuredPrompt(activeClip);
-        activeClip.structured_prompt = scaffold;
-        activeClip.prompt = compileStructuredPrompt(scaffold);
+      const sections = promptSectionsFor(activeClip);
+      const fields = structuredFieldsFromText(activeClip.prompt || "", sections);
+      activeClip.structured_prompt = storedSections(fields);
+      const inputs = new Map();
+      let lastInput = null;
+      const writeBack = () => {
+        activeClip.prompt = compilePromptSections(fields);
+        activeClip.structured_prompt = storedSections(fields);
         syncState();
         if (promptWidget) promptWidget.value = activeClip.prompt;
-        renderInspector();
+        updatePromptCounters();
       };
-      structToolbar.appendChild(scaffoldBtn);
+      const grow = area => { area.style.height = "auto"; area.style.height = `${Math.max(area.scrollHeight, 20)}px`; };
 
-      const clearStructBtn = document.createElement("button");
-      clearStructBtn.className = "mmx-action-btn";
-      clearStructBtn.style.fontSize = "10px";
-      clearStructBtn.style.padding = "2px 8px";
-      clearStructBtn.innerHTML = "Clear All";
-      clearStructBtn.disabled=externallyAuthored;
-      clearStructBtn.onclick = () => {
-        activeClip.structured_prompt = {
-          subject_definitions: "",
-          summary: "",
-          retention_analysis: "",
-          detailed_description: "",
-          overall_soundscape: "",
-          soundscape: "",
-          non_diegetic_music: "",
-          music: "",
+      // Toolbar: reference tokens insert into the section you were editing.
+      const bar = document.createElement("div"); bar.className = "mmx-sp-bar";
+      const tagRow = document.createElement("div"); tagRow.className = "mmx-quick-tags";
+      const counts = {image:0, video:0, audio:0, refmod:0};
+      const tagList = activeReferences(activeClip).map(row => ({label:`${row.name} · <${({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]} ${++counts[row.type]}>`, tag:`<${({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]} ${counts[row.type]}>`}));
+      memoryRows(activeClip).forEach((row, i) => { const tag = `<Video ${memoryFirstVideo(activeClip) + i}>`; tagList.push({label:`Memory · ${tag}`, tag, memory:true}); });
+      for (const t of tagList) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "mmx-quick-tag-btn" + (t.memory ? " mmx-tag-memory" : ""); b.textContent = t.label; b.title = `Insert ${t.tag}`;
+        b.disabled = externallyAuthored;
+        b.onmousedown = e => e.preventDefault();
+        b.onclick = () => {
+          const area = lastInput || inputs.get(sections.find(s => s.main).key); if (!area) return;
+          const start = area.selectionStart ?? area.value.length, end = area.selectionEnd ?? start;
+          area.value = area.value.slice(0, start) + t.tag + area.value.slice(end);
+          area.selectionStart = area.selectionEnd = start + t.tag.length; area.focus(); area.oninput();
         };
-        activeClip.prompt = "";
-        syncState();
-        if (promptWidget) promptWidget.value = "";
-        renderInspector();
-      };
-      structToolbar.appendChild(clearStructBtn);
-      promptWrap.appendChild(structToolbar);
-
-      // 6-Section Structured Fields Grid (Verbatim Official MiniMax H3 Section Names)
-      const grid = document.createElement("div");
-      grid.className = "mmx-structured-grid";
-      grid.style.flex = "1";
-      grid.style.minHeight = "140px";
-      grid.style.overflowY = "auto";
-
-      const createField = (key, label, isTextarea = true, fullSpan = false, placeholder = "") => {
-        const field = document.createElement("div");
-        field.className = "mmx-structured-field" + (fullSpan ? " full-span" : "");
-
-        const lbl = document.createElement("span");
-        lbl.className = "mmx-structured-label";
-        lbl.textContent = label;
-        field.appendChild(lbl);
-
-        const input = document.createElement(isTextarea ? "textarea" : "input");
-        input.className = isTextarea ? "mmx-structured-textarea" : "mmx-structured-input";
-        input.placeholder = placeholder;
-        const rawVal = activeClip.structured_prompt[key] || (key === "overall_soundscape" ? activeClip.structured_prompt.soundscape : (key === "non_diegetic_music" ? activeClip.structured_prompt.music : "")) || "";
-        input.value = rawVal;
-        input.readOnly=externallyAuthored;
-        input.oninput = () => {
-          activeClip.structured_prompt[key] = input.value;
-          if (key === "overall_soundscape") {
-            activeClip.structured_prompt.soundscape = input.value;
-          } else if (key === "non_diegetic_music") {
-            activeClip.structured_prompt.music = input.value;
-          }
-          activeClip.prompt = compileStructuredPrompt(activeClip.structured_prompt);
-          syncState();
-          if (promptWidget) promptWidget.value = activeClip.prompt;
-          updatePromptCounters();
+        tagRow.appendChild(b);
+      }
+      bar.appendChild(tagRow);
+      if (isReferencePromptMode(activeClip) && activeReferences(activeClip).length) {
+        const fill = document.createElement("button"); fill.type = "button"; fill.className = "mmx-sp-fill";
+        fill.textContent = "Fill empty sections from references";
+        fill.title = "Writes a starting point into sections that are still empty. Sections you wrote are never changed.";
+        fill.disabled = externallyAuthored;
+        fill.onclick = () => {
+          const scaffold = scaffoldStructuredPrompt(activeClip);
+          for (const s of sections) if (!String(fields[s.key] || "").trim() && scaffold[s.key]) fields[s.key] = scaffold[s.key];
+          writeBack(); renderInspector();
         };
-        field.appendChild(input);
-        return field;
-      };
+        bar.appendChild(fill);
+      }
+      promptWrap.appendChild(bar);
 
-      grid.appendChild(createField("subject_definitions", "subject_definitions:", true, false, "Describe the subjects and assigned references."));
-      grid.appendChild(createField("summary", "summary:", false, false, "[reference generation] Cinematic sequence for this clip with atmospheric lighting..."));
-      grid.appendChild(createField("retention_analysis", "retention_analysis:", true, false, "Describe which assigned subjects or features should stay unchanged."));
-      grid.appendChild(createField("detailed_description", "detailed_description:", true, false, "Describe continuous action, choreography, camera movements (pan, tilt, push-in), and lighting..."));
-      grid.appendChild(createField("overall_soundscape", "overall_soundscape:", false, false, "Diegetic audio: wind ambience, footsteps, mechanical hums, natural reverberation..."));
-      grid.appendChild(createField("non_diegetic_music", "non_diegetic_music:", false, false, "N/A or musical soundtrack style, e.g. Ambient orchestral cello drone..."));
-
+      const grid = document.createElement("div"); grid.className = "mmx-sp-grid";
+      for (const section of sections) {
+        const card = document.createElement("label"); card.className = "mmx-sp-card" + (section.half ? " mmx-sp-half" : "");
+        const head = document.createElement("span"); head.className = "mmx-sp-head";
+        const title = document.createElement("span"); title.className = "mmx-sp-title"; title.textContent = section.title;
+        const key = document.createElement("code"); key.className = "mmx-sp-key"; key.textContent = section.key;
+        head.append(title, key);
+        const area = document.createElement("textarea"); area.className = "mmx-sp-input"; area.rows = section.rows;
+        area.placeholder = section.hint; area.value = fields[section.key] || ""; area.readOnly = externallyAuthored;
+        area.spellcheck = true;
+        area.onfocus = () => { lastInput = area; };
+        area.oninput = () => { fields[section.key] = area.value; grow(area); writeBack(); };
+        inputs.set(section.key, area);
+        card.append(head, area); grid.appendChild(card);
+        requestAnimationFrame(() => grow(area));
+      }
+      const hidden = Object.keys(fields).filter(k => String(fields[k] || "").trim() && !sections.some(s => s.key === k));
+      if (hidden.length) {
+        const note = document.createElement("p"); note.className = "mmx-sp-hidden-note";
+        note.textContent = `Also kept in the prompt (not used by this clip type's sections): ${hidden.join(", ")}. Edit them in Raw.`;
+        grid.appendChild(note);
+      }
       promptWrap.appendChild(grid);
     } else {
       // Raw Prompt View with Quick Tags
@@ -5140,6 +5459,7 @@ function mountDirectorUI(node) {
         const tag = `<${kind} ${++counts[row.type]}>`;
         return {label: `${row.name} · ${tag}`, tag};
       });
+      memoryRows(activeClip).forEach((row, i) => { const tag = `<Video ${memoryFirstVideo(activeClip) + i}>`; tags.push({label:`Memory · ${tag}`, tag}); });
 
       tags.forEach((t) => {
         const tagBtn = document.createElement("button");
@@ -5206,6 +5526,14 @@ function mountDirectorUI(node) {
       }
     };
     updatePromptCounters();
+    const autoNote = memoryNoteFor(activeClip);
+    if (autoNote) {
+      // Never silently injected: show exactly what H3 receives in addition.
+      const box = document.createElement("details"); box.className = "mmx-memory-auto-note";
+      const sum = document.createElement("summary"); sum.textContent = `Memory note · added to the prompt automatically (${memoryRows(activeClip).length})`;
+      const pre = document.createElement("pre"); pre.textContent = autoNote;
+      box.append(sum, pre); promptWrap.appendChild(box);
+    }
     promptFooter.appendChild(charCounter);
     promptWrap.appendChild(promptFooter);
 
@@ -5224,11 +5552,12 @@ function mountDirectorUI(node) {
     helpButton.onclick=()=>{showToolHelp=!showToolHelp;tools.classList.toggle("mmx-show-help",showToolHelp);helpButton.setAttribute("aria-pressed",String(showToolHelp));};toolHeading.append(helpButton);
     const tabs=document.createElement("div");tabs.className="mmx-tool-tabs";tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Clip controls");
     shotSections.className="mmx-shot-sections mmx-tool-content";
-    const panels=[["Continuity",continuityPanel],["Look",shotExtras],["LoRAs",loraPanel]];
+    const panels=[["Continuity",continuityPanel],["Look",shotExtras],["LoRAs",loraPanel],["Memory",memoryPanel]];
     const canContinue=!continuityPanel.hidden;
-    if((activeToolTab==="Continuity"&&!canContinue) || (activeToolTab==="LoRAs"&&activeClip.locked))activeToolTab="Look";
+    const unavailable=label=>(label==="Continuity"&&!canContinue) || ((label==="LoRAs"||label==="Memory")&&!!activeClip.locked) || (label==="Memory"&&!memorySupported(activeClip));
+    if(unavailable(activeToolTab))activeToolTab="Look";
     const selectTool=label=>{
-      if((label==="Continuity"&&!canContinue) || (label==="LoRAs"&&activeClip.locked))return;
+      if(unavailable(label))return;
       activeToolTab=label;
       for(const [name,panel] of panels)panel.hidden=name!==label;
       for(const button of tabs.querySelectorAll("button")){
@@ -5242,7 +5571,9 @@ function mountDirectorUI(node) {
       button.dataset.tool=label;button.tabIndex=label===activeToolTab?0:-1;
       button.setAttribute("role","tab");button.setAttribute("aria-selected",String(label===activeToolTab));
       const panelId=`mmx-${node.id}-${label.toLowerCase()}-panel`;button.id=panelId+"-tab";
-      button.setAttribute("aria-controls",panelId);button.disabled=(label==="Continuity"&&!canContinue) || (label==="LoRAs"&&!!activeClip.locked);
+      button.setAttribute("aria-controls",panelId);button.disabled=unavailable(label);
+      if(label==="Memory"&&!memorySupported(activeClip))button.title="Memory works on REF2V and RV2V clips.";
+      if(label==="Memory"&&memorySupported(activeClip)&&memoryRows(activeClip).length){const count=document.createElement("span");count.className="mmx-tab-count";count.textContent=String(memoryRows(activeClip).length);button.append(count);}
       panel.id=panelId;panel.setAttribute("role","tabpanel");panel.setAttribute("aria-labelledby",button.id);
       panel.open=true;panel.hidden=label!==activeToolTab;shotSections.append(panel);
       button.onclick=()=>selectTool(label);
@@ -5338,6 +5669,13 @@ function mountDirectorUI(node) {
     }
     return sz;
   };
+  // A freshly added Master starts at LiteGraph's default width, which squeezes
+  // the editor into a narrow scrolling column. Saved workflows restore their
+  // own size in onConfigure, which runs after this.
+  if ((node.size?.[0] || 0) < 1200) {
+    const fresh = node.computeSize();
+    node.setSize?.([Math.max(1500, fresh[0]), Math.max(fresh[1], getTopWidgetsHeight(node) + 1300)]);
+  }
 
   const origOnDrawForeground = node.onDrawForeground;
   node.onDrawForeground = function (ctx) {

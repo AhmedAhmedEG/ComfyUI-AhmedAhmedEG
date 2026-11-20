@@ -45,6 +45,52 @@ def clean_mentions(text: str) -> str:
     return res
 
 
+PROMPT_SECTIONS = (
+    "subject_definitions", "summary", "retention_analysis", "detailed_description",
+    "integrated_multimodal_description", "overall_soundscape", "non_diegetic_music",
+)
+SECTION_ALIASES = {"soundscape": "overall_soundscape", "music": "non_diegetic_music",
+                   "imd": "integrated_multimodal_description"}
+_SECTION_REGEX = re.compile(
+    r"^[ \t]*(" + "|".join([*PROMPT_SECTIONS, *SECTION_ALIASES]) + r")[ \t]*:[ \t]*", re.I | re.M)
+
+
+def parse_prompt_sections(text: str):
+    """Split free-written prompt text into its official sections.
+
+    Returns ``(found, fields, preamble)``. ``found`` is False when the text has
+    no section headings; the Structured editor then treats the whole text as the
+    main description. ``preamble`` is any text before the first heading. The
+    Master's prompt text is the single source of truth; this is the same parser
+    the Structured editor uses, so both always agree.
+    """
+    text = str(text or "")
+    hits = list(_SECTION_REGEX.finditer(text))
+    if not hits:
+        return False, {}, text.strip()
+    fields = {}
+    for index, hit in enumerate(hits):
+        key = SECTION_ALIASES.get(hit.group(1).lower(), hit.group(1).lower())
+        end = hits[index + 1].start() if index + 1 < len(hits) else len(text)
+        body = text[hit.end():end].strip("\n").rstrip()
+        fields[key] = f"{fields[key]}\n{body}" if fields.get(key) else body
+    return True, fields, text[:hits[0].start()].strip()
+
+
+def structured_fields_from_text(text: str, reference_mode: bool) -> dict:
+    """Structured-prompt fields derived from the prompt text (see parse_prompt_sections)."""
+    found, fields, preamble = parse_prompt_sections(text)
+    main = "detailed_description" if reference_mode else "integrated_multimodal_description"
+    if not found:
+        fields = {main: preamble}
+    elif preamble:
+        fields[main] = "\n".join(part for part in (preamble, fields.get(main, "")) if part)
+    if not reference_mode and not fields.get("integrated_multimodal_description") and fields.get("detailed_description"):
+        fields["integrated_multimodal_description"] = fields["detailed_description"]
+    fields["imd"] = fields.get("integrated_multimodal_description", "")
+    return fields
+
+
 def format_alignment_header(mode: str, duration_sec: float, has_first_frame: bool = True, has_last_frame: bool = True) -> str:
     """Generate the official canonical alignment header line for FL2VA/I2VA/L2VA."""
     aligned_frames = align_frame_count(int(duration_sec * FPS))

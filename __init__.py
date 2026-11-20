@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.51"
+__version__ = "1.7.52"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -574,6 +574,28 @@ if getattr(PromptServer, "instance", None) is not None:
         try:
             mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
             return web.json_response({"project_id": mgr.project_id, "clips": await asyncio.to_thread(mgr.result_availability)})
+        except (ValueError, TypeError) as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+    @routes.get("/minimax_director/clip/filmstrip")
+    async def clip_filmstrip(request):
+        """Evenly spaced frames of a generated clip, for picking memory moments."""
+        try:
+            from .core.visual_memory import filmstrip
+            mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
+            clip_id = request.query.get("clip_id", "")
+            if not clip_id:
+                raise ValueError("Choose a clip.")
+            def build():
+                frames = mgr.load_clip_frames(clip_id)
+                if frames is None:
+                    raise FileNotFoundError("This clip has not been generated yet.")
+                trim = mgr._manifest.get("clips", {}).get(clip_id, {}).get("trim_prefix", 0)
+                return filmstrip(frames, trim, request.query.get("count", 8), request.query.get("height", 64))
+            data = await asyncio.to_thread(build)
+            return web.Response(body=data, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
+        except FileNotFoundError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
         except (ValueError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
 
