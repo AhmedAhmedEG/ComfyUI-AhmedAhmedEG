@@ -715,24 +715,35 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(carry.call_args.kwargs['audio_context_length'],5)
         self.assertTrue(carry.call_args.kwargs['pin_audio'])
         self.assertEqual(carry.call_args.kwargs['seam_min_mask'],.3)
-        self.assertFalse(carry.call_args.kwargs['freeze_prefix'])
 
-    def test_pure_carry_freezes_prefix_and_skips_chain_corrections(self):
-        clips=[{"id":"one","type":"T2VA","duration":2,"continuity_mode":"Independent (No Continuity)"},
-               {"id":"two","type":"T2VA","duration":2,"continuity_mode":"Latent Carry (Pinned)","context_length":39,"pure_carry":True}]
-        with patch('core.vendor.aimixer.director.h3_latent_continue.apply_latent_continue',side_effect=lambda latent,**kw:(latent,39,0)) as carry,              patch('core.advanced_sampling.sample_stage',side_effect=lambda model,latent,*args,**kw:latent),              patch('nodes.node_director.guard_carried_sharpness',side_effect=AssertionError('pure carry must not soften')),              patch('nodes.node_director.anchor_chain_contrast',side_effect=AssertionError('pure carry must not re-grade')):
+    def test_pure_carry_mirrors_studio_and_skips_chain_corrections(self):
+        clips=[{"id":"one","type":"T2VA","duration":124/24,"continuity_mode":"Independent (No Continuity)"},
+               {"id":"two","type":"T2VA","duration":124/24,"continuity_mode":"Latent Carry (Pinned)","context_length":39,"pure_carry":True}]
+        seen={}
+        def fake(latent,previous,context,carry_audio=True):
+            seen['context']=context;seen['audio']=carry_audio;return latent,12,65
+        with patch('core.studio_carry.build_continuation',side_effect=fake),              patch('core.vendor.aimixer.director.h3_latent_continue.apply_latent_continue',side_effect=AssertionError('old carry must not run')),              patch('core.advanced_sampling.sample_stage',side_effect=lambda model,latent,*args,**kw:latent),              patch('nodes.node_director.guard_carried_sharpness',side_effect=AssertionError('pure carry must not soften')),              patch('nodes.node_director.anchor_chain_contrast',side_effect=AssertionError('pure carry must not re-grade')):
             self.execute(clips)
-        self.assertTrue(carry.call_args.kwargs['freeze_prefix'])
+        self.assertEqual(seen['context'],39)
+        manager=ProjectCacheManager('regression',self.temp.name)
+        self.assertEqual(manager._manifest['clips']['two']['trim_prefix'],39)
+        self.assertEqual(manager._manifest['clips']['two'].get('previous_trim',0),0)
 
-    def test_freeze_prefix_masks_every_carried_token(self):
+    def test_studio_carry_freezes_last_tokens_and_audio(self):
         import torch as T
-        from core.vendor.aimixer.director import h3_latent_continue as lc
+        from core import studio_carry as sc
         from comfy.nested_tensor import NestedTensor
-        def av(t): return {"samples":NestedTensor((T.randn(1,24,t,4,4),T.randn(1,8,t*5)))}
-        out,_,_=lc.apply_latent_continue(av(12),prev_av=av(12),prev_tail=None,vae=None,context_length=22,pin_audio=False,freeze_prefix=True)
-        masks=out["noise_mask"]; mask=(masks.tensors if hasattr(masks,"tensors") else masks)[0]
-        self.assertEqual(float(mask[0,0,:7].max()),0.0)
-        self.assertEqual(float(mask[0,0,7:].min()),1.0)
+        prev={"samples":NestedTensor((T.arange(22).float().view(1,1,22,1,1).repeat(1,24,1,2,2),T.randn(1,8,1,280)))}
+        new={"samples":NestedTensor((T.zeros(1,24,47,2,2),T.zeros(1,8,1,270)))}
+        out,tokens,ticks=sc.build_continuation(new,prev,39)
+        video,_=(out["samples"].tensors if hasattr(out["samples"],"tensors") else out["samples"])
+        masks=out["noise_mask"]; vm,am=(masks.tensors if hasattr(masks,"tensors") else masks)
+        self.assertEqual(tokens,12); self.assertEqual(ticks,65)
+        self.assertEqual(video[0,0,:12,0,0].tolist(),list(range(10,22)))   # the previous clip's last 12 tokens, unchanged
+        self.assertEqual(float(vm[0,0,:12].max()),0.0); self.assertEqual(float(vm[0,0,12:].min()),1.0)
+        self.assertEqual(float(am[...,:65].max()),0.0); self.assertEqual(float(am[...,65:].min()),1.0)
+        self.assertEqual(sc.continuing_budget(124,39),(158,119))
+        self.assertEqual(sc.frames_for_tokens(12),39)
 
     def test_clip_by_clip_advances_only_the_completed_seed(self):
         clips = [{"id":"one","type":"T2V","duration":1,"seed":"18446744073709551615","seed_mode":"increment"},

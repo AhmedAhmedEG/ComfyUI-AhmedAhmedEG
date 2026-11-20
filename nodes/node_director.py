@@ -908,6 +908,9 @@ class MiniMaxH3MasterDirector:
             visible_frames = source["frames"].shape[0] if source is not None else align_frame_count(int(clip_dur * FPS))
             continuation_prefix = 0
             latent_carry = clip_continuity_mode == "Latent Carry (Pinned)"
+            # Pure carry mirrors H3 Continuity Studio's plain masked continuation
+            # (core/studio_carry.py): frozen carried tokens, no chain corrections.
+            pure_carry = latent_carry and bool(clip_item.get("pure_carry", timeline.get("pure_carry", False)))
             continuity_source = None
             if source is None and canon_mode != MODE_INPAINT and clip_continuity and previous_tail is not None:
                 frames = previous_tail.get("tail_frames")
@@ -918,8 +921,18 @@ class MiniMaxH3MasterDirector:
                         from ..core.continuity import continuity_frame_budget
                     except ImportError:
                         from core.continuity import continuity_frame_budget
-                    sample_frames, visible_frames = continuity_frame_budget(visible_frames, count, clip_duration_policy)
+                    if pure_carry:
+                        try:
+                            from ..core.studio_carry import continuing_budget
+                        except ImportError:
+                            from core.studio_carry import continuing_budget
+                        sample_frames, visible_frames = continuing_budget(visible_frames, count)
+                    else:
+                        sample_frames, visible_frames = continuity_frame_budget(visible_frames, count, clip_duration_policy)
                     clip_dur = sample_frames / FPS
+                    if pure_carry and previous_tail.get("last_frame") is not None:
+                        # Studio's continuation_guide: the previous clip's last frame guides the first new frame.
+                        guide_frames = [*(guide_frames or []), {"frame": previous_tail["last_frame"][-1:], "frame_idx": count}]
                     if first_frame is not None and not is_chained_from_previous:
                         guide_frames = [*(guide_frames or []), {"frame": first_frame, "frame_idx": count}]
                     first_frame = None
@@ -1104,10 +1117,6 @@ class MiniMaxH3MasterDirector:
             # Carry a copy whose sharpness cannot exceed the chain's baseline, so
             # grain/contrast do not ratchet up hop after hop (delivered clips unchanged).
             carry_av = previous_av
-            # Pure carry: continue from the saved latent exactly as it is, fully
-            # frozen, with none of the chain corrections below (what other H3
-            # continuation tools do). Experimental A/B switch.
-            pure_carry = bool(clip_item.get("pure_carry", timeline.get("pure_carry", False)))
             if continuation_prefix and previous_av is not None and not pure_carry:
                 carry_av, softened = guard_carried_sharpness(previous_av, chain_baseline())
                 if softened:
@@ -1124,7 +1133,19 @@ class MiniMaxH3MasterDirector:
                     context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None)
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
-            if latent_carry and continuation_prefix:
+            if pure_carry and continuation_prefix:
+                try:
+                    from ..core.studio_carry import build_continuation
+                except ImportError:
+                    from core.studio_carry import build_continuation
+                latent, carried_tokens, carried_ticks = build_continuation(latent, carry_av, continuation_prefix,
+                                                                           carry_audio=clip_audio_context > 0)
+                log.info("Master Director: clip %s pure carry: %d frames (%d tokens, %d audio ticks) frozen, guide at frame %d.",
+                         clip_id, continuation_prefix, carried_tokens, carried_ticks, continuation_prefix)
+                trim_count, previous_trim, continuity_source = continuation_prefix, 0, "latent_carry"
+                is_chained_from_previous = trim_count
+                clip_chained_flags[clip_idx] = trim_count
+            elif latent_carry and continuation_prefix:
                 try:
                     from ..core.vendor.aimixer.director.h3_latent_continue import apply_latent_continue
                 except ImportError:
@@ -1135,8 +1156,7 @@ class MiniMaxH3MasterDirector:
                     context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None,
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
                     pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
-                    seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)),
-                    freeze_prefix=pure_carry)
+                    seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
                 continuity_source = "latent_carry"
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
@@ -1172,7 +1192,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **(({"pure_carry": 1} if pure_carry else {"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1}) if is_chained_from_previous else {}),
+                    **(({"pure_carry": 2} if pure_carry else {"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1}) if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
