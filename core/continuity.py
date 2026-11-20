@@ -158,6 +158,7 @@ def guard_carried_sharpness(latent_dict: Dict[str, Any], baseline: float, tail_t
 
 CHAIN_CONTRAST_DEADBAND = 0.02
 CHAIN_CONTRAST_MAX = 0.10
+CHAIN_JOIN_MAX = 0.15
 
 
 def latent_contrast(video: torch.Tensor) -> float:
@@ -183,6 +184,7 @@ def anchor_chain_contrast(latent_dict: Dict[str, Any], guide_video: torch.Tensor
       * it then eases (cosine) to a scale that brings the clip's spread back
         to the chain's first clip, ignoring differences within +-2% and never
         more than +-10%, so real scene changes are left mostly alone.
+    The join match may go to +-15%: it settles near 0.90 on long chains.
     One scalar for all channels, around per-channel means: contrast only, no
     colour shift. Returns (latent_dict, seam_scale, end_scale).
     """
@@ -205,7 +207,7 @@ def anchor_chain_contrast(latent_dict: Dict[str, Any], guide_video: torch.Tensor
     rendered_spread = float(centred(v[:, :, 1:n]).std().clamp_min(1e-6))
     guide_spread = float(centred(guide[:, :, 1:n]).std())
     lo, hi = 1 - CHAIN_CONTRAST_MAX, 1 + CHAIN_CONTRAST_MAX
-    seam = min(hi, max(lo, guide_spread / rendered_spread))
+    seam = min(1 + CHAIN_JOIN_MAX, max(1 - CHAIN_JOIN_MAX, guide_spread / rendered_spread))
     ratio = float(anchor_contrast) / max(1e-6, float(centred(v[:, :, max(p, 1):]).std()))
     if abs(ratio - 1) <= CHAIN_CONTRAST_DEADBAND:
         end = 1.0

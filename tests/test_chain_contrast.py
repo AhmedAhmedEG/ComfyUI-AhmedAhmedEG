@@ -53,6 +53,13 @@ class ChainContrast(unittest.TestCase):
         self.assertIs(anchor_chain_contrast(same, None, self.anchor, 7)[0], same)
         self.assertIs(anchor_chain_contrast(same, self.guide, None, 7)[0], same)
 
+    def test_join_match_allows_up_to_fifteen_percent(self):
+        biased = torch.cat([self.guide, self.fresh], dim=2) * 1.12
+        _, seam, end = anchor_chain_contrast({"samples": biased}, self.guide, self.anchor, 7)
+        self.assertAlmostEqual(seam, 1 / 1.12, places=2)
+        biased = torch.cat([self.guide, self.fresh], dim=2) * 1.3
+        self.assertAlmostEqual(anchor_chain_contrast({"samples": biased}, self.guide, self.anchor, 7)[1], 0.85, places=3)
+
     def test_large_scene_change_is_capped(self):
         dark = torch.cat([self.guide, self.fresh * 0.5], dim=2)
         _, _, end = anchor_chain_contrast({"samples": dark}, self.guide, self.anchor, 7)
