@@ -94,42 +94,58 @@ def trim_continuity_audio_prefix(
     return {"waveform": trimmed_wf, "sample_rate": sr}
 
 
-def _video_channel_axes(video: torch.Tensor):
-    # [B,C,T,H,W] or [C,T,H,W]: statistics per channel over everything else.
-    return (0, 2, 3, 4) if video.ndim == 5 else tuple(i for i in range(video.ndim) if i != 0)
-
-
-def latent_channel_stats(latent_dict: Dict[str, Any]):
-    """Per-channel (mean, std) of a clip's video latent, used as a chain anchor."""
-    video, _ = extract_streams_from_av_latent(latent_dict)
+def latent_sharpness(video: torch.Tensor) -> float:
+    """High-frequency energy of a video latent [B,C,T,H,W], relative to its spread."""
     v = video.detach().float()
-    axes = _video_channel_axes(v)
-    return v.mean(dim=axes).cpu(), v.std(dim=axes).cpu()
+    grad = (v[..., 1:, :] - v[..., :-1, :]).abs().mean() + (v[..., :, 1:] - v[..., :, :-1]).abs().mean()
+    return float(grad / v.std().clamp_min(1e-6))
 
 
-def anchor_chain_drift(latent_dict: Dict[str, Any], anchor, strength: float) -> Dict[str, Any]:
-    """Pull a continued clip's video latent toward its chain's first clip (AdaIN).
+def _soften(video: torch.Tensor) -> torch.Tensor:
+    # 3x3 spatial smoothing per channel and latent frame.
+    import torch.nn.functional as F
+    b, c, t, h, w = video.shape
+    flat = video.permute(0, 2, 1, 3, 4).reshape(b * t, c, h, w)
+    flat = F.avg_pool2d(F.pad(flat, (1, 1, 1, 1), mode="replicate"), 3, stride=1)
+    return flat.reshape(b, t, c, h, w).permute(0, 2, 1, 3, 4)
 
-    Each continued clip starts from the previous clip's output, so a small
-    contrast/saturation/grain bias compounds hop after hop. Matching per-channel
-    mean/std to the chain's first clip stops that build-up; every clip is
-    anchored to the same reference, so seams stay consistent. Audio is untouched.
+
+CARRY_SHARPNESS_TOLERANCE = 1.02
+CARRY_MAX_SOFTEN = 0.6
+
+
+def guard_carried_sharpness(latent_dict: Dict[str, Any], baseline: float, tail_tokens: int = 12):
+    """Stop grain/sharpness from ratcheting up along a continuity chain.
+
+    A clip ends a little sharper than it starts; the next clip continues from
+    that ending and adds its own rise, so it compounds hop after hop. Only the
+    copy that is carried into the next clip is touched: if its tail is sharper
+    than the chain's baseline, blend in just enough smoothing to return it to
+    the baseline (capped). Delivered clips and audio are unchanged.
+    Returns (latent_dict_for_carry, applied_amount).
     """
-    strength = float(strength or 0.0)
-    if anchor is None or strength <= 0.0:
-        return latent_dict
+    if latent_dict is None or not baseline or baseline <= 0:
+        return latent_dict, 0.0
     samples = latent_dict.get("samples")
     streams, nested = unpack_av_samples(samples)
     video = streams[0]
+    if video.ndim != 5:
+        return latent_dict, 0.0
     v = video.float()
-    axes = _video_channel_axes(v)
-    shape = [1] * v.ndim
-    shape[1 if v.ndim == 5 else 0] = -1
-    mean, std = v.mean(dim=axes, keepdim=True), v.std(dim=axes, keepdim=True).clamp_min(1e-6)
-    a_mean = anchor[0].to(v.device, v.dtype).view(shape)
-    a_std = anchor[1].to(v.device, v.dtype).view(shape)
-    matched = (v - mean) / std * a_std + a_mean
-    streams[0] = (v + min(strength, 1.0) * (matched - v)).to(video.dtype)
+    tail = v[:, :, -min(int(tail_tokens), v.shape[2]):]
+    target = float(baseline) * CARRY_SHARPNESS_TOLERANCE
+    if latent_sharpness(tail) <= target:
+        return latent_dict, 0.0
+    smooth_tail = _soften(tail)
+    lo, hi = 0.0, CARRY_MAX_SOFTEN
+    for _ in range(14):  # smallest amount that reaches the baseline
+        mid = (lo + hi) / 2
+        if latent_sharpness(tail + mid * (smooth_tail - tail)) > target:
+            lo = mid
+        else:
+            hi = mid
+    amount = hi
+    streams[0] = (v + amount * (_soften(v) - v)).to(video.dtype)
     out = dict(latent_dict)
     if not nested:
         out["samples"] = streams[0]
@@ -137,7 +153,7 @@ def anchor_chain_drift(latent_dict: Dict[str, Any], anchor, strength: float) -> 
         out["samples"] = type(samples)(streams)
     else:
         out["samples"] = type(samples)(tuple(streams))
-    return out
+    return out, amount
 
 
 def match_color_temperature_and_grade(

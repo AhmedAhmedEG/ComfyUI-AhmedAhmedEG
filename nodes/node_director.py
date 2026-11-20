@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, latent_channel_stats, anchor_chain_drift
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, latent_channel_stats, anchor_chain_drift
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -55,7 +55,7 @@ try:
     from ..core.source_media import source_range, choose_audio
     from ..core.advanced_sampling import sample_selflift
     from ..core.project import migrate_timeline, save_autosave, export_timeline_state
-    from ..core.references import load_reference, edit_images
+    from ..core.references import load_reference, edit_images, undo_image_edits
 except ImportError:
     from core.sampling import sample_latent, native_outputs
     from core.cache_manager import fingerprint_value
@@ -64,7 +64,7 @@ except ImportError:
     from core.source_media import source_range, choose_audio
     from core.advanced_sampling import sample_selflift
     from core.project import migrate_timeline, save_autosave, export_timeline_state
-    from core.references import load_reference, edit_images
+    from core.references import load_reference, edit_images, undo_image_edits
 
 CATEGORY = "ComfyUI-AhmedAhmedEG"
 
@@ -239,8 +239,6 @@ class MiniMaxH3MasterDirector:
         scheduler = str(kwargs.get("scheduler", cfg_dict.get("scheduler", "simple")))
         shift_video = float(kwargs.get("shift_video", cfg_dict.get("shift_video", 12.0)))
         shift_audio = float(kwargs.get("shift_audio", cfg_dict.get("shift_audio", 3.0)))
-        # Absent from configs built before the setting existed: keep them unchanged.
-        chain_drift = max(0.0, min(1.0, float(cfg_dict.get("chain_drift_correction", 0.0) or 0.0)))
         seed = int(kwargs.get("seed", cfg_dict.get("seed", 0)))
         execution_mode = str(kwargs.get("execution_mode", cfg_dict.get("execution_mode", "All-in-One Generation")))
         prompt_mode = str(kwargs.get("prompt_mode", cfg_dict.get("prompt_mode", "structured")))
@@ -452,19 +450,20 @@ class MiniMaxH3MasterDirector:
         except ImportError:
             from core.progress import shot_event
         run_report = []
-        # The first clip of each continuity chain anchors the chain's latent
-        # colour statistics (see anchor_chain_drift). Loaded lazily for clips
-        # reused without reading their latent.
-        chain_anchor = {"clip": None, "stats": None}
-        def set_chain_anchor(anchor_clip, latent_dict=None):
-            chain_anchor["clip"] = anchor_clip
-            chain_anchor["stats"] = latent_channel_stats(latent_dict) if latent_dict is not None else None
-        def chain_anchor_stats():
-            if chain_anchor["stats"] is None and chain_anchor["clip"] is not None:
-                saved = cache_mgr.load_clip_latent(chain_anchor["clip"])
+        # Baseline sharpness of the current continuity chain (its first clip).
+        # Used to stop grain/sharpness ratcheting up through carried tails.
+        chain_sharpness = {"clip": None, "value": None}
+        def set_chain_start(start_clip, latent_dict=None):
+            chain_sharpness["clip"] = start_clip
+            chain_sharpness["value"] = None
+            if latent_dict is not None:
+                chain_sharpness["value"] = latent_sharpness(extract_streams_from_av_latent(latent_dict)[0])
+        def chain_baseline():
+            if chain_sharpness["value"] is None and chain_sharpness["clip"] is not None:
+                saved = cache_mgr.load_clip_latent(chain_sharpness["clip"])
                 if saved is not None:
-                    chain_anchor["stats"] = latent_channel_stats(saved)
-            return chain_anchor["stats"]
+                    chain_sharpness["value"] = latent_sharpness(extract_streams_from_av_latent(saved)[0])
+            return chain_sharpness["value"]
         def clear_dependent_approvals(ids):
             for item in clips:
                 if str(item['id']) in ids:
@@ -550,7 +549,7 @@ class MiniMaxH3MasterDirector:
                 low_carry = cached_latent.get("_selflift_low_carry") if cached_latent else None
                 clip_chained_flags[clip_idx] = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("trim_prefix", 0))
                 if not clip_chained_flags[clip_idx] and cached_latent is not None:
-                    set_chain_anchor(clip_id, cached_latent)
+                    set_chain_start(clip_id, cached_latent)
                 previous_trim = int(cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("previous_trim", 0))
                 if previous_trim and all_decoded_frames:
                     all_decoded_frames[-1] = all_decoded_frames[-1][:-previous_trim]
@@ -568,9 +567,13 @@ class MiniMaxH3MasterDirector:
                 sr_c = int(cached_aud.get("sample_rate", 48000))
                 aud_samples_c = min(wf_c.shape[-1], max(1, int(round(56 / frame_rate * sr_c))))
                 cached_tail_aud = {"waveform": wf_c[..., -aud_samples_c:].clone(), "sample_rate": sr_c}
+                saved_look = (cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("media_recovery") or {}).get("color", clip_item.get("color"))
+                graded_tail = cached_frames[-tail_count:].clone()
+                context_tail = undo_image_edits(graded_tail, saved_look)
                 previous_tail = {
-                    "last_frame": cached_frames[-1:].clone(),
-                    "tail_frames": cached_frames[-tail_count:].clone(),
+                    "last_frame": context_tail[-1:].clone(),
+                    "tail_frames": context_tail,
+                    "display_tail": graded_tail,
                     "tail_latent": v_stream[:, :, -1:].clone() if hasattr(v_stream, "shape") and getattr(v_stream, "ndim", 0) >= 3 else None,
                     "tail_audio": cached_tail_aud,
                 }
@@ -598,7 +601,7 @@ class MiniMaxH3MasterDirector:
                     if expected and expected!=meta.get('generation'):
                         raise ValueError(f"Approved clip {clip_id!r} has been replaced. Refresh and review its current saved result.")
                     if not int(meta.get('trim_prefix',0) or 0):
-                        set_chain_anchor(clip_id)  # chain start; stats loaded only if a later clip needs them
+                        set_chain_start(clip_id)  # baseline read lazily only if a later clip continues
                     run_report.append({'clip_id':clip_id,'action':'cached','frames':meta.get('frame_count'),
                                        'media_load':'skipped_unneeded_predecessor'})
                     completed_clips.append(clip_item)
@@ -1055,13 +1058,21 @@ class MiniMaxH3MasterDirector:
                     raise RuntimeError(f"Enabled Semantic Bridge failed: {exc}") from exc
 
             previous_trim = 0
+            # Both continuity methods continue from the previous sampled latent.
+            # Carry a copy whose sharpness cannot exceed the chain's baseline, so
+            # grain/contrast do not ratchet up hop after hop (delivered clips unchanged).
+            carry_av = previous_av
+            if continuation_prefix and previous_av is not None:
+                carry_av, softened = guard_carried_sharpness(previous_av, chain_baseline())
+                if softened:
+                    log.info("Master Director: carried context for clip %s softened %.2f to the chain's baseline sharpness.", clip_id, softened)
             if not latent_carry and continuation_prefix:
                 try:
                     from ..core.motion_context import apply_motion_context
                 except ImportError:
                     from core.motion_context import apply_motion_context
                 positive, trim_count, previous_trim, continuity_source = apply_motion_context(
-                    positive, latent, previous_av=previous_av, previous_tail=previous_tail,
+                    positive, latent, previous_av=carry_av, previous_tail=previous_tail,
                     vae=video_vae, audio_vae=audio_vae, context_frames=continuation_prefix,
                     audio_frames=clip_audio_context,
                     context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None)
@@ -1073,7 +1084,7 @@ class MiniMaxH3MasterDirector:
                 except ImportError:
                     from core.vendor.aimixer.director.h3_latent_continue import apply_latent_continue
                 latent, trim_count, previous_trim = apply_latent_continue(latent,
-                    prev_av=previous_av, prev_tail=previous_tail["tail_frames"], vae=video_vae,
+                    prev_av=carry_av, prev_tail=previous_tail["tail_frames"], vae=video_vae,
                     context_length=continuation_prefix,
                     context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None,
                     context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
@@ -1114,7 +1125,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **({"chain_drift_correction": chain_drift} if is_chained_from_previous and chain_drift > 0 else {}),
+                    **({"carry_sharpness_guard": 1} if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1326,17 +1337,10 @@ class MiniMaxH3MasterDirector:
                     guard_mode=refine.get("guard_mode","burn_direction"), memory_planning=refine.get("memory_planning",True),memory_reserve_pct=refine.get("memory_reserve_pct",35.),
                 )
 
-            # Long continuity chains drift (contrast, saturation, grain compound
-            # hop after hop). Anchor continued clips to their chain's first clip
-            # before decoding, so the next clip also inherits the corrected latent.
-            if is_chained_from_previous and chain_drift > 0:
-                anchor_stats = chain_anchor_stats()
-                if anchor_stats is not None:
-                    sampled_latent = anchor_chain_drift(sampled_latent, anchor_stats, chain_drift)
-                else:
-                    set_chain_anchor(clip_id, sampled_latent)
-            elif not is_chained_from_previous:
-                set_chain_anchor(clip_id, sampled_latent)
+            # A clip that does not continue another starts a new chain baseline;
+            # a continued clip with no known baseline (e.g. after source footage) seeds one.
+            if not is_chained_from_previous or chain_baseline() is None:
+                set_chain_start(clip_id, sampled_latent)
 
             # Decode
             previous_av = sampled_latent
@@ -1370,7 +1374,7 @@ class MiniMaxH3MasterDirector:
                     blend_w = min(12, int(decoded_frames.shape[0]))
                     decoded_frames = match_color_temperature_and_grade(
                         decoded_frames,
-                        previous_tail["tail_frames"],
+                        previous_tail.get("display_tail", previous_tail["tail_frames"]),
                         blend_window=blend_w, inplace=True,
                     )
                 except Exception as cg_err:
@@ -1453,9 +1457,15 @@ class MiniMaxH3MasterDirector:
             sr_d = int(decoded_audio.get("sample_rate", 48000))
             aud_samples_d = min(wf_d.shape[-1], max(1, int(round(56 / frame_rate * sr_d))))
             tail_aud = {"waveform": wf_d[..., -aud_samples_d:].clone(), "sample_rate": sr_d}
+            # The next clip continues from the ungraded generation (a graded tail
+            # would be continued and graded again, compounding the Look); the
+            # graded tail is kept only for seam colour matching.
+            graded_tail = decoded_frames[-tail_count:].clone()
+            context_tail = undo_image_edits(graded_tail, clip_item.get('color'))
             previous_tail = {
-                "last_frame": decoded_frames[-1:].clone(),
-                "tail_frames": decoded_frames[-tail_count:].clone(),
+                "last_frame": context_tail[-1:].clone(),
+                "tail_frames": context_tail,
+                "display_tail": graded_tail,
                 "tail_latent": v_stream[:, :, -1:].clone() if hasattr(v_stream, "shape") and getattr(v_stream, "ndim", 0) >= 3 else None,
                 "tail_audio": tail_aud,
             }

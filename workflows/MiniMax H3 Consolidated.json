@@ -242,8 +242,7 @@
         "manual",
         1,
         "16:9",
-        "latest",
-        1.0
+        "latest"
       ],
       "widgets_values_named": {
         "width": 960,
@@ -258,8 +257,7 @@
         "canvas_policy": "manual",
         "canvas_megapixels": 1,
         "canvas_aspect": "16:9",
-        "decoded_output": "latest",
-        "chain_drift_correction": 1.0
+        "decoded_output": "latest"
       }
     },
     {

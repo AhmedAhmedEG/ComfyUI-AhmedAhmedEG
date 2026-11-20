@@ -51,6 +51,37 @@ def edit_images(images, edits=None, crop=None):
     return images.clamp(0, 1)
 
 
+def look_is_active(edits):
+    edits = edits or {}
+    return (float(edits.get("exposure", 0)) != 0 or float(edits.get("contrast", 1)) != 1
+            or float(edits.get("saturation", 1)) != 1)
+
+
+def undo_image_edits(images, edits=None):
+    """Invert a clip's Look grade (exposure/contrast/saturation) on its frames.
+
+    Continuity must continue from what the model generated, not from the graded
+    output: otherwise the next clip inherits the grade and is graded again, so
+    the look compounds along the chain. Exact except where the grade clipped.
+    Saturation keeps the grey reference unchanged, so it inverts cleanly.
+    """
+    if not look_is_active(edits):
+        return images
+    exposure = float(edits.get("exposure", 0))
+    contrast = max(float(edits.get("contrast", 1)), 1e-3)
+    saturation = max(float(edits.get("saturation", 1)), 1e-3)
+    images = images.float()
+    if edits.get('model') == 'css':
+        images = images / 2**exposure
+        images = (images - .5) / contrast + .5
+        gray = images[..., 0:1]*.213 + images[..., 1:2]*.715 + images[..., 2:3]*.072
+        return (gray + (images - gray) / saturation).clamp(0, 1)
+    gray = images[..., :3].mean(dim=-1, keepdim=True)
+    images = gray + (images - gray) / saturation
+    images = (images - .5) / contrast + .5
+    return (images / 2**exposure).clamp(0, 1)
+
+
 def load_reference(row, root, width=1344, height=768):
     if row.get("role", "subject") not in ROLES:
         raise ValueError(f"Unknown reference role: {row.get('role')}")

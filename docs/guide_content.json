@@ -1,5 +1,5 @@
 {
-  "version": "1.7.44",
+  "version": "1.7.45",
   "reviewed": "2026-10-23",
   "title": "H3 Director — User Guide",
   "nodes": {
@@ -749,26 +749,6 @@
             "min": null,
             "max": null,
             "step": null,
-            "connection": false
-          }
-        },
-        "chain_drift_correction": {
-          "what": "Stops long continuity chains from drifting in contrast, saturation and grain.",
-          "when": "Keep at 1 for chains of continued clips; lower it if a chain should deliberately change look (for example a scene getting darker).",
-          "effect": "Each continued clip’s latent colour statistics are pulled toward the first clip of its chain before decoding, so the drift cannot build up.",
-          "caution": "Only affects continued clips. Changing it regenerates unapproved continued clips; 0 turns it off.",
-          "advanced": true,
-          "contract": {
-            "name": "chain_drift_correction",
-            "type": "FLOAT",
-            "required": false,
-            "default": 1.0,
-            "choices": [],
-            "dynamic": false,
-            "description": "Stops contrast, saturation and grain from building up over long continuity chains by pulling each continued clip's latent colour statistics back toward the first clip of its chain. 0 = off, 1 = full.",
-            "min": 0.0,
-            "max": 1.0,
-            "step": 0.05,
             "connection": false
           }
         }

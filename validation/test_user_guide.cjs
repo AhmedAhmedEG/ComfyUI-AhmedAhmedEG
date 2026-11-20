@@ -54,5 +54,5 @@ for(const relative of manifest){
  if(relative==='getting-started.html'){assert(d.querySelector('a[download]'));for(const text of ['FL2VA','REF2VA','56 frames','24 fps','0.92'])assert(d.body.textContent.includes(text));}
  dom.window.close();
 }
-assert.equal(totalOptions,284);assert(filtersChecked);assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
+assert.equal(totalOptions,283);assert(filtersChecked);assert.equal(errors.length,0,errors.map(e=>e.message).join('\n'));
 console.log(`Guide passed: ${nodes.length} chapters, ${totalOptions} source inputs/settings, ${screenshots.length} real screenshots plus a wiring diagram, offline links/anchors, full-text search, option filters, lightbox, keyboard and legacy redirects.`);
