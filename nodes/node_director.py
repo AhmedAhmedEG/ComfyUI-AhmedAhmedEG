@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, align_to_continued_context
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, align_to_continued_context
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -154,9 +154,9 @@ class MiniMaxH3MasterDirector:
             clips = [{"type":"T2V"}]
         overrides = kwargs.get("model_pack") or {}
         try:
-            from ..core.preflight_cache import PreflightCache
+            from ..core.preflight_cache import PreflightCache, model_identity
         except ImportError:
-            from core.preflight_cache import PreflightCache
+            from core.preflight_cache import PreflightCache, model_identity
         preflight=PreflightCache(preflight_inputs,tl)
         blocked=set()
         types = set()
@@ -413,9 +413,9 @@ class MiniMaxH3MasterDirector:
 
         cache_mgr = executor.cache_mgr
         try:
-            from ..core.preflight_cache import PreflightCache
+            from ..core.preflight_cache import PreflightCache, model_identity
         except ImportError:
-            from core.preflight_cache import PreflightCache
+            from core.preflight_cache import PreflightCache, model_identity
         preflight=PreflightCache(preflight_inputs,{**timeline,'clips':clips})
         if execution_mode != "Conditioning Guide Output":
             cache_mgr.begin_preview_run()
@@ -1125,7 +1125,7 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **({"carry_sharpness_guard": 1} if is_chained_from_previous else {}),
+                    **({"carry_sharpness_guard": 1, "seam_bias_removal": 1} if is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1337,6 +1337,22 @@ class MiniMaxH3MasterDirector:
                     guard_mode=refine.get("guard_mode","burn_direction"), memory_planning=refine.get("memory_planning",True),memory_reserve_pct=refine.get("memory_reserve_pct",35.),
                 )
 
+            # Remove this hop's render bias: the clip's first tokens re-render the
+            # previous tail (same moment); H3 renders guided frames a few percent
+            # more contrasty, and that compounded hop after hop.
+            if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry"):
+                try:
+                    from ..core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
+                except ImportError:
+                    from core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
+                try:
+                    guide_blocks, *_ = _video_tail_blocks(carry_av, continuation_prefix,
+                        end_frame=carry_av.get("_mmx_visible_end") if clip_duration_policy == "new" else None)
+                    sampled_latent, removed = align_to_continued_context(sampled_latent, torch.cat(guide_blocks, dim=2))
+                    log.info("Master Director: clip %s seam bias removed (contrast x%.3f -> 1.0).", clip_id, removed)
+                except Exception as exc:
+                    log.warning("Master Director: seam bias check skipped for clip %s: %s", clip_id, exc)
+
             # A clip that does not continue another starts a new chain baseline;
             # a continued clip with no known baseline (e.g. after source footage) seeds one.
             if not is_chained_from_previous or chain_baseline() is None:
@@ -1437,6 +1453,7 @@ class MiniMaxH3MasterDirector:
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
                     'preflight_key':preflight.key(clip_idx),
+                    'model_identity':model_identity(preflight.graph,preflight.node_id,clip_item.get('type','T2V')) if isinstance(preflight.graph,dict) else None,
                     'cache_report':cache_report(),
                     "refine_passes":refine_pass_rows,"refinement_pending":False,
                     "first_pass": {k:v for k,v in staged.items() if k != 'latent'} if staged is not None else None,

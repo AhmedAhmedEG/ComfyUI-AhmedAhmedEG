@@ -4007,6 +4007,18 @@ function mountDirectorUI(node) {
         saved.setAttribute('aria-label','Saved generated latent available');
         shotTopBar.append(saved);
       }
+      // A continued clip whose saved take came from a different model than the
+      // clip it continues: the look jumps at that seam (e.g. Fast H3 after Lightning).
+      const continued=idx>0 && !clip.locked && !clip.source && clip.continuity!==false && (clip.continuity_mode || 'Independent (No Continuity)')!=='Independent (No Continuity)';
+      const before=continued ? cachedClipResults[timelineState.clips[idx-1]?.id] : null;
+      if(continued && savedResult?.model_id && before?.model_id && savedResult.model_id!==before.model_id){
+        const warn=document.createElement('span');warn.className='mmx-model-mismatch-badge';
+        warn.textContent='⚠ Model changed';
+        warn.title=`This clip's saved take was made with ${savedResult.model_label || 'a different model'}, but it continues a clip made with ${before.model_label || 'another model'}. Mixing models in one chain changes the look at this seam. Regenerate the chain with one model.`;
+        warn.setAttribute('aria-label',`${clip.name || 'Clip'}: continues a clip made with a different model`);
+        warn.style.cssText='padding:1px 6px;border:1px solid #b9893a;border-radius:4px;background:#3a2d16;color:#f0c674;font-size:11px;white-space:nowrap';
+        shotTopBar.append(warn);
+      }
       if(clip.refine_pending) {const review=document.createElement('span');review.textContent=clip.refine_approved?'Ready To Refine':'Review First Pass';review.className='mmx-generating-badge';shotTopBar.append(review);}
       if(clip.cache_report && (Object.keys(clip.cache_report.stats || {}).length || Object.keys(clip.cache_report.run_preparation || {}).length)){
         const cache=document.createElement('button');cache.className='mmx-cache-button';cache.textContent='Cache';

@@ -462,6 +462,8 @@ class ProjectCacheManager:
                          "can_approve": latent or frames and audio, "generation": meta.get("generation"),
                          "seed": meta.get('seed'), "authored_seed": meta.get('authored_seed'),
                          "next_seed": meta.get('next_seed'), "refine_pending": False,
+                         "model_id": (meta.get('model_identity') or {}).get('id'),
+                         "model_label": (meta.get('model_identity') or {}).get('label'),
                          "cache_report":meta.get('cache_report')}
         for cid,meta in self._manifest.get("first_pass",{}).items():
             row=rows.setdefault(cid,{"has_frames":False,"has_audio":False,"has_latent":False,"can_approve":False})

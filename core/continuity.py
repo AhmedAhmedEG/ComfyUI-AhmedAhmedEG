@@ -156,6 +156,50 @@ def guard_carried_sharpness(latent_dict: Dict[str, Any], baseline: float, tail_t
     return out, amount
 
 
+SEAM_BIAS_MAX_SCALE = 0.15
+
+
+def align_to_continued_context(latent_dict: Dict[str, Any], guide_video: torch.Tensor):
+    """Remove the per-hop render bias of a continued clip.
+
+    The first tokens of a continued clip re-render the same moment as the
+    previous clip's tail tokens (``guide_video``). H3 renders guided frames a few
+    percent more contrasty with a small colour offset; the rest of the clip
+    continues from that, so the bias compounded hop after hop. The difference on
+    this identical content is pure bias: estimate it per channel (skipping the
+    special first latent frame) and remove it from the whole clip.
+    Returns (latent_dict, contrast_ratio_removed).
+    """
+    if latent_dict is None or guide_video is None:
+        return latent_dict, 1.0
+    samples = latent_dict.get("samples")
+    streams, nested = unpack_av_samples(samples)
+    video = streams[0]
+    guide = guide_video.float().to(video.device)
+    if video.ndim != 5 or guide.ndim != 5 or guide.shape[1] != video.shape[1] or guide.shape[3:] != video.shape[3:]:
+        return latent_dict, 1.0
+    n = min(int(guide.shape[2]), int(video.shape[2]) - 1)
+    if n < 3:
+        return latent_dict, 1.0
+    v = video.float()
+    rendered, target = v[:, :, 1:n], guide[:, :, 1:n]
+    axes = (0, 2, 3, 4)
+    r_mean, r_std = rendered.mean(dim=axes), rendered.std(dim=axes).clamp_min(1e-6)
+    t_mean, t_std = target.mean(dim=axes), target.std(dim=axes)
+    scale = (t_std / r_std).clamp(1 - SEAM_BIAS_MAX_SCALE, 1 + SEAM_BIAS_MAX_SCALE)
+    shift = t_mean - scale * r_mean
+    view = [1, -1, 1, 1, 1]
+    streams[0] = (v * scale.view(view) + shift.view(view)).to(video.dtype)
+    out = dict(latent_dict)
+    if not nested:
+        out["samples"] = streams[0]
+    elif isinstance(samples, (tuple, list)):
+        out["samples"] = type(samples)(streams)
+    else:
+        out["samples"] = type(samples)(tuple(streams))
+    return out, float(1.0 / scale.median())
+
+
 def match_color_temperature_and_grade(
     current_frames: torch.Tensor,
     prev_tail_frames: torch.Tensor,

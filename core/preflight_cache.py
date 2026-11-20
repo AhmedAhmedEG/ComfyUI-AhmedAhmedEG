@@ -58,6 +58,34 @@ def model_graph_signature(graph,link,seen=None):
     finally:seen.remove(node_id)
 
 
+def model_identity(graph, node_id, mode):
+    """Stable identity + readable label of the model branch a clip samples with.
+
+    Follows switches to the selected branch (UNET, LoRAs, attention patches),
+    so a chain can tell when a clip continues one made with a different model.
+    None when the wiring cannot be described statically.
+    """
+    try:
+        from .task_modes import normalize_mode, get_required_model_type
+        socket = get_required_model_type(normalize_mode(mode)) + '_model'
+        signature = model_graph_signature(graph, graph[str(node_id)]['inputs'][socket])
+    except Exception:
+        return None
+    names = {'unet_name': [], 'lora_name': []}
+    def walk(item):
+        if isinstance(item, dict):
+            settings = item.get('settings') if isinstance(item.get('settings'), dict) else {}
+            for key in names:
+                if isinstance(settings.get(key), str):
+                    names[key].append(Path(settings[key]).stem)
+            for value in item.values(): walk(value)
+        elif isinstance(item, (list, tuple)):
+            for value in item: walk(value)
+    walk(signature)
+    label = ' + '.join(dict.fromkeys(names['unet_name'] + names['lora_name'])) or 'model'
+    return {'id': fingerprint_value(signature)[:16], 'label': label}
+
+
 class PreflightCache:
     def __init__(self,inputs,timeline):
         self.inputs=inputs

@@ -42,6 +42,28 @@ class NativeFastH3Switch(unittest.TestCase):
                 self.assertNotEqual(base, fast, 'Switching model changes the saved-clip identity')
                 self.assertEqual(model_graph_signature(graph, ['vae_switch', 0])['model']['settings']['vae_name'], 'vae_fp16.safetensors')
 
+    def test_model_identity_tells_branches_apart_with_readable_labels(self):
+        from core.preflight_cache import model_identity
+        with tempfile.TemporaryDirectory() as folder:
+            weights = Path(folder) / 'weights.safetensors'; weights.write_bytes(b'x' * 64)
+            paths = SimpleNamespace(get_full_path_or_raise=lambda category, name: str(weights))
+            graph = {
+                'use_fast': {'class_type': 'PrimitiveBoolean', 'inputs': {'value': False}},
+                'base': {'class_type': 'UNETLoader', 'inputs': {'unet_name': 'MiniMax H3/ref2va_int8.safetensors', 'weight_dtype': 'default'}},
+                'lora': {'class_type': 'LoraLoaderModelOnly', 'inputs': {'model': ['base', 0], 'lora_name': 'MiniMax H3/turbo_8step.safetensors', 'strength_model': 1.0}},
+                'fast': {'class_type': 'UNETLoader', 'inputs': {'unet_name': 'MiniMax H3/fasth3_omniref.safetensors', 'weight_dtype': 'default'}},
+                'switch': {'class_type': 'ComfySwitchNode', 'inputs': {'switch': ['use_fast', 0], 'on_true': ['fast', 0], 'on_false': ['lora', 0]}},
+                'master': {'class_type': 'MiniMaxH3MasterNode', 'inputs': {'ref2va_model': ['switch', 0]}},
+            }
+            with patch.dict(sys.modules, {'folder_paths': paths}):
+                lightning = model_identity(graph, 'master', 'REF2VA')
+                graph['use_fast']['inputs']['value'] = True
+                fast = model_identity(graph, 'master', 'REF2VA')
+            self.assertEqual(lightning['label'], 'ref2va_int8 + turbo_8step')
+            self.assertEqual(fast['label'], 'fasth3_omniref')
+            self.assertNotEqual(lightning['id'], fast['id'])
+            self.assertIsNone(model_identity(graph, 'missing', 'REF2VA'))
+
 
 if __name__ == '__main__':
     unittest.main()

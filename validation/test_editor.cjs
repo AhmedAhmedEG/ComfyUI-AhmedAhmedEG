@@ -450,6 +450,16 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert.deepStrictEqual(unticked.clips.map(c=>c.validated),[false,false,true,true],
     'Once the new take is saved its dependents are unticked for regeneration');
   assert.equal(unticked.clips[1].pending_upstream,undefined);
+  // A continued clip whose saved take came from another model is flagged.
+  cacheStatusOverride={clips:{clip_1:{has_latent:true,can_approve:true,model_id:'aaa',model_label:'ref2va + turbo'},
+    dependent:{has_latent:true,can_approve:true,model_id:'bbb',model_label:'fasth3'},
+    independent:{has_latent:true,can_approve:true,model_id:'bbb'},'after-independent':{has_latent:true,can_approve:true,model_id:'bbb'}}};
+  node.__mmxDirectorRefresh();await new Promise(r=>setTimeout(r,200));
+  const modelBlocks=[...editorRoot.querySelectorAll('.mmx-shot-block')];
+  assert.deepStrictEqual(modelBlocks.map(b=>!!b.querySelector('.mmx-model-mismatch-badge')),[false,true,false,false],
+    'Only the continued clip whose model differs from its predecessor is flagged');
+  assert.match(modelBlocks[1].querySelector('.mmx-model-mismatch-badge').title,/fasth3.*ref2va \+ turbo/);
+  cacheStatusOverride=null;
   timeline.value=approvalBackup;node.__mmxDirectorRefresh();
   const executionState=JSON.parse(timeline.value),executionClip=executionState.clips.at(-1);
   node.__mmxShotHandler({detail:{node:String(node.id),project_id:executionState.project_id,clip_id:executionClip.id,phase:'preparing',index:2,total:2}});
