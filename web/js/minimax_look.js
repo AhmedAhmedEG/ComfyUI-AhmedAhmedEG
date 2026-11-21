@@ -92,6 +92,18 @@ function loadImage(url) {
   });
 }
 
+// Decoded frames and compare positions survive the editor being rebuilt (the
+// inspector redraws on many edits), so a redraw shows the same picture, zoom
+// and region at once instead of "Loading frame…" and a reset view.
+const pixelCache = new Map(), pixelReady = new Map(), savedViews = new Map();
+function cachedPixels(url) {
+  if (!pixelCache.has(url)) {
+    if (pixelCache.size > 24) { const old = pixelCache.keys().next().value; pixelCache.delete(old); pixelReady.delete(old); }
+    pixelCache.set(url, imagePixels(url).then(p => { pixelReady.set(url, p); return p; }, e => { pixelCache.delete(url); throw e; }));
+  }
+  return pixelCache.get(url);
+}
+
 async function imagePixels(url, maxWidth = 560) {
   const img = await loadImage(url);
   const scale = Math.min(1, maxWidth / img.naturalWidth);
@@ -106,6 +118,7 @@ async function imagePixels(url, maxWidth = 560) {
  * Build a look editor.
  * opts: {imageUrl, emptyText, look, onInput(look), onChange(look), anchorUrl, anchorLabel, beforeLabel, afterLabel,
  *        compareOriginal: readouts compare the adjusted frame with the unadjusted one}
+ * viewKey: keeps the compare zoom and region across rebuilds of the same editor.
  * The returned element has .actions (a row above the sliders, hidden until used) and .setLook(look).
  */
 export function createLookEditor(opts) {
@@ -115,7 +128,8 @@ export function createLookEditor(opts) {
   const canvas = document.createElement("canvas"); canvas.className = "mmx-look-canvas";
   // Compare view: the SAME zoomed region from both images side by side (before
   // left, after right). Drag the picture to move the region; 1x/2x/4x zoom.
-  const view = {x: .5, y: .5, zoom: 2};
+  const view = opts.viewKey && savedViews.get(opts.viewKey) || {x: .5, y: .5, zoom: 2};
+  if (opts.viewKey) savedViews.set(opts.viewKey, view);
   const zoomBar = document.createElement("div"); zoomBar.className = "mmx-look-zoom";
   for (const z of [1, 2, 4]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = `${z}×`; b.dataset.zoom = z;
@@ -215,13 +229,16 @@ export function createLookEditor(opts) {
     opts.onChange?.({...look});
   };
 
+  const show = pixels => {
+    original = pixels; canvas.width = pixels.width; canvas.height = pixels.height;
+    for (const c of Object.values(sources)) { c.width = pixels.width; c.height = pixels.height; }
+    empty.hidden = true; stage.classList.remove("mmx-look-missing"); render();
+  };
   if (opts.imageUrl) {
-    imagePixels(opts.imageUrl).then(pixels => {
-      original = pixels; canvas.width = pixels.width; canvas.height = pixels.height;
-      for (const c of Object.values(sources)) { c.width = pixels.width; c.height = pixels.height; }
-      empty.hidden = true; stage.classList.remove("mmx-look-missing"); render();
-    }).catch(() => { empty.textContent = opts.emptyText || "Frame not available yet."; stage.classList.add("mmx-look-missing"); });
-    if (opts.anchorUrl) imagePixels(opts.anchorUrl).then(pixels => { anchor = pixels; render(); }).catch(() => {});
+    if (opts.anchorUrl && pixelReady.has(opts.anchorUrl)) anchor = pixelReady.get(opts.anchorUrl);
+    if (pixelReady.has(opts.imageUrl)) show(pixelReady.get(opts.imageUrl));
+    else cachedPixels(opts.imageUrl).then(show).catch(() => { empty.textContent = opts.emptyText || "Frame not available yet."; stage.classList.add("mmx-look-missing"); });
+    if (opts.anchorUrl && !anchor) cachedPixels(opts.anchorUrl).then(pixels => { anchor = pixels; render(); }).catch(() => {});
   } else { empty.textContent = opts.emptyText || "No frame to preview."; stage.classList.add("mmx-look-missing"); }
   return root;
 }

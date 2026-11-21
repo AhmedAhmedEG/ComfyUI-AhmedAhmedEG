@@ -4749,7 +4749,17 @@ function mountDirectorUI(node) {
   };
 
   // Render Active Clip Inspector (Directly below timeline track!)
+  // Redraws keep the scroll position when the same clip stays selected, so an
+  // edit never jumps the panel back to the top.
+  let inspectorScrollClip=null;
   const renderInspector = () => {
+    const scrollers=[];for(let el=inspector;el;el=el.parentElement)if(el.scrollTop)scrollers.push([el,el.scrollTop]);
+    const sameClip=inspectorScrollClip===activeClipId;
+    renderInspectorNow();
+    inspectorScrollClip=activeClipId;
+    if(sameClip)for(const [el,top] of scrollers)el.scrollTop=top;
+  };
+  const renderInspectorNow = () => {
     projectName.value=timelineState.project_name || '';updateServerStatus();
     sharedPrompt.value=timelineState.shared_prompt || "";fade.value=timelineState.audio_fade_ms ?? 15;
     gain.checked=timelineState.audio_gain_match ?? true;sharedPolicy.value=timelineState.shared_prompt_policy || "prepend";
@@ -5362,7 +5372,7 @@ function mountDirectorUI(node) {
       box.append(head);
       if(extra.note){const p=document.createElement("p");p.className="mmx-continuity-mode-note";p.textContent=extra.note;box.append(p);}
       box.editor=createLookEditor({imageUrl,emptyText,look:activeClip[key],beforeLabel:extra.before || "Original",afterLabel:extra.after || "Adjusted",
-        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,compareOriginal:extra.compareOriginal,
+        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,compareOriginal:extra.compareOriginal,viewKey:`${timelineState.project_id||""}:${activeClip.id}:${key}`,
         onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}});
       box.append(box.editor);
       return box;
