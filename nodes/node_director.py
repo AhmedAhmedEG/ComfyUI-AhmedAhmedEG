@@ -12,7 +12,7 @@ import torch
 import torch.nn.functional as F
 
 try:
-    from ..core.config import FPS, CANVAS_MULTIPLE, align_frame_count
+    from ..core.config import FPS, CANVAS_MULTIPLE, MAX_REF_IMAGES, MAX_REF_VIDEOS, align_frame_count
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
@@ -26,7 +26,7 @@ try:
     from ..core.audio_post import join_timeline_audio
     from ..core.cache_manager import compute_clip_fingerprint
 except (ImportError, ValueError):
-    from core.config import FPS, CANVAS_MULTIPLE, align_frame_count
+    from core.config import FPS, CANVAS_MULTIPLE, MAX_REF_IMAGES, MAX_REF_VIDEOS, align_frame_count
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
@@ -940,7 +940,7 @@ class MiniMaxH3MasterDirector:
             memory_note_text = ""
             if clip_item.get("memory") and not group:
                 if canon_mode not in ("REF2VA", "RV2V"):
-                    raise ValueError("Clip memory needs a REF2V or RV2V clip; it passes earlier moments as reference videos.")
+                    raise ValueError("Clip memory needs a REF2V or RV2V clip; it passes earlier moments as reference videos or pictures.")
                 try:
                     from ..core.visual_memory import memory_windows, memory_note
                 except ImportError:
@@ -948,25 +948,23 @@ class MiniMaxH3MasterDirector:
                 manifest_clips = cache_mgr._manifest.get("clips", {})
                 windows = memory_windows(clip_item, clips, clip_idx, cache_mgr.load_clip_frames,
                     trim_prefix=lambda cid: manifest_clips.get(cid, {}).get("trim_prefix", 0))
-                # Memory takes the first video slots (after an RV2V source,
-                # which must stay Video 1); the user's own videos follow.
-                keep = 1 if source is not None else 0
-                items = list(ref_videos.items())
-                first_memory_video = keep + 1
-                reordered, moved = {}, {}
-                for key, value in items[:keep]:
-                    reordered[key] = value
-                for offset, window in enumerate(windows):
-                    reordered[f"ref_video_{first_memory_video + offset}"] = window["frames"]
-                for j, (key, value) in enumerate(items[keep:]):
-                    moved[key] = f"ref_video_{first_memory_video + len(windows) + j}"
-                    reordered[moved[key]] = value
-                ref_videos = reordered
-                ref_video_audios = {moved.get(key, key): value for key, value in ref_video_audios.items()}
-                memory_note_text = memory_note(windows, first_memory_video)
+                # Memory comes after the clip's own references, so the numbers
+                # the user wrote for their own videos and pictures never change.
+                first_memory_video, first_memory_image = len(ref_videos) + 1, len(ref_images) + 1
+                videos = [w for w in windows if w["kind"] == "video"]
+                images = [w for w in windows if w["kind"] == "image"]
+                for offset, window in enumerate(videos):
+                    ref_videos[f"ref_video_{first_memory_video + offset}"] = window["frames"]
+                for offset, window in enumerate(images):
+                    ref_images[f"ref_image_{first_memory_image + offset}"] = window["frames"]
+                if len(ref_videos) > MAX_REF_VIDEOS:
+                    raise ValueError(f"Clip memory and this clip's own videos use {len(ref_videos)} video slots; H3 accepts {MAX_REF_VIDEOS}.")
+                if len(ref_images) > MAX_REF_IMAGES:
+                    raise ValueError(f"Clip memory and this clip's own pictures use {len(ref_images)} picture slots; H3 accepts {MAX_REF_IMAGES}.")
+                memory_note_text = memory_note(windows, first_memory_video, first_memory_image)
                 if windows:
                     log.info("Master Director: clip %s remembers %s.", clip_id,
-                        ", ".join(f"{w['name']} {w['start']:.2f}-{w['end']:.2f}s" for w in windows))
+                        ", ".join(f"{w['name']} {w['start']:.2f}s" if w["kind"] == "image" else f"{w['name']} {w['start']:.2f}-{w['end']:.2f}s" for w in windows))
             audio_mode = clip_item.get("audio_mode", timeline.get("audio_mode", "generate"))
             if str(audio_mode).lower() not in ("generate", "source", "keep_source", "original", "mute"):
                 raise ValueError(f"Unknown clip audio mode: {audio_mode!r}")

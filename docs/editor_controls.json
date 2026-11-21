@@ -256,8 +256,8 @@
     ],
     [
       "Hold look to the chain's first clip",
-      "Pulls brightness and colour back to the first clip of the chain after decoding.",
-      "Long chains that slowly darken or shift colour.",
+      "Pulls the colour balance back to the first clip of the chain after decoding; brightness is left as generated.",
+      "Long chains whose colour slowly shifts (for example bluer with each clip).",
       "A gentle per-channel gain ramped from the join, so there is no jump."
     ],
     [

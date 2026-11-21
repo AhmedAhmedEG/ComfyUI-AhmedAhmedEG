@@ -37,8 +37,8 @@
         },
         {
           "goal": "Carry a room or outfit across a cut",
-          "setup": "On a REF2V clip open Memory and choose an earlier clip, whole or a part of it, with a short note such as 'the kitchen, wide view'.",
-          "expect": "That moment becomes a reference video and a visible note is added to the prompt; the earlier clip must be generated first."
+          "setup": "On a REF2V clip open Memory and choose an earlier clip (whole, a part of it, or one frame) with a short note such as 'the kitchen, wide view'.",
+          "expect": "That moment becomes a reference video (or a picture, for one frame) after the clip's own references, and a visible note is added to the prompt; the earlier clip must be generated first."
         }
       ],
       "notes": [

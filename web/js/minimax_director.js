@@ -4129,38 +4129,34 @@ function mountDirectorUI(node) {
     .map(key => `${key}:\n${String(fields[key]).trim()}`).join("\n\n");
   const storedSections = fields => ({...fields, soundscape:fields.overall_soundscape || "", music:fields.non_diegetic_music || "", imd:fields.integrated_multimodal_description || ""});
 
-  // Clip memory (see core/visual_memory.py): earlier clips, or parts of them,
-  // passed as reference videos with a visible note added to the prompt.
-  const MEMORY_INSTRUCTION = "These videos are earlier moments of this same film. Keep the people, clothing, setting, lighting and style they show. The camera, framing and action of this clip follow its own description; do not replay those moments.";
+  // Clip memory (see core/visual_memory.py): earlier clips, parts of them, or
+  // single frames, passed as reference videos / pictures with a visible note
+  // added to the prompt. Memory comes after the clip's own references, so the
+  // numbers of the user's own videos and pictures never change.
+  const MEMORY_INSTRUCTION = "These references are earlier moments of this same film. Keep the people, clothing, setting, lighting and style they show. The camera, framing and action of this clip follow its own description; do not replay those moments.";
   const MEMORY_MAX_SECONDS = 15;
   const memorySupported = clip => ["REF2V","RV2V"].includes(clipCode(clip));
   const memoryRows = clip => (Array.isArray(clip.memory) ? clip.memory : []).filter(row => row && row.enabled !== false && row.clip_id);
-  // Memory takes the first video slots; an RV2V source stays <Video 1>. The
-  // clip's own videos follow (matches nodes/node_director.py).
-  const memoryFirstVideo = clip => clipCode(clip) === "RV2V" && activeReferences(clip).some(row => row.type === "video") ? 2 : 1;
-  const memoryCount = clip => memorySupported(clip) ? memoryRows(clip).length : 0;
-  const ownVideoNumber = (clip, k) => clipCode(clip) === "RV2V" && k === 0 ? 1 : k + 1 + memoryCount(clip);
-  // Keep <Video N> tags written for the clip's own videos pointing at the same
-  // video when the number of memory slots in front of them changes.
-  const shiftOwnVideoTags = (clip, before, after) => {
-    if (before === after) return;
-    const lastMemory = memoryFirstVideo(clip) - 1 + before;
-    const shift = text => String(text ?? "").replace(/<Video\s+(\d+)>/g, (tag, n) => Number(n) > lastMemory ? `<Video ${Number(n) - before + after}>` : tag);
-    clip.prompt = shift(clip.prompt);
-    if (clip.structured_prompt) for (const [key, value] of Object.entries(clip.structured_prompt)) if (typeof value === "string") clip.structured_prompt[key] = shift(value);
-    if (clip.id === activeClipId && promptWidget) promptWidget.value = clip.prompt;
+  const memoryKind = row => row?.kind === "image" ? "image" : "video";
+  const ownCount = (clip, type) => activeReferences(clip).filter(row => row.type === type).length;
+  const ownVideoNumber = (clip, k) => k + 1;
+  // Prompt tag of an enabled memory row (<Video N> or <Picture N>), else null.
+  const memoryTag = (clip, row) => {
+    const rows = memoryRows(clip), pos = rows.indexOf(row);
+    if (pos < 0) return null;
+    const kind = memoryKind(row), n = rows.slice(0, pos).filter(r => memoryKind(r) === kind).length;
+    return kind === "image" ? `<Picture ${ownCount(clip, "image") + 1 + n}>` : `<Video ${ownCount(clip, "video") + 1 + n}>`;
   };
-  const memorySlots = clip => Math.max(0, 3 - activeReferences(clip).filter(row => row.type === "video").length);
+  const memorySlots = (clip, kind) => kind === "image" ? Math.max(0, 9 - ownCount(clip, "image")) : Math.max(0, 3 - ownCount(clip, "video"));
   const clipById = id => timelineState.clips.find(c => c.id === id);
-  const memoryWindowSeconds = row => { const src = clipById(row.clip_id); const total = Number(src?.duration) || 0; const start = Math.max(0, Number(row.start) || 0); const end = row.end == null ? total : Math.min(total, Number(row.end)); return Math.max(0, end - start); };
+  const memoryWindowSeconds = row => { if (memoryKind(row) === "image") return 0; const src = clipById(row.clip_id); const total = Number(src?.duration) || 0; const start = Math.max(0, Number(row.start) || 0); const end = row.end == null ? total : Math.min(total, Number(row.end)); return Math.max(0, end - start); };
   const memoryNoteFor = clip => {
     const rows = memoryRows(clip);
     if (!rows.length || !memorySupported(clip)) return "";
-    const first = memoryFirstVideo(clip);
-    const lines = rows.map((row, i) => {
+    const lines = rows.map(row => {
       const note = String(row.note || "").split(/\s+/).filter(Boolean).join(" ").slice(0, 200);
       const src = clipById(row.clip_id);
-      return `<Video ${first + i}> is an earlier moment of this film (${note || src?.name || src?.id || row.clip_id || "an earlier clip"}).`;
+      return `${memoryTag(clip, row)} is ${memoryKind(row) === "image" ? "a frame from an earlier moment" : "an earlier moment"} of this film (${note || src?.name || src?.id || row.clip_id || "an earlier clip"}).`;
     });
     return [...lines, MEMORY_INSTRUCTION].join("\n");
   };
@@ -5165,18 +5161,18 @@ function mountDirectorUI(node) {
     const memoryBody = document.createElement("div"); memoryBody.className = "mmx-memory";
     memoryPanel.appendChild(memoryBody);
     const fmtSec = v => `${(Math.round(Number(v) * 100) / 100).toFixed(2)} s`;
-    let memoryCountShown = memoryCount(activeClip);
-    const commitMemory = (redraw = true) => { const now = memoryCount(activeClip); if (!externallyAuthored) shiftOwnVideoTags(activeClip, memoryCountShown, now); memoryCountShown = now; syncState(); renderTimeline(); if (redraw) renderInspector(); };
+    const commitMemory = (redraw = true) => { syncState(); renderTimeline(); if (redraw) renderInspector(); };
     const drawMemory = () => {
       memoryBody.replaceChildren();
       const index = timelineState.clips.indexOf(activeClip);
       const earlier = timelineState.clips.slice(0, Math.max(0, index)).filter(c => !c.locked || Number(c.duration) > 0);
       if (!memorySupported(activeClip)) {
         const p = document.createElement("p"); p.className = "mmx-memory-empty";
-        p.textContent = "Memory works on REF2V and RV2V clips: it passes earlier moments as reference videos.";
+        p.textContent = "Memory works on REF2V and RV2V clips: it passes earlier moments as reference videos or pictures.";
         memoryBody.appendChild(p); return;
       }
-      const slots = memorySlots(activeClip);
+      const videoSlots = memorySlots(activeClip, "video"), imageSlots = memorySlots(activeClip, "image");
+      const usedOf = kind => activeClip.memory.filter(r => memoryKind(r) === kind).length;
       activeClip.memory.forEach((row, i) => {
         const src = clipById(row.clip_id);
         const srcIndex = timelineState.clips.indexOf(src);
@@ -5186,7 +5182,7 @@ function mountDirectorUI(node) {
         const head = document.createElement("div"); head.className = "mmx-memory-head";
         const tag = document.createElement("span"); tag.className = "mmx-memory-tag";
         const pos = memoryRows(activeClip).indexOf(row);
-        tag.textContent = pos >= 0 ? `<Video ${memoryFirstVideo(activeClip) + pos}>` : "off";
+        tag.textContent = pos >= 0 ? memoryTag(activeClip, row) : "off";
         const pick = document.createElement("select"); pick.className = "mmx-memory-source"; pick.setAttribute("aria-label", "Remembered clip");
         if (!src) { const o = document.createElement("option"); o.value = row.clip_id; o.textContent = "Missing clip"; pick.appendChild(o); }
         for (const c of earlier) { const o = document.createElement("option"); o.value = c.id; o.textContent = `${timelineState.clips.indexOf(c) + 1} · ${c.name || c.id} · ${fmtSec(c.duration || 0)}`; pick.appendChild(o); }
@@ -5202,14 +5198,23 @@ function mountDirectorUI(node) {
         head.append(toggle, tag, pick, remove);
         card.appendChild(head);
 
-        // Whole clip or a part of it, on a small track of the source clip.
+        // Whole clip, a part of it (reference video) or one frame (reference
+        // picture), on a small track of the source clip.
         const total = Math.max(0.2, Number(src?.duration) || 0.2);
-        const whole = row.end == null && !(Number(row.start) > 0);
+        const frameMode = memoryKind(row) === "image";
+        const whole = !frameMode && row.end == null && !(Number(row.start) > 0);
+        const current = frameMode ? "frame" : whole ? "whole" : "part";
         const modes = document.createElement("div"); modes.className = "mmx-memory-modes"; modes.setAttribute("role", "radiogroup");
-        for (const [label, isWhole] of [["Whole clip", true], ["Part of it", false]]) {
+        for (const [label, mode] of [["Whole clip", "whole"], ["Part of it", "part"], ["One frame", "frame"]]) {
           const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("role", "radio");
-          b.setAttribute("aria-checked", String(whole === isWhole)); b.className = whole === isWhole ? "active" : "";
-          b.onclick = () => { if (isWhole) { row.start = 0; row.end = null; } else if (whole) { row.start = Math.max(0, total - Math.min(2, total)); row.end = total; } commitMemory(); };
+          b.setAttribute("aria-checked", String(current === mode)); b.className = current === mode ? "active" : "";
+          const wantKind = mode === "frame" ? "image" : "video";
+          if (current !== mode && memoryKind(row) !== wantKind && usedOf(wantKind) >= memorySlots(activeClip, wantKind)) { b.disabled = true; b.title = wantKind === "image" ? "All picture slots are used." : "All video slots are used."; }
+          b.onclick = () => {
+            if (mode === "frame") { row.kind = "image"; row.start = Math.min(total, Number(row.end ?? total) - (row.end == null ? Math.min(total, 0.5) : 0)); row.start = Math.max(0, Math.round(row.start * 1000) / 1000); row.end = null; }
+            else { delete row.kind; if (mode === "whole") { row.start = 0; row.end = null; } else if (current !== "part") { row.start = Math.max(0, total - Math.min(2, total)); row.end = total; } }
+            commitMemory();
+          };
           modes.appendChild(b);
         }
         card.appendChild(modes);
@@ -5233,13 +5238,15 @@ function mountDirectorUI(node) {
         const readout = document.createElement("div"); readout.className = "mmx-memory-readout";
         const paint = () => {
           const s = Number(startIn.value), e = Number(endIn.value);
+          if (frameMode) { windowEl.style.left = `calc(${s / total * 100}% - 1px)`; windowEl.style.width = "2px"; readout.textContent = `Frame at ${fmtSec(s)}  ·  passed as a picture`; return; }
           windowEl.style.left = `${(whole ? 0 : s) / total * 100}%`; windowEl.style.width = `${(whole ? total : Math.max(0, e - s)) / total * 100}%`;
           readout.textContent = whole ? `All ${fmtSec(total)}` : `${fmtSec(s)} → ${fmtSec(e)}  ·  ${fmtSec(Math.max(0, e - s))}`;
         };
-        const settle = () => { let s = Number(startIn.value), e = Number(endIn.value); if (e - s < 0.25) { if (document.activeElement === startIn) s = Math.max(0, e - 0.25); else e = Math.min(total, s + 0.25); } startIn.value = String(s); endIn.value = String(e); row.start = Math.round(s * 1000) / 1000; row.end = Math.round(e * 1000) / 1000; paint(); };
+        const settle = () => { if (frameMode) { row.start = Math.round(Number(startIn.value) * 1000) / 1000; paint(); return; } let s = Number(startIn.value), e = Number(endIn.value); if (e - s < 0.25) { if (document.activeElement === startIn) s = Math.max(0, e - 0.25); else e = Math.min(total, s + 0.25); } startIn.value = String(s); endIn.value = String(e); row.start = Math.round(s * 1000) / 1000; row.end = Math.round(e * 1000) / 1000; paint(); };
         startIn.oninput = endIn.oninput = () => { settle(); };
         startIn.onchange = endIn.onchange = () => { settle(); commitMemory(false); drawMemory(); };
-        if (!whole) { track.classList.add("mmx-memory-track-part"); track.append(startIn, endIn); }
+        if (frameMode) { startIn.setAttribute("aria-label", "Remembered frame"); track.classList.add("mmx-memory-track-part"); track.append(startIn); }
+        else if (!whole) { track.classList.add("mmx-memory-track-part"); track.append(startIn, endIn); }
         card.append(track, readout);
         paint();
 
@@ -5255,22 +5262,26 @@ function mountDirectorUI(node) {
       const used = memoryRows(activeClip);
       const seconds = used.reduce((sum, row) => sum + memoryWindowSeconds(row), 0);
       const budget = document.createElement("div"); budget.className = "mmx-memory-budget" + (seconds > MEMORY_MAX_SECONDS ? " over" : "");
-      budget.textContent = `${used.length} of ${slots} video slots · ${fmtSec(seconds)} of ${MEMORY_MAX_SECONDS} s reference video time` + (seconds > MEMORY_MAX_SECONDS ? " — shorten a part" : "");
+      const usedVideos = used.filter(r => memoryKind(r) === "video").length, usedImages = used.length - usedVideos;
+      budget.textContent = `${usedVideos} of ${videoSlots} video slots` + (usedImages ? ` · ${usedImages} of ${imageSlots} picture slots` : "") + (usedVideos ? ` · ${fmtSec(seconds)} of ${MEMORY_MAX_SECONDS} s reference video time` : "") + (seconds > MEMORY_MAX_SECONDS ? " — shorten a part" : "");
       if (activeClip.memory.length) memoryBody.appendChild(budget);
 
       const actions = document.createElement("div"); actions.className = "mmx-memory-actions";
-      const full = activeClip.memory.length >= slots;
+      const videoFull = usedOf("video") >= videoSlots, full = videoFull && usedOf("image") >= imageSlots;
+      // New memories are videos while video slots remain, else single frames.
+      const newRow = clipId => videoFull ? {clip_id: clipId, kind: "image", start: 0, end: null, note: "", enabled: true} : {clip_id: clipId, start: 0, end: null, note: "", enabled: true};
       const prev = earlier[earlier.length - 1];
       const addPrev = document.createElement("button"); addPrev.type = "button"; addPrev.className = "mmx-lora-add";
       addPrev.textContent = prev ? `+ Remember the previous clip (${prev.name || prev.id})` : "+ Remember the previous clip";
       addPrev.disabled = !prev || full;
-      addPrev.onclick = () => { activeClip.memory.push({clip_id: prev.id, start: 0, end: null, note: "", enabled: true}); commitMemory(); };
+      addPrev.onclick = () => { activeClip.memory.push(newRow(prev.id)); commitMemory(); };
       const addAny = document.createElement("button"); addAny.type = "button"; addAny.className = "mmx-lora-add";
       addAny.textContent = "+ Remember another earlier clip"; addAny.disabled = !earlier.length || full;
-      addAny.onclick = () => { const pick = earlier.find(c => !activeClip.memory.some(r => r.clip_id === c.id)) || earlier[0]; activeClip.memory.push({clip_id: pick.id, start: 0, end: null, note: "", enabled: true}); commitMemory(); };
+      addAny.onclick = () => { const pick = earlier.find(c => !activeClip.memory.some(r => r.clip_id === c.id)) || earlier[0]; activeClip.memory.push(newRow(pick.id)); commitMemory(); };
       actions.append(addPrev, addAny);
       if (!earlier.length) { const p = document.createElement("p"); p.className = "mmx-memory-empty"; p.textContent = "This is the first clip; memory needs an earlier clip."; actions.appendChild(p); }
-      else if (full) { const p = document.createElement("p"); p.className = "mmx-memory-empty"; p.textContent = slots ? `All ${slots} video slots are used.` : "This clip already uses all 3 reference video slots."; actions.appendChild(p); }
+      else if (full) { const p = document.createElement("p"); p.className = "mmx-memory-empty"; p.textContent = "All video and picture slots are used."; actions.appendChild(p); }
+      else if (videoFull) { const p = document.createElement("p"); p.className = "mmx-memory-empty"; p.textContent = "Video slots are full; new memories are added as single frames (pictures)."; actions.appendChild(p); }
       memoryBody.appendChild(actions);
 
       const noteText = memoryNoteFor(activeClip);
@@ -5282,7 +5293,7 @@ function mountDirectorUI(node) {
       }
     };
     drawMemory();
-    finishSection(memoryPanel, "Show H3 earlier moments of this film so people, places and style carry over: a whole earlier clip or a part of it becomes a reference video, and a note saying so is added to the prompt. The earlier clip must be generated first.");
+    finishSection(memoryPanel, "Show H3 earlier moments of this film so people, places and style carry over: a whole earlier clip or a part of it becomes a reference video, or one frame becomes a reference picture, after this clip's own references. A note saying so is added to the prompt. The earlier clip must be generated first.");
 
     // Duration controls in the clip header.
     const timingRow = document.createElement("div");
@@ -5399,10 +5410,10 @@ function mountDirectorUI(node) {
         const changes=lookChanges(used,next);
         const note=document.createElement("p");note.className="mmx-calib-note";
         note.textContent=`Calibrate fixes the Join row: it sets the previous-tail sliders so this clip starts the way the previous clip ended, starting from the look this take was made with${withContrast?"":" (contrast is left to the join fix)"}. Regenerate this clip after calibrating.`;
-        const endOff=m.anchor && [pct(luma(m.raw_end),luma(m.anchor)),pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
+        const endOff=m.anchor && [pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
         const endNote=document.createElement("p");
         if(endOff){const p=endNote;p.className="mmx-calib-note"+(m.hold_gain?"":" warn");
-          p.textContent=m.hold_gain?"The end is corrected after decoding by Hold look (see End, delivered); the sliders are not used for that.":"The end drifts from the chain's first clip. Turn on Hold look above to correct it after decoding; the sliders cannot fix the end reliably.";}
+          p.textContent=m.hold_gain?"The end's colour is corrected after decoding by Hold look (see End, delivered); its brightness is left as generated.":"The end's colour drifts from the chain's first clip. Turn on Hold look above to correct the colour after decoding; brightness changes toward the end are left as generated.";}
         const actions=document.createElement("div");actions.className="mmx-calib-actions";
         const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
         const summary=document.createElement("small");
@@ -5464,7 +5475,7 @@ function mountDirectorUI(node) {
         fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();preview?.editor.refresh();},
           "Keeps sharpness, contrast and colour cast from building up at each join. Recommended."));
         fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();preview?.editor.refresh();},
-          "After decoding, gently pulls brightness and colour back to the first clip of this chain, ramping from the join so there is no jump."));
+          "After decoding, gently pulls the colour balance back to the first clip of this chain, ramping from the join so there is no jump. Brightness is left as generated."));
         continuityPanel.append(fixes);
         if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
         const anchor=chainStart();
@@ -5597,16 +5608,8 @@ function mountDirectorUI(node) {
     // Prompt tag each selected asset answers to, with memory slots in their real place.
     const slotTags = new Map(); { const n = {image:0, video:0, audio:0, refmod:0};
       for (const row of activeReferences(activeClip)) { const kind = ({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]; slotTags.set(row.id, `<${kind} ${row.type === "video" ? ownVideoNumber(activeClip, n.video++) : ++n[row.type]}>`); } }
-    if (memorySupported(activeClip)) memoryRows(activeClip).forEach((row, i) => {
-      const src = clipById(row.clip_id), chip = document.createElement("span");
-      chip.className = "mmx-local-ref-item checked mmx-ref-memory";
-      const whole = row.end == null && !(Number(row.start) > 0);
-      chip.innerHTML = `<span>🧠</span><span style="font-weight:700;opacity:.7;">[MEM]</span><span>${escapeHtml(src?.name || row.clip_id)}${whole ? "" : ` · ${Number(row.start||0).toFixed(1)}–${Number(row.end).toFixed(1)} s`}</span><b class="mmx-ref-slot">&lt;Video ${memoryFirstVideo(activeClip) + i}&gt;</b>`;
-      chip.title = "Clip memory fills this video slot automatically. Change it in the Memory tab.";
-      refsList.appendChild(chip);
-    });
     refsPoolWrap.hidden = referenceTypes(activeClip).length === 0;
-    if(!allRefs.length && !refsList.children.length){const empty=document.createElement("span");empty.textContent="No compatible assets in the connected Reference Pack.";refsList.append(empty);}
+    if(!allRefs.length && !memoryRows(activeClip).length){const empty=document.createElement("span");empty.textContent="No compatible assets in the connected Reference Pack.";refsList.append(empty);}
     allRefs.forEach((r) => {
       const isChecked = activeClip.ref_ids.includes(r.id);
       const item = document.createElement("button");
@@ -5656,6 +5659,16 @@ function mountDirectorUI(node) {
       refsList.appendChild(item);
     });
 
+    // Memory fills the slots after the clip's own references.
+    if (memorySupported(activeClip)) memoryRows(activeClip).forEach(row => {
+      const src = clipById(row.clip_id), chip = document.createElement("span");
+      chip.className = "mmx-local-ref-item checked mmx-ref-memory";
+      const whole = row.end == null && !(Number(row.start) > 0), image = memoryKind(row) === "image";
+      const range = image ? ` · frame at ${Number(row.start||0).toFixed(2)} s` : whole ? "" : ` · ${Number(row.start||0).toFixed(1)}–${Number(row.end).toFixed(1)} s`;
+      chip.innerHTML = `<span>🧠</span><span style="font-weight:700;opacity:.7;">[MEM]</span><span>${escapeHtml(src?.name || row.clip_id)}${range}</span><b class="mmx-ref-slot">${escapeHtml(memoryTag(activeClip, row))}</b>`;
+      chip.title = "Clip memory fills this video slot automatically. Change it in the Memory tab.";
+      refsList.appendChild(chip);
+    });
     refsPoolWrap.appendChild(refsList);
     inspector.appendChild(refsPoolWrap);
 
@@ -5742,7 +5755,7 @@ function mountDirectorUI(node) {
       const tagRow = document.createElement("div"); tagRow.className = "mmx-quick-tags";
       const counts = {image:0, video:0, audio:0, refmod:0};
       const tagList = activeReferences(activeClip).map(row => { const kind = ({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]; const n = row.type === "video" ? ownVideoNumber(activeClip, counts.video++) : ++counts[row.type]; return {label:`${row.name} · <${kind} ${n}>`, tag:`<${kind} ${n}>`}; });
-      memoryRows(activeClip).forEach((row, i) => { const tag = `<Video ${memoryFirstVideo(activeClip) + i}>`; tagList.push({label:`Memory · ${tag}`, tag, memory:true}); });
+      memoryRows(activeClip).forEach(row => { const tag = memoryTag(activeClip, row); tagList.push({label:`Memory · ${tag}`, tag, memory:true}); });
       for (const t of tagList) {
         const b = document.createElement("button"); b.type = "button"; b.className = "mmx-quick-tag-btn" + (t.memory ? " mmx-tag-memory" : ""); b.textContent = t.label; b.title = `Insert ${t.tag}`;
         b.disabled = externallyAuthored;
@@ -5807,7 +5820,7 @@ function mountDirectorUI(node) {
         const tag = `<${kind} ${row.type === "video" ? ownVideoNumber(activeClip, counts.video++) : ++counts[row.type]}>`;
         return {label: `${row.name} · ${tag}`, tag};
       });
-      memoryRows(activeClip).forEach((row, i) => { const tag = `<Video ${memoryFirstVideo(activeClip) + i}>`; tags.push({label:`Memory · ${tag}`, tag}); });
+      memoryRows(activeClip).forEach(row => { const tag = memoryTag(activeClip, row); tags.push({label:`Memory · ${tag}`, tag}); });
 
       tags.forEach((t) => {
         const tagBtn = document.createElement("button");

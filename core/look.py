@@ -48,8 +48,10 @@ def apply_look(images, look):
 
 
 # "Hold look to chain start": a per-channel gain on delivered frames that pulls
-# a continued clip's colour/brightness back to the chain's first clip. It ramps
-# from the previous clip's end gain (seamless join) to this clip's own target.
+# a continued clip's colour balance back to the chain's first clip. Brightness
+# is left alone (the prompt may brighten or darken the end on purpose), so the
+# gain is normalised to keep luma. It ramps from the previous clip's end gain
+# (seamless join) to this clip's own target.
 HOLD_MIN, HOLD_MAX = 0.75, 1.33
 
 
@@ -59,7 +61,12 @@ def mean_rgb(frames, count=24):
 
 
 def hold_target(anchor_rgb, raw_end_rgb):
-    return [min(HOLD_MAX, max(HOLD_MIN, a / max(r, 1e-4))) for a, r in zip(anchor_rgb, raw_end_rgb)]
+    """Per-channel gain matching the anchor's colour balance at unchanged brightness."""
+    gains = [a / max(r, 1e-4) for a, r in zip(anchor_rgb, raw_end_rgb)]
+    luma = sum(w * g * r for w, g, r in zip((0.299, 0.587, 0.114), gains, raw_end_rgb))
+    base = sum(w * r for w, r in zip((0.299, 0.587, 0.114), raw_end_rgb))
+    scale = base / max(luma, 1e-6)
+    return [min(HOLD_MAX, max(HOLD_MIN, g * scale)) for g in gains]
 
 
 def _curve(hold, total, start, stop, like):

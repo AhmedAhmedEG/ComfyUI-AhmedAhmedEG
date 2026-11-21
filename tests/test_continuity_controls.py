@@ -34,7 +34,10 @@ class LookMath(unittest.TestCase):
         hold = {"start": [1.0, 1.0, 1.0], "end": hold_target([0.6, 0.5, 0.4], mean_rgb(frames))}
         held = apply_hold(frames, hold)
         self.assertAlmostEqual(float(held[0, 0, 0, 0]), 0.5, places=5)   # seamless join
-        self.assertAlmostEqual(float(held[-1, 0, 0, 0]), 0.6, places=4)  # pulled to the anchor
+        end = held[-1, 0, 0]  # colour balance pulled to the anchor, brightness kept
+        self.assertAlmostEqual(float(end[0] / end[1]), 0.6 / 0.5, places=4)
+        self.assertAlmostEqual(float(end[2] / end[1]), 0.4 / 0.5, places=4)
+        self.assertAlmostEqual(float(0.299 * end[0] + 0.587 * end[1] + 0.114 * end[2]), 0.5, places=4)
         tail = undo_hold(held[-4:], hold, 10)
         self.assertTrue(torch.allclose(tail, frames[-4:], atol=1e-5))
 

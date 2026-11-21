@@ -1,8 +1,9 @@
-"""Clip memory: show H3 moments from earlier clips as reference videos.
+"""Clip memory: show H3 moments from earlier clips as reference videos or pictures.
 
 A clip's ``memory`` list names earlier clips, optionally a time range inside
-each, plus a short note of what the moment shows. At generation time each
-entry becomes one reference video cut from that clip's saved frames, and a
+each (or one frame, ``kind: "image"``), plus a short note of what the moment
+shows. At generation time each entry becomes one reference video (or picture)
+cut from that clip's saved frames, placed after the clip's own references, and a
 visible note is added to the prompt so H3 knows those videos are earlier
 moments of the same film. The editor shows the exact same note text.
 """
@@ -11,12 +12,12 @@ from __future__ import annotations
 import math
 import re
 
-from .config import FPS, MAX_REF_VIDEOS, align_frame_count
+from .config import FPS, MAX_REF_IMAGES, MAX_REF_VIDEOS, align_frame_count
 
 MEMORY_LIMIT = MAX_REF_VIDEOS
 MIN_WINDOW_FRAMES = 5
 MEMORY_INSTRUCTION = (
-    "These videos are earlier moments of this same film. Keep the people, clothing, "
+    "These references are earlier moments of this same film. Keep the people, clothing, "
     "setting, lighting and style they show. The camera, framing and action of this "
     "clip follow its own description; do not replay those moments."
 )
@@ -33,15 +34,18 @@ def memory_entries(clip_item):
             raise ValueError("Each clip memory needs a source clip.")
         if row.get("enabled", True) is False:
             continue
+        kind = "image" if row.get("kind") == "image" else "video"
         start = float(row.get("start") or 0.0)
         end = row.get("end")
-        end = None if end in (None, "") else float(end)
+        end = None if end in (None, "") or kind == "image" else float(end)
         if not math.isfinite(start) or start < 0 or (end is not None and (not math.isfinite(end) or end <= start)):
             raise ValueError("Clip memory ranges need 0 <= start < end.")
-        out.append({"clip_id": str(row["clip_id"]), "start": start, "end": end,
+        out.append({"kind": kind, "clip_id": str(row["clip_id"]), "start": start, "end": end,
                     "note": " ".join(str(row.get("note") or "").split())[:200]})
-    if len(out) > MEMORY_LIMIT:
-        raise ValueError(f"A clip can remember at most {MEMORY_LIMIT} moments.")
+    if sum(row["kind"] == "video" for row in out) > MEMORY_LIMIT:
+        raise ValueError(f"A clip can remember at most {MEMORY_LIMIT} moments as video.")
+    if sum(row["kind"] == "image" for row in out) > MAX_REF_IMAGES:
+        raise ValueError(f"A clip can remember at most {MAX_REF_IMAGES} frames as pictures.")
     return out
 
 
@@ -68,6 +72,13 @@ def memory_windows(clip_item, clips, clip_idx, load_frames, trim_prefix=lambda c
             raise ValueError(f"Clip memory needs '{name}' to be generated first.")
         visible = frames[int(trim_prefix(source) or 0):]
         total = int(visible.shape[0])
+        if entry["kind"] == "image":
+            index = min(max(0, total - 1), max(0, round(entry["start"] * FPS)))
+            frame = visible[index:index + 1].clone()
+            frame = frame.float() / 255.0 if not frame.is_floating_point() else frame.float()
+            windows.append({"kind": "image", "clip_id": source, "name": name, "note": entry["note"],
+                            "start": index / FPS, "end": index / FPS, "frames": frame})
+            continue
         first = min(total, max(0, round(entry["start"] * FPS)))
         last = total if entry["end"] is None else min(total, max(first, round(entry["end"] * FPS)))
         count = last - first
@@ -77,19 +88,23 @@ def memory_windows(clip_item, clips, clip_idx, load_frames, trim_prefix=lambda c
         window = visible[first:first + count].clone()
         # Saved takes may be 8-bit; reference videos are float pixels in 0..1.
         window = window.float() / 255.0 if not window.is_floating_point() else window.float()
-        windows.append({"clip_id": source, "name": name, "note": entry["note"],
+        windows.append({"kind": "video", "clip_id": source, "name": name, "note": entry["note"],
                         "start": first / FPS, "end": (first + count) / FPS, "frames": window})
     return windows
 
 
-def memory_note(windows, first_video):
-    """The prompt text that introduces memory videos ``first_video``, ``first_video + 1``..."""
+def memory_note(windows, first_video, first_image=1):
+    """The prompt text introducing memory videos ``first_video``.. and pictures ``first_image``.."""
     if not windows:
         return ""
     lines = []
-    for offset, window in enumerate(windows):
+    counts = {"video": first_video, "image": first_image}
+    for window in windows:
         detail = window.get("note") or window.get("name") or "an earlier clip"
-        lines.append(f"<Video {first_video + offset}> is an earlier moment of this film ({detail}).")
+        kind = window.get("kind", "video")
+        tag = f"<Video {counts['video']}>" if kind == "video" else f"<Picture {counts['image']}>"
+        counts[kind] += 1
+        lines.append(f"{tag} is {'an earlier moment' if kind == 'video' else 'a frame from an earlier moment'} of this film ({detail}).")
     return "\n".join([*lines, MEMORY_INSTRUCTION])
 
 

@@ -83,6 +83,18 @@ class ClipMemory(unittest.TestCase):
         self.assertIn("<Video 3> is an earlier moment of this film (Kitchen).", note)
         self.assertTrue(note.endswith(MEMORY_INSTRUCTION))
 
+    def test_a_single_frame_can_be_remembered_as_a_picture(self):
+        clip = {"memory": [{"clip_id": "a", "kind": "image", "start": 1.0, "end": 3.0, "note": "her face"},
+                           {"clip_id": "b"}]}
+        windows = memory_windows(clip, _clips(), 2, {"a": self.frames(240), "b": self.frames(48)}.get)
+        self.assertEqual([w["kind"] for w in windows], ["image", "video"])
+        self.assertEqual(tuple(windows[0]["frames"].shape[:1]), (1,))
+        self.assertAlmostEqual(windows[0]["start"], 1.0, places=3)
+        note = memory_note(windows, first_video=2, first_image=4)
+        self.assertIn("<Picture 4> is a frame from an earlier moment of this film (her face).", note)
+        self.assertIn("<Video 2> is an earlier moment of this film", note)
+        self.assertEqual(memory_entries({"memory": [{"clip_id": "a", "kind": "image"}] * 4})[0]["end"], None)
+
     def test_note_goes_inside_subject_definitions(self):
         prompt = "subject_definitions:\n<Subject 1> is <Picture 1>.\n\nsummary:\nS"
         out = inject_memory_note(prompt, "NOTE")

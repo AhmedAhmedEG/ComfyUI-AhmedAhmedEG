@@ -56,7 +56,10 @@ export function steerToAnchor(data, anchor, {contrast = false, hold = false} = {
     steps.push(`Join fix · contrast ×${k.toFixed(2)}`);
   }
   if (hold) {
-    const s = moments(data), gain = s.rgb.map((v, c) => Math.min(1.33, Math.max(.75, a.rgb[c] / Math.max(1, v))));
+    // Colour balance only, brightness kept (core/look.py hold_target).
+    const s = moments(data), raw = s.rgb.map((v, c) => a.rgb[c] / Math.max(1, v));
+    const keep = (.299*s.rgb[0] + .587*s.rgb[1] + .114*s.rgb[2]) / Math.max(1e-6, .299*raw[0]*s.rgb[0] + .587*raw[1]*s.rgb[1] + .114*raw[2]*s.rgb[2]);
+    const gain = raw.map(g => Math.min(1.33, Math.max(.75, g * keep)));
     for (let i = 0; i < data.length; i += 4) { data[i] *= gain[0]; data[i+1] *= gain[1]; data[i+2] *= gain[2]; }
     steps.push(`Hold look · R×${gain[0].toFixed(2)} G×${gain[1].toFixed(2)} B×${gain[2].toFixed(2)}`);
   }
