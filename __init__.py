@@ -677,12 +677,18 @@ if getattr(PromptServer, "instance", None) is not None:
                 previous_hold = clips.get(before[-1], {}).get("hold_gain")
                 previous_raw = undo_hold(previous[-24:], previous_hold, int(previous.shape[0])) if previous_hold else previous[-24:]
                 first_raw = undo_hold_at(frames[trim:trim + 24], hold, total, trim)
-                return {"tone_points": list(TONE_QUANTILES), "first_tones": tone_quantiles(first_raw), "previous_end_tones": tone_quantiles(previous_raw, from_end=True),
+                # Match the join after decoding changes the opening; calibrate
+                # from the opening as the model generated it (saved before the match).
+                join_match = meta.get("join_match") or {}
+                first_tones = join_match.get("first_tones") or tone_quantiles(first_raw)
+                first_stats = join_match.get("first") or frame_stats(first_raw)
+                return {"tone_points": list(TONE_QUANTILES), "first_tones": first_tones, "previous_end_tones": tone_quantiles(previous_raw, from_end=True),
+                        "join_matched": bool(join_match), "delivered_first": frame_stats(first_raw),
                         "generation": meta.get("generation"), "anchor_id": anchor_id,
                         "tail_look": meta.get("tail_look"), "tail_look_known": "tail_look" in meta, "auto_fix": meta.get("auto_fix"), "hold_gain": hold,
                         # The join is measured on what the model generated: the
                         # small Hold look ramp at the start is removed first.
-                        "first": frame_stats(first_raw), "previous_end": frame_stats(previous_raw, from_end=True),
+                        "first": first_stats, "previous_end": frame_stats(previous_raw, from_end=True),
                         "end": frame_stats(frames, from_end=True), "raw_end": frame_stats(raw_end, from_end=True),
                         "anchor": frame_stats(anchor, from_end=True) if anchor is not None and anchor.shape[0] else None}
             return web.json_response(await asyncio.to_thread(build), headers={"Cache-Control": "no-store"})

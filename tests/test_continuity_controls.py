@@ -85,6 +85,34 @@ class ToneCurve(unittest.TestCase):
         self.assertEqual(q[0], sorted(q[0])); self.assertAlmostEqual(q[1][-1], 0.0)
 
 
+class JoinMatch(unittest.TestCase):
+    def frames(self, gain, n=48):
+        ramp = torch.linspace(0.05, 0.95, 16).view(1, 1, 16, 1).expand(n, 8, 16, 3).clone()
+        return (ramp * torch.tensor(gain)).clamp(0, 1)
+
+    def test_opening_matches_previous_end_and_fades_out(self):
+        from core.look import match_join, frame_stats
+        previous = self.frames([1.0, 1.0, 1.0])
+        clip = self.frames([0.85, 0.85, 0.9])  # darker, slightly blue opening
+        untouched = clip.clone()
+        out, info = match_join(clip, previous[-24:], start=1)
+        first, target = frame_stats(out[1:2]), frame_stats(previous[-1:])
+        for a, b in zip(first["rgb"], target["rgb"]):
+            self.assertAlmostEqual(a, b, delta=0.02)
+        self.assertTrue(torch.allclose(out[30:], untouched[30:]))  # past one second: as generated
+        # Measurements are taken before the match, for calibration.
+        self.assertLess(info["first"]["rgb"][0], target["rgb"][0] - 0.03)
+        self.assertGreater(info["amount"], 0.02)
+
+    def test_matching_clip_is_left_alone(self):
+        from core.look import match_join
+        previous = self.frames([1.0, 1.0, 1.0])
+        clip = previous.clone()
+        out, info = match_join(clip, previous[-24:], start=1)
+        self.assertTrue(torch.allclose(out, previous))
+        self.assertEqual(info["amount"], 0.0)
+
+
 class BoundaryFrame(unittest.TestCase):
     def frames(self, levels):
         noise = torch.rand((len(levels), 8, 8, 3)) * 0.01

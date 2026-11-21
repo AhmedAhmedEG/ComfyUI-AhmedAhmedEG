@@ -252,7 +252,13 @@
       "Prevent build-up at joins (Automatic join fix)",
       "Keeps sharpness, contrast and colour cast from building up at each join.",
       "Always, unless you are testing raw carry.",
-      "Corrects the new clip during generation; on by default. With calibrated tail sliders it uses the re-encoded tail as its reference."
+      "Corrects the new clip during generation (sharpness, contrast, blue cast); on by default. The colour match at the join itself is Match the join after decoding."
+    ],
+    [
+      "Match the join after decoding",
+      "Tone-matches a continued clip's opening to the previous clip's end (darks, mids and whites per colour), full strength on the first new frame and fading out over one second.",
+      "Always for continued clips; on by default.",
+      "Fixes brightness, contrast and colour jumps at the join on every take, with no regenerate round. Auto calibrate still measures the opening as generated, before this match."
     ],
     [
       "Keep colour on the chain's first clip (Hold look)",

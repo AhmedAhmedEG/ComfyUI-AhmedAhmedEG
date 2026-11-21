@@ -5418,7 +5418,8 @@ function mountDirectorUI(node) {
         const luma=s=>.299*s.rgb[0]+.587*s.rgb[1]+.114*s.rgb[2];
         const pct=(x,y)=>(x/Math.max(1e-6,y)-1)*100;
         const join=[["brightness",pct(luma(m.first),luma(m.previous_end))],["warm",pct(m.first.rgb[0]/m.first.rgb[1],m.previous_end.rgb[0]/m.previous_end.rgb[1])],["cool",pct(m.first.rgb[2]/m.first.rgb[1],m.previous_end.rgb[2]/m.previous_end.rgb[1])],["contrast",pct(m.first.std,m.previous_end.std)]];
-        const summary="This take's start vs. the previous end: "+join.map(([k,v])=>`${k} ${pctText(v)}`).join(", ")+".";
+        let summary=(m.join_matched?"As generated, before the join match: ":"This take's start vs. the previous end: ")+join.map(([k,v])=>`${k} ${pctText(v)}`).join(", ")+".";
+        if(m.join_matched && m.delivered_first){const d=m.delivered_first;summary+=` Delivered after the match: brightness ${pctText(pct(luma(d),luma(m.previous_end)))}, contrast ${pctText(pct(d.std,m.previous_end.std))}.`;}
         // Calibrate from the look this take actually used, not from edits made since.
         const current=activeClip.tail_look||null;
         const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
@@ -5487,10 +5488,12 @@ function mountDirectorUI(node) {
         continuityPanel.append(grid);
         const fixes=document.createElement("div");fixes.className="mmx-switch-group";
         const fixesTitle=document.createElement("div");fixesTitle.className="mmx-switch-group-title";
-        fixesTitle.innerHTML="<strong>Continuity corrections</strong><span>Each fixes a different thing; Auto calibrate below fixes how this clip starts.</span>";
+        fixesTitle.innerHTML="<strong>Continuity corrections</strong><span>Each fixes a different thing; Auto calibrate below makes the model itself start closer.</span>";
         fixes.append(fixesTitle);
         fixes.append(switchRow("Prevent build-up at joins",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
           "During generation. Stops sharpness, contrast and the model's slight blue cast from adding up clip after clip. Works with calibrated sliders too. Recommended."));
+        fixes.append(switchRow("Match the join after decoding",activeClip.join_match!==false,checked=>{if(checked)delete activeClip.join_match;else activeClip.join_match=false;syncState();},
+          "After decoding. Matches this clip's opening to the previous clip's end (darks, mids and whites, per colour) at full strength on the first new frame, fading out over one second. Fixes the join on every take; Auto calibrate still measures the opening as generated. Recommended."));
         fixes.append(switchRow("Keep colour on the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
           "After decoding. A colour-only correction that starts at zero at the join and grows toward the end, so colour does not drift along a long chain. Brightness is left as generated; Auto calibrate measures without it."));
         continuityPanel.append(fixes);

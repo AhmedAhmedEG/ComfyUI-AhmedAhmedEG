@@ -190,3 +190,69 @@ def undo_hold(tail, hold, total):
         return tail
     n = int(tail.shape[0])
     return (tail.float() / _curve(hold, total, total - n, total, tail)).clamp(0, 1).to(tail.dtype)
+
+
+def fit_tone_lut(start_tones, target_tones, limit=0.25):
+    """Per-channel lookup tables mapping ``start_tones`` onto ``target_tones``
+    (histogram matching at TONE_QUANTILES); mirrors fitToneCurve in
+    web/js/minimax_look.js. None when the two already match."""
+    tables = []
+    for c in range(3):
+        xs, ys = [], []
+        for x, y in zip(start_tones[c], target_tones[c]):
+            if xs and x <= xs[-1] + 1e-4:
+                ys[-1] = max(ys[-1], y)
+                continue
+            xs.append(float(x)); ys.append(float(y))
+        def correct(x):
+            if not xs:
+                return x
+            if x <= xs[0]:
+                return ys[0] + (x - xs[0])
+            if x >= xs[-1]:
+                return ys[-1] + (x - xs[-1])
+            k = 1
+            while xs[k] < x:
+                k += 1
+            return ys[k - 1] + (ys[k] - ys[k - 1]) * (x - xs[k - 1]) / (xs[k] - xs[k - 1])
+        top, table = 0.0, []
+        for i in range(CURVE_POINTS):
+            x = i / (CURVE_POINTS - 1)
+            y = min(1.0, max(0.0, max(x - limit, min(x + limit, correct(x)))))
+            top = max(top, y)
+            table.append(round(top, 4))
+        tables.append(table)
+    return clean_curve(tables)
+
+
+# "Match the join after decoding": the new clip's opening is tone-matched to
+# the previous clip's end (darks, mids and whites per channel), at full
+# strength on the first new frame and fading out over JOIN_MATCH_FRAMES so the
+# model's own look takes over smoothly. Frames before ``start`` (reused
+# context, trimmed on delivery) get the full correction.
+JOIN_MATCH_FRAMES = 24
+
+
+def match_join(frames, target, start, ramp=JOIN_MATCH_FRAMES, count=24):
+    """Tone-match the opening of ``frames`` (new content from ``start``) to the
+    end of ``target``. Edits ``frames`` in place; returns (frames, info) where
+    info holds the opening's measurements before matching (for calibration)."""
+    import torch
+    total = int(frames.shape[0])
+    start = max(0, min(int(start), total - 1))
+    first = frames[start:start + int(count)]
+    info = {"first": frame_stats(first), "first_tones": tone_quantiles(first), "frames": int(ramp), "amount": 0.0}
+    lut = fit_tone_lut(info["first_tones"], tone_quantiles(target, from_end=True))
+    if lut is None:
+        return frames, info
+    step = 1.0 / (CURVE_POINTS - 1)
+    info["amount"] = round(max(abs(v - i * step) for table in lut for i, v in enumerate(table)), 4)
+    n = min(total, start + int(ramp))
+    head = frames[:n].float()
+    scale = 255.0 if head.numel() and float(head.max()) > 2 else 1.0
+    head = head / scale
+    k = ((torch.arange(n, dtype=torch.float32) - start) / max(1, int(ramp))).clamp(0, 1)
+    weight = (1 - k * k * (3 - 2 * k)).view(-1, 1, 1, 1).to(head.device)
+    out = head + (apply_curve(head, lut) - head) * weight
+    frames[:n] = (out.clamp(0, 1) * scale).to(frames.dtype)
+    return frames, info

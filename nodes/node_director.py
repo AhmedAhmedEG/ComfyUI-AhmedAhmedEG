@@ -56,7 +56,7 @@ try:
     from ..core.advanced_sampling import sample_selflift
     from ..core.project import migrate_timeline, save_autosave, export_timeline_state
     from ..core.references import load_reference, edit_images, undo_image_edits
-    from ..core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold
+    from ..core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold, match_join
 except ImportError:
     from core.sampling import sample_latent, native_outputs
     from core.cache_manager import fingerprint_value
@@ -66,7 +66,7 @@ except ImportError:
     from core.advanced_sampling import sample_selflift
     from core.project import migrate_timeline, save_autosave, export_timeline_state
     from core.references import load_reference, edit_images, undo_image_edits
-    from core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold
+    from core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold, match_join
 
 CATEGORY = "ComfyUI-AhmedAhmedEG"
 
@@ -749,6 +749,7 @@ class MiniMaxH3MasterDirector:
             clip_start_look = clean_look(clip_item.get("start_look")) if canon_mode in ("I2VA", "FL2VA") else None
             clip_tail_look = clean_look(clip_item.get("tail_look")) if carry_mode else None
             clip_hold_look = bool(clip_item.get("hold_look", False)) and carry_mode
+            clip_join_match = clip_item.get("join_match", True) is not False and carry_mode
             clip_lora_rows = list(clip_item.get("loras") or [])
             antiburn = clip_item.get("antiburn") or {}
             if (clip_continuity and carry_mode and previous_tail is not None and antiburn.get("enabled", True)
@@ -1260,6 +1261,7 @@ class MiniMaxH3MasterDirector:
                     **(({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1} if clip_auto_fix else {"auto_fix": 0}) if is_chained_from_previous else {}),
                     **({"tail_look": clip_tail_look} if clip_tail_look else {}),
                     **({"hold_look": 1} if clip_hold_look and is_chained_from_previous else {}),
+                    **({"join_match": 1} if clip_join_match and is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1537,7 +1539,20 @@ class MiniMaxH3MasterDirector:
                 from core.output_retention import process_video_frames
             decoded_frames = process_video_frames(decoded_frames, cache_mgr.project_dir,
                 lambda pixels: edit_images(pixels, clip_item.get('color')))
-            seam_grade = (clip_auto_fix and carry_mode) or (clip_continuity_mode == "Last Frame (Start Image)" and clip_start_look is None)
+            # Continued clips: tone-match the opening to the previous clip's end
+            # as delivered (its Hold look removed; this clip's own Hold look
+            # then starts from the same gain), fading out over one second.
+            join_match = None
+            if clip_join_match and is_chained_from_previous and source is None and previous_tail is not None and canon_mode != MODE_INPAINT:
+                try:
+                    target = previous_tail.get("display_tail", previous_tail.get("tail_frames"))
+                    decoded_frames, join_match = match_join(decoded_frames, target[-24:], int(is_chained_from_previous))
+                    log.info("Master Director: clip %s join matched to the previous clip's end (largest tone change %.3f, fading over %d frames).",
+                             clip_id, join_match["amount"], join_match["frames"])
+                except Exception as jm_err:
+                    join_match = None
+                    log.warning(f"Master Director: Join match failed for clip {clip_idx}: {jm_err}")
+            seam_grade = clip_continuity_mode == "Last Frame (Start Image)" and clip_start_look is None
             if seam_grade and clip_idx > 0 and clip_continuity and previous_tail is not None and "tail_frames" in previous_tail:
                 try:
                     blend_w = min(12, int(decoded_frames.shape[0]))
@@ -1616,7 +1631,7 @@ class MiniMaxH3MasterDirector:
                 clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
-                    "hold_gain": hold, "tail_look": clip_tail_look, "auto_fix": bool(clip_auto_fix),
+                    "hold_gain": hold, "tail_look": clip_tail_look, "auto_fix": bool(clip_auto_fix), "join_match": join_match,
                     'preflight_key':preflight.key(clip_idx),
                     'model_identity':model_identity(preflight.graph,preflight.node_id,clip_item.get('type','T2V')) if isinstance(preflight.graph,dict) else None,
                     'cache_report':cache_report(),
