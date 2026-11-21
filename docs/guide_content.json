@@ -6818,6 +6818,53 @@
         "audio output; see the execution contract above.",
         "fps output; see the execution contract above."
       ]
+    },
+    "MiniMaxH3JoinTestSink": {
+      "purpose": "Internal helper for the Master editor's Test join button. You never add or wire this node yourself; the editor adds it to a temporary prompt and it does not appear in the node menu.",
+      "use": "Lets a join test run only the Master node and the nodes that feed it. ComfyUI runs a prompt only when it ends in an output node, so the editor connects this sink to the Master's status output instead of your save, preview or combine nodes. Because none of those run, a join test writes no video, image or audio files and leaves your saved takes untouched.",
+      "wiring": [
+        "Master status → status (added automatically by the editor for a Test join run)"
+      ],
+      "steps": [
+        "Open a clip that continues the previous clip in the Master editor.",
+        "Make sure every clip before it has a saved take.",
+        "Press Test join in the Continuity tab; the editor queues the temporary prompt with this sink.",
+        "Read the Join row in the Measured card, calibrate if needed, and test again before generating the full clip."
+      ],
+      "examples": [
+        {
+          "goal": "Check a join before generating the whole clip",
+          "setup": "Continuity tab → Test join on a continuing clip whose earlier clips are saved.",
+          "expect": "Only the opening second after the reused context is sampled with the clip's own seed, settings and noise; its colour and brightness at the join are measured and shown, and nothing is saved as a take."
+        }
+      ],
+      "notes": [
+        "This node only receives the Master node's status text and returns nothing.",
+        "If it appears in an old workflow you can delete it; the editor adds it again when needed.",
+        "A join test needs the earlier clips to be saved already, because it continues from them exactly as the full run would."
+      ],
+      "options": {
+        "status": {
+          "what": "The Master node's status text for the Test join run",
+          "when": "Filled automatically by the editor; do not connect it yourself.",
+          "effect": "Shown as text after the run.",
+          "caution": "Internal input; only the editor's Test join prompt uses it.",
+          "advanced": true,
+          "contract": {
+            "name": "status",
+            "type": "STRING",
+            "required": true,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
+        }
+      }
     }
   }
 }

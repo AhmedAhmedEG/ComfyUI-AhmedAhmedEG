@@ -29,12 +29,14 @@ from .node_output_processing import MiniMaxH3OutputProcessing
 from .node_pixel_upscale import MiniMaxH3PixelUpscale
 from .node_ref_pack import MiniMaxH3RefPack
 from .node_smart_preview import MiniMaxH3SmartPreview
+from .node_join_test import MiniMaxH3JoinTestSink
 
 # Single public Master Node name; implementation class stays internal.
 MiniMaxH3MasterNode = MiniMaxH3MasterDirector
 
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3FrameInterpolation": MiniMaxH3FrameInterpolation,
+    "MiniMaxH3JoinTestSink": MiniMaxH3JoinTestSink,
     "MiniMaxH3ProjectImport": MiniMaxH3ProjectImport,
     "MiniMaxH3RefModLibrary": MiniMaxH3RefModLibrary,
     "MiniMaxH3TimelineBuilder": MiniMaxH3TimelineBuilder,
@@ -104,6 +106,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ProjectVideo": "MiniMax H3 Export Cached Project / Shots",
     "MiniMaxH3OutputProcessing": "MiniMax H3 Playback / Watermark / Loop",
     "MiniMaxH3PixelUpscale": "MiniMax H3 Pixel / RTX Upscale",
+    "MiniMaxH3JoinTestSink": "MiniMax H3 Join Test (internal)",
 }
 
 # Keep everyday controls together; manual graph plumbing is explicitly advanced.
@@ -147,7 +150,8 @@ _MENU_GROUPS = {
     "Advanced graph tools": [
         "MiniMaxH3TailFromLatent",
         "MiniMaxH3ModelOverridePack",
-        "MiniMaxH3ApplyPromptDraft"
+        "MiniMaxH3ApplyPromptDraft",
+        "MiniMaxH3JoinTestSink"
     ]
 }
 for _group, _names in _MENU_GROUPS.items():

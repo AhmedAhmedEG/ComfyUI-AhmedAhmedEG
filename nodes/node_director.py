@@ -56,7 +56,7 @@ try:
     from ..core.advanced_sampling import sample_selflift
     from ..core.project import migrate_timeline, save_autosave, export_timeline_state
     from ..core.references import load_reference, edit_images, undo_image_edits
-    from ..core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold
+    from ..core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold, frame_stats
 except ImportError:
     from core.sampling import sample_latent, native_outputs
     from core.cache_manager import fingerprint_value
@@ -66,7 +66,7 @@ except ImportError:
     from core.advanced_sampling import sample_selflift
     from core.project import migrate_timeline, save_autosave, export_timeline_state
     from core.references import load_reference, edit_images, undo_image_edits
-    from core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold
+    from core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold, frame_stats
 
 CATEGORY = "ComfyUI-AhmedAhmedEG"
 
@@ -297,6 +297,12 @@ class MiniMaxH3MasterDirector:
                     raise ValueError("Unknown timeline generation mode.")
                 execution_mode = "Conditioning Guide Output" if generation == "Conditioning only" else "All-in-One Generation"
                 run_mode = "full_batch" if generation == "All shots" else "clip_by_clip"
+            # "Test join" (editor button): sample only the opening of one clip.
+            # Removed from the timeline so it never reaches an autosave.
+            join_test = timeline.pop("join_test", None)
+            join_test_id = str(join_test["clip_id"]) if isinstance(join_test, dict) and join_test.get("clip_id") else None
+            if join_test_id:
+                run_mode = "full_batch"
             resolution = cfg_dict.get("resolution") or timeline.get("resolution")
             if resolution:
                 try:
@@ -633,6 +639,19 @@ class MiniMaxH3MasterDirector:
                 return True
             return False
 
+        join_test_index = None
+        if join_test_id:
+            join_test_index = next((i for i, item in enumerate(clips) if str(item.get("id")) == join_test_id), None)
+            if join_test_index is None:
+                raise ValueError("Test join: that clip is no longer in the timeline.")
+            target = clips[join_test_index]
+            if join_test_index == 0:
+                raise ValueError("Test join needs a clip that continues an earlier clip; this is the first clip.")
+            if target.get("validated") or target.get("locked"):
+                raise ValueError("Test join: this clip is approved or locked. Unapprove it to test its join.")
+            if selflift is not None and selflift.get("enabled", False):
+                raise ValueError("Test join does not support Self-Lift yet; switch Self-Lift off to test the join.")
+            clips = clips[:join_test_index + 1]
         for clip_idx, clip_item in enumerate(clips):
             clip_id = str(clip_item.get("id") or f"clip_{clip_idx + 1}")
             clip_type = str(clip_item.get("type", "T2V")).upper()
@@ -662,7 +681,7 @@ class MiniMaxH3MasterDirector:
                 completed_clips.append(clip_item)
                 continue
 
-            if not clip_item.get('locked') and execution_mode!='Conditioning Guide Output' and preflight.matches(clip_idx):
+            if not clip_item.get('locked') and execution_mode!='Conditioning Guide Output' and clip_id!=join_test_id and preflight.matches(clip_idx):
                 if reuse_saved_take(clip_idx,clip_item):
                     completed_clips.append(clip_item)
                     shot_event(unique_id,project_id,clip_id,'completed',reused=True,index=clip_idx+1,total=len(clips))
@@ -1253,11 +1272,13 @@ class MiniMaxH3MasterDirector:
             completed_clips.append(clip_item)
             # Approval preserves a take across edits. Independently, exact-input
             # cache matches avoid repeating deterministic generation work.
-            if cache_mgr.is_clip_cached_and_valid(clip_id,clip_fp) and reuse_saved_take(clip_idx,clip_item,source):
+            if clip_id!=join_test_id and cache_mgr.is_clip_cached_and_valid(clip_id,clip_fp) and reuse_saved_take(clip_idx,clip_item,source):
                 cache_mgr.update_clip_metadata(clip_id,{'preflight_key':preflight.key(clip_idx)})
                 shot_event(unique_id,project_id,clip_id,'completed',reused=True,index=clip_idx+1,total=len(clips))
                 if run_mode=='clip_by_clip':break
                 continue
+            if join_test_id and clip_id != join_test_id:
+                raise ValueError(f"Test join continues from the saved clips before it, but '{clip_item.get('name') or clip_id}' has no current saved take. Generate it first.")
             # Dependent results stay visible while this clip samples/decodes.
             # store_clip_results removes them atomically only after the
             # replacement take is saved; their fingerprints already embed this
@@ -1268,7 +1289,7 @@ class MiniMaxH3MasterDirector:
                 all_decoded_frames[-1]=all_decoded_frames[-1][:-previous_trim]
                 all_decoded_audios[-1]=fit_audio_duration(all_decoded_audios[-1],all_decoded_frames[-1].shape[0],FPS)
 
-            refine_enabled=refine is not None and refine.get('enabled',False) and not (refine.get('skip_fl2v',True) and canon_mode=='FL2VA')
+            refine_enabled=refine is not None and refine.get('enabled',False) and not (refine.get('skip_fl2v',True) and canon_mode=='FL2VA') and clip_id!=join_test_id
             confirm_first=refine_enabled and refine.get('confirm_first_pass',False)
             first_fp=fingerprint_value({'runtime':runtime_signature,'mode':canon_mode,'prompt':final_prompt,
                 'seed':clip_seed,'size':(width,height),'duration':clip_dur,'steps':steps,'cfg':cfg,
@@ -1370,6 +1391,15 @@ class MiniMaxH3MasterDirector:
                     if low_carry is not None:
                         sampled_latent = {**sampled_latent, "_selflift_low_carry": low_carry}
                 else:
+                    join_noise = None
+                    if clip_id == join_test_id:
+                        try:
+                            from ..core.join_test import cut_for_join_test
+                        except ImportError:
+                            from core.join_test import cut_for_join_test
+                        latent, join_noise, kept, full = cut_for_join_test(latent, clip_seed, int(is_chained_from_previous))
+                        shot_event(unique_id, project_id, clip_id, "join_test_sampling", index=clip_idx+1, total=len(clips))
+                        log.info("Master Director: join test for clip %s samples %d of %d latent frames.", clip_id, kept, full)
                     sampling_function = sample_latent
                     if latent_carry and continuation_prefix:
                         try:
@@ -1389,6 +1419,7 @@ class MiniMaxH3MasterDirector:
                         clip_seed,
                         denoise=1.0,
                         sigmas=sigmas,
+                        noise=join_noise,
                     )
 
             current_resources().release_transients()
@@ -1518,6 +1549,24 @@ class MiniMaxH3MasterDirector:
                     )
                 except Exception as cg_err:
                     log.warning(f"Master Director: Seam color grading failed for clip {clip_idx}: {cg_err}")
+
+            if clip_id == join_test_id:
+                try:
+                    from ..core.join_test import save_result
+                except ImportError:
+                    from core.join_test import save_result
+                trim = int(is_chained_from_previous or 0)
+                visible = decoded_frames[trim:] if decoded_frames.shape[0] > trim else decoded_frames
+                result = {"first": frame_stats(visible), "tail_look": clip_tail_look, "start_look": clip_start_look,
+                          "auto_fix": bool(clip_auto_fix), "seed": str(clip_seed), "frames": int(visible.shape[0]),
+                          "previous_generation": cache_mgr._manifest.get("clips", {}).get(str(clips[clip_idx - 1].get("id")), {}).get("generation")}
+                save_result(cache_mgr.project_dir, clip_id, result)
+                shot_event(unique_id, project_id, clip_id, "join_test_done", index=clip_idx+1, total=len(clips))
+                status_str = f"Join test for {clip_item.get('name') or clip_id}: measured {int(visible.shape[0])} opening frames; nothing was saved as a take."
+                log.info("Master Director: %s", status_str)
+                silent = {"waveform": torch.zeros((1, 2, max(1, round(int(visible.shape[0]) / FPS * 48000)))), "sample_rate": 48000}
+                return (visible, silent, None, positive, sampled_latent, final_prompt, float(frame_rate),
+                        int(visible.shape[0]), status_str, json.dumps(export_timeline_state(timeline), ensure_ascii=False))
 
             # Optional FaceRefine
             if face_refine is not None and face_refine.get("enabled", False):
