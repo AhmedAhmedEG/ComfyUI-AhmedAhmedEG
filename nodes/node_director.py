@@ -179,14 +179,19 @@ class MiniMaxH3MasterDirector:
         except ImportError:
             from core.preflight_cache import PreflightCache, model_identity
         preflight=PreflightCache(preflight_inputs,tl)
+        # A join test always samples its clip (even when a matching take is
+        # saved) and never runs the clips after it.
+        join_test=tl.get("join_test") if isinstance(tl,dict) else None
+        join_id=str(join_test.get("clip_id")) if isinstance(join_test,dict) and join_test.get("clip_id") else None
         blocked=set()
         types = set()
         needs_auxiliary=False
         for index,item in enumerate(clips):
+            is_join_test=join_id is not None and str(item.get('id'))==join_id
             if item.get("locked") or item.get("validated"):
                 if not preflight.complete(index):needs_auxiliary=True
                 continue
-            if item.get('id') not in blocked and preflight.matches(index):
+            if not is_join_test and item.get('id') not in blocked and preflight.matches(index):
                 if next_only:break
                 continue
             needs_auxiliary=True
@@ -196,11 +201,11 @@ class MiniMaxH3MasterDirector:
             if name:
                 if not isinstance(overrides,dict) or overrides.get(name) is None:
                     raise ValueError(f"Unknown clip model override: {name}")
-                if next_only:
+                if next_only or is_join_test:
                     break
                 continue
             types.add(normalize_mode(item.get("type","T2V")))
-            if next_only:
+            if next_only or is_join_test:
                 break
         needed = []
         if any(get_required_model_type(t)=="fl2va" for t in types) and fl2va_model is None:

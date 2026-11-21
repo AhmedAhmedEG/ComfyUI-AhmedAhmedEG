@@ -51,6 +51,18 @@ class JoinTest(unittest.TestCase):
             self.assertEqual(load_result(folder, "c3")["seed"], "2")
             self.assertIn("time", load_result(folder, "c2"))
 
+    def test_join_test_requests_the_model_even_when_the_take_matches(self):
+        import json
+        from unittest.mock import patch
+        from nodes.node_director import MiniMaxH3MasterDirector
+        timeline = {"clips": [{"id": "a", "type": "REF2VA"}, {"id": "b", "type": "REF2VA", "continuity_mode": "Latent Carry (Pinned)"}]}
+        with patch("core.preflight_cache.PreflightCache.matches", return_value=True),              patch("core.preflight_cache.PreflightCache.complete", return_value=True):
+            plain = MiniMaxH3MasterDirector.check_lazy_status(timeline_data=json.dumps(timeline), fl2va_model=object())
+            tested = MiniMaxH3MasterDirector.check_lazy_status(timeline_data=json.dumps({**timeline, "join_test": {"clip_id": "b"}}), fl2va_model=object())
+        self.assertNotIn("ref2va_model", plain)
+        self.assertIn("ref2va_model", tested)
+
+
 
 if __name__ == "__main__":
     unittest.main()
