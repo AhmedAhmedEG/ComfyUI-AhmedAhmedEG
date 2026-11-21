@@ -4,12 +4,12 @@
 
 export const LOOK_NEUTRAL = {exposure:0, contrast:1, black:0, saturation:1, temperature:0, tint:0};
 export const LOOK_CONTROLS = [
-  ["exposure","Brightness",-2,2,0.05,v=>`${v>0?"+":""}${v.toFixed(2)} EV`],
-  ["contrast","Contrast",0.5,1.5,0.01,v=>`${Math.round(v*100)}%`],
-  ["black","Black level",-0.1,0.1,0.005,v=>`${v>0?"+":""}${(v*100).toFixed(1)}`],
-  ["saturation","Saturation",0,2,0.01,v=>`${Math.round(v*100)}%`],
-  ["temperature","Temperature",-1,1,0.02,v=>v===0?"0":`${v>0?"warm":"cool"} ${Math.abs(v).toFixed(2)}`],
-  ["tint","Tint",-1,1,0.02,v=>v===0?"0":`${v>0?"green":"magenta"} ${Math.abs(v).toFixed(2)}`],
+  ["exposure","Brightness",-2,2,0.005,v=>`${v>0?"+":""}${v.toFixed(3)} EV`],
+  ["contrast","Contrast",0.5,1.5,0.002,v=>`${(v*100).toFixed(1)}%`],
+  ["black","Black level",-0.1,0.1,0.001,v=>`${v>0?"+":""}${(v*100).toFixed(1)}`],
+  ["saturation","Saturation",0,2,0.005,v=>`${(v*100).toFixed(1)}%`],
+  ["temperature","Temperature",-1,1,0.005,v=>Math.abs(v)<5e-4?"0":`${v>0?"warm":"cool"} ${Math.abs(v).toFixed(3)}`],
+  ["tint","Tint",-1,1,0.005,v=>Math.abs(v)<5e-4?"0":`${v>0?"green":"magenta"} ${Math.abs(v).toFixed(3)}`],
 ];
 
 export function lookIsNeutral(look) {
@@ -48,7 +48,9 @@ export function calibrateLook(used, target, result, {contrast = true} = {}) {
   const e = Math.log2(Math.max(1e-3, c[1] / (1 + .1*g)));
   const lumaGain = .299*c[0] + .587*c[1] + .114*c[2];
   const k = contrast && result.std > 1e-4 ? target.std / result.std / lumaGain : 1;
-  const clampTo = (key, v) => { const row = LOOK_CONTROLS.find(r => r[0] === key); const step = row[4]; return Math.min(row[3], Math.max(row[2], Math.round(v / step) * step)); };
+  // Keep calibrated values precise (not snapped to the slider step): a coarse
+  // step left takes a few percent off in brightness.
+  const clampTo = (key, v) => { const row = LOOK_CONTROLS.find(r => r[0] === key); return Math.min(row[3], Math.max(row[2], Math.round(v * 1000) / 1000)); };
   const next = {...base,
     exposure: clampTo("exposure", base.exposure + e),
     temperature: clampTo("temperature", base.temperature + t),

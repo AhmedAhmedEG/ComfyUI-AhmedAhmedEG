@@ -5412,10 +5412,13 @@ function mountDirectorUI(node) {
         const actions=document.createElement("div");actions.className="mmx-calib-actions";
         const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
         const summary=document.createElement("small");
-        if(!changes.length){button.textContent="On target";button.disabled=true;summary.textContent="The join matches; no slider change needed.";}
-        else if(activeClip.calibrated_from===m.generation){button.textContent="Calibrated";button.disabled=true;summary.textContent="Regenerate this clip to use the calibrated sliders.";}
-        else{button.textContent="Calibrate sliders";summary.textContent=changes.join(" · ");
-          button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look=next;activeClip.calibrated_from=m.generation;syncState();renderTimeline();renderInspector();};}
+        // Always clickable: each click sets the sliders to this take's
+        // calibrated values, so edits on top of them can be reset.
+        const again=activeClip.calibrated_from===m.generation;
+        button.textContent=again?"Reset to calibrated":"Calibrate sliders";
+        summary.textContent=!changes.length?"The join already matches; calibrating keeps the sliders as this take used them."
+          :(again?"Sets the sliders back to: ":"")+changes.join(" · ")+(again?". Regenerate this clip to use them.":"");
+        button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look={...next};activeClip.calibrated_from=m.generation;syncState();renderTimeline();renderInspector();};
         actions.append(button,summary);body.append(actions,note);
         if(activeClip.calibrated_from!==m.generation && m.tail_look_known && JSON.stringify(used||null)!==JSON.stringify(lookIsNeutral(current)?null:current) && changes.length){const w=document.createElement("p");w.className="mmx-calib-note warn";w.textContent="The sliders changed since this take. Calibrating replaces them with a correction of the look this take actually used.";body.append(w);}
         if(m.anchor){
