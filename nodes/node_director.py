@@ -948,9 +948,21 @@ class MiniMaxH3MasterDirector:
                 manifest_clips = cache_mgr._manifest.get("clips", {})
                 windows = memory_windows(clip_item, clips, clip_idx, cache_mgr.load_clip_frames,
                     trim_prefix=lambda cid: manifest_clips.get(cid, {}).get("trim_prefix", 0))
-                first_memory_video = len(ref_videos) + 1
+                # Memory takes the first video slots (after an RV2V source,
+                # which must stay Video 1); the user's own videos follow.
+                keep = 1 if source is not None else 0
+                items = list(ref_videos.items())
+                first_memory_video = keep + 1
+                reordered, moved = {}, {}
+                for key, value in items[:keep]:
+                    reordered[key] = value
                 for offset, window in enumerate(windows):
-                    ref_videos[f"ref_video_{first_memory_video + offset}"] = window["frames"]
+                    reordered[f"ref_video_{first_memory_video + offset}"] = window["frames"]
+                for j, (key, value) in enumerate(items[keep:]):
+                    moved[key] = f"ref_video_{first_memory_video + len(windows) + j}"
+                    reordered[moved[key]] = value
+                ref_videos = reordered
+                ref_video_audios = {moved.get(key, key): value for key, value in ref_video_audios.items()}
                 memory_note_text = memory_note(windows, first_memory_video)
                 if windows:
                     log.info("Master Director: clip %s remembers %s.", clip_id,

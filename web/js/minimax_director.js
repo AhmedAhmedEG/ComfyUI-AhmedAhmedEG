@@ -2460,6 +2460,8 @@ const embeddedCSS = `
 .mmx-director-root textarea.mmx-sp-input { width:100%;min-height:20px;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;outline:none;resize:none;overflow:hidden;color:#e8edf2;font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;user-select:text; }
 .mmx-director-root textarea.mmx-sp-input::placeholder { color:#5f6f7e; }
 .mmx-director-root .mmx-sp-hidden-note { grid-column:1/-1;margin:0;font-size:11.5px;color:#9fb2c3; }
+.mmx-director-root .mmx-ref-slot { margin-left:4px;padding:1px 5px;border-radius:4px;background:rgba(0,0,0,.28);font:600 10px ui-monospace,Consolas,monospace;opacity:.9;white-space:nowrap; }
+.mmx-director-root .mmx-local-ref-item.mmx-ref-memory { cursor:default;color:#bff0e3;background:rgba(45,180,150,.14)!important;border:1px solid rgba(45,180,150,.45)!important; }
 .mmx-director-root .mmx-quick-tag-btn.mmx-tag-memory { color:#7fd8c4;background:rgba(45,180,150,.08);border-color:rgba(45,180,150,.3); }
 .mmx-director-root .mmx-memory-auto-note { margin-top:8px;border:1px solid #2f5a52;border-radius:8px;background:#172522; }
 .mmx-director-root .mmx-memory-auto-note summary { padding:6px 10px;font-size:12px;font-weight:600;color:#9fe3d2;cursor:pointer; }
@@ -4028,7 +4030,7 @@ function mountDirectorUI(node) {
     vids.forEach((vid, idx) => {
       const subj = `<Subject ${subjs.length + 1}>`;
       subjs.push(subj);
-      defs.push(`${subj} is the motion sequence from <Video ${idx + 1}> (${vid.name}).`);
+      defs.push(`${subj} is the motion sequence from <Video ${ownVideoNumber(clip, idx)}> (${vid.name}).`);
       rets.push(`${subj}: attribute_transfer - camera dynamics and pacing are followed.`);
     });
 
@@ -4117,7 +4119,21 @@ function mountDirectorUI(node) {
   const MEMORY_MAX_SECONDS = 15;
   const memorySupported = clip => ["REF2V","RV2V"].includes(clipCode(clip));
   const memoryRows = clip => (Array.isArray(clip.memory) ? clip.memory : []).filter(row => row && row.enabled !== false && row.clip_id);
-  const memoryFirstVideo = clip => activeReferences(clip).filter(row => row.type === "video").length + 1;
+  // Memory takes the first video slots; an RV2V source stays <Video 1>. The
+  // clip's own videos follow (matches nodes/node_director.py).
+  const memoryFirstVideo = clip => clipCode(clip) === "RV2V" && activeReferences(clip).some(row => row.type === "video") ? 2 : 1;
+  const memoryCount = clip => memorySupported(clip) ? memoryRows(clip).length : 0;
+  const ownVideoNumber = (clip, k) => clipCode(clip) === "RV2V" && k === 0 ? 1 : k + 1 + memoryCount(clip);
+  // Keep <Video N> tags written for the clip's own videos pointing at the same
+  // video when the number of memory slots in front of them changes.
+  const shiftOwnVideoTags = (clip, before, after) => {
+    if (before === after) return;
+    const lastMemory = memoryFirstVideo(clip) - 1 + before;
+    const shift = text => String(text ?? "").replace(/<Video\s+(\d+)>/g, (tag, n) => Number(n) > lastMemory ? `<Video ${Number(n) - before + after}>` : tag);
+    clip.prompt = shift(clip.prompt);
+    if (clip.structured_prompt) for (const [key, value] of Object.entries(clip.structured_prompt)) if (typeof value === "string") clip.structured_prompt[key] = shift(value);
+    if (clip.id === activeClipId && promptWidget) promptWidget.value = clip.prompt;
+  };
   const memorySlots = clip => Math.max(0, 3 - activeReferences(clip).filter(row => row.type === "video").length);
   const clipById = id => timelineState.clips.find(c => c.id === id);
   const memoryWindowSeconds = row => { const src = clipById(row.clip_id); const total = Number(src?.duration) || 0; const start = Math.max(0, Number(row.start) || 0); const end = row.end == null ? total : Math.min(total, Number(row.end)); return Math.max(0, end - start); };
@@ -5036,9 +5052,9 @@ function mountDirectorUI(node) {
     const drawLoras = () => {
       loraRows.replaceChildren();
       drawAntiburn();
-      if (!activeClip.loras.length) {
+      if (!activeClip.loras.length && !carriesPrevious) {
         const empty = document.createElement("div"); empty.className = "mmx-lora-empty";
-        empty.textContent = carriesPrevious ? "No other LoRAs on this clip. Add one below if you need it." : "No LoRAs on this clip. The model runs as loaded in the workflow.";
+        empty.textContent = "No LoRAs on this clip. The model runs as loaded in the workflow.";
         loraRows.appendChild(empty);
       }
       activeClip.loras.forEach((row, index) => {
@@ -5116,6 +5132,7 @@ function mountDirectorUI(node) {
       const count = activeClip.loras.length;
       addLora.textContent = count >= MAX_CLIP_LORAS ? `LoRA limit reached (${MAX_CLIP_LORAS})` : `+ Add LoRA  ·  ${count}/${MAX_CLIP_LORAS}`;
       addLora.disabled = count >= MAX_CLIP_LORAS;
+      addLora.title = carriesPrevious ? `Your own LoRAs on this clip. The automatic anti-burn LoRA is extra and not counted in the ${MAX_CLIP_LORAS}.` : "";
     };
     addLora.onclick = () => {
       if (activeClip.loras.length >= MAX_CLIP_LORAS) return;
@@ -5132,7 +5149,8 @@ function mountDirectorUI(node) {
     const memoryBody = document.createElement("div"); memoryBody.className = "mmx-memory";
     memoryPanel.appendChild(memoryBody);
     const fmtSec = v => `${(Math.round(Number(v) * 100) / 100).toFixed(2)} s`;
-    const commitMemory = (redraw = true) => { syncState(); renderTimeline(); if (redraw) renderInspector(); };
+    let memoryCountShown = memoryCount(activeClip);
+    const commitMemory = (redraw = true) => { const now = memoryCount(activeClip); if (!externallyAuthored) shiftOwnVideoTags(activeClip, memoryCountShown, now); memoryCountShown = now; syncState(); renderTimeline(); if (redraw) renderInspector(); };
     const drawMemory = () => {
       memoryBody.replaceChildren();
       const index = timelineState.clips.indexOf(activeClip);
@@ -5508,8 +5526,19 @@ function mountDirectorUI(node) {
     if (!Array.isArray(activeClip.ref_ids)) activeClip.ref_ids = [];
 
     const allRefs = (timelineState.available_refs || []).filter(row=>referenceTypes(activeClip).includes(row.type));
+    // Prompt tag each selected asset answers to, with memory slots in their real place.
+    const slotTags = new Map(); { const n = {image:0, video:0, audio:0, refmod:0};
+      for (const row of activeReferences(activeClip)) { const kind = ({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]; slotTags.set(row.id, `<${kind} ${row.type === "video" ? ownVideoNumber(activeClip, n.video++) : ++n[row.type]}>`); } }
+    if (memorySupported(activeClip)) memoryRows(activeClip).forEach((row, i) => {
+      const src = clipById(row.clip_id), chip = document.createElement("span");
+      chip.className = "mmx-local-ref-item checked mmx-ref-memory";
+      const whole = row.end == null && !(Number(row.start) > 0);
+      chip.innerHTML = `<span>🧠</span><span style="font-weight:700;opacity:.7;">[MEM]</span><span>${escapeHtml(src?.name || row.clip_id)}${whole ? "" : ` · ${Number(row.start||0).toFixed(1)}–${Number(row.end).toFixed(1)} s`}</span><b class="mmx-ref-slot">&lt;Video ${memoryFirstVideo(activeClip) + i}&gt;</b>`;
+      chip.title = "Clip memory fills this video slot automatically. Change it in the Memory tab.";
+      refsList.appendChild(chip);
+    });
     refsPoolWrap.hidden = referenceTypes(activeClip).length === 0;
-    if(!allRefs.length){const empty=document.createElement("span");empty.textContent="No compatible assets in the connected Reference Pack.";refsList.append(empty);}
+    if(!allRefs.length && !refsList.children.length){const empty=document.createElement("span");empty.textContent="No compatible assets in the connected Reference Pack.";refsList.append(empty);}
     allRefs.forEach((r) => {
       const isChecked = activeClip.ref_ids.includes(r.id);
       const item = document.createElement("button");
@@ -5522,6 +5551,7 @@ function mountDirectorUI(node) {
       const fnHint = r.filename ? ` <span style="font-size: 8px; opacity: 0.55; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;">(${escapeHtml(r.filename)})</span>` : "";
       item.innerHTML = `<span>${icon}</span><span style="font-weight: 700; opacity: 0.7;">${tag}</span><span>${escapeHtml(r.name)}</span>${fnHint}`;
       if (r.filename) item.title = `${r.name} (${r.filename})`;
+      if (isChecked && slotTags.has(r.id)) { const slot = document.createElement("b"); slot.className = "mmx-ref-slot"; slot.textContent = slotTags.get(r.id); item.append(slot); }
 
       item.dataset.refId=r.id;
       const single=selectionLimit(activeClip,rtype)===1;
@@ -5643,7 +5673,7 @@ function mountDirectorUI(node) {
       const bar = document.createElement("div"); bar.className = "mmx-sp-bar";
       const tagRow = document.createElement("div"); tagRow.className = "mmx-quick-tags";
       const counts = {image:0, video:0, audio:0, refmod:0};
-      const tagList = activeReferences(activeClip).map(row => ({label:`${row.name} · <${({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]} ${++counts[row.type]}>`, tag:`<${({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]} ${counts[row.type]}>`}));
+      const tagList = activeReferences(activeClip).map(row => { const kind = ({image:"Picture",video:"Video",audio:"Audio",refmod:"RefMod"})[row.type]; const n = row.type === "video" ? ownVideoNumber(activeClip, counts.video++) : ++counts[row.type]; return {label:`${row.name} · <${kind} ${n}>`, tag:`<${kind} ${n}>`}; });
       memoryRows(activeClip).forEach((row, i) => { const tag = `<Video ${memoryFirstVideo(activeClip) + i}>`; tagList.push({label:`Memory · ${tag}`, tag, memory:true}); });
       for (const t of tagList) {
         const b = document.createElement("button"); b.type = "button"; b.className = "mmx-quick-tag-btn" + (t.memory ? " mmx-tag-memory" : ""); b.textContent = t.label; b.title = `Insert ${t.tag}`;
@@ -5706,7 +5736,7 @@ function mountDirectorUI(node) {
       const counts = {image:0, video:0, audio:0, refmod:0};
       const tags = activeReferences(activeClip).map(row => {
         const kind = {image:"Picture", video:"Video", audio:"Audio", refmod:"RefMod"}[row.type];
-        const tag = `<${kind} ${++counts[row.type]}>`;
+        const tag = `<${kind} ${row.type === "video" ? ownVideoNumber(activeClip, counts.video++) : ++counts[row.type]}>`;
         return {label: `${row.name} · ${tag}`, tag};
       });
       memoryRows(activeClip).forEach((row, i) => { const tag = `<Video ${memoryFirstVideo(activeClip) + i}>`; tags.push({label:`Memory · ${tag}`, tag}); });
