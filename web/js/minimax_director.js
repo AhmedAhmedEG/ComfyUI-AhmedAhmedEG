@@ -2386,6 +2386,11 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-empty { display:flex;align-items:center;justify-content:center;min-height:90px;padding:14px;text-align:center;font-size:11.5px;color:#8ea2b4; }
 .mmx-director-root .mmx-look-empty[hidden] { display:none; }
 .mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-split { display:none; }
+.mmx-director-root .mmx-antiburn-note { margin:2px 0 8px;padding:6px 10px;border-left:3px solid #8b7bf0;border-radius:4px;background:#22232e;font-size:11.5px;color:#b9c3cf;line-height:1.4; }
+.mmx-director-root .mmx-look-steps { display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:6px; }
+.mmx-director-root .mmx-look-steps:empty { display:none; }
+.mmx-director-root .mmx-look-steps span { font-size:10.5px;padding:2px 7px;border-radius:10px;background:#2a3340;color:#cfe0ef;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-look-steps small { flex-basis:100%;font-size:10.5px;color:#7d8e9e; }
 .mmx-director-root .mmx-look-readout { display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 2px;font-size:11px;color:#9fb0c0;font-variant-numeric:tabular-nums; }
 .mmx-director-root .mmx-look-readout:empty { display:none; }
 .mmx-director-root .mmx-look-readout b { color:#e8edf2;font-weight:600; }
@@ -2402,12 +2407,6 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-row.changed .mmx-look-reset { visibility:visible;color:#dfe7ee!important;border-color:#4b5866!important; }
 .mmx-director-root .mmx-look-row.changed .mmx-look-reset:hover { background:#2c343d!important; }
 .mmx-director-root .mmx-look-reset-all { align-self:flex-end;margin-top:6px;height:26px!important;min-height:26px!important;padding:0 10px!important;border:1px solid #4b5866!important;border-radius:6px!important;background:#2c343d!important;color:#dfe7ee!important;font-size:11.5px!important;cursor:pointer; }
-.mmx-director-root .mmx-join-result { margin-top:12px; }
-.mmx-director-root .mmx-join-result > strong { font-size:12.5px;color:#e8edf2; }
-.mmx-director-root .mmx-join-pair { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px; }
-.mmx-director-root .mmx-join-pair figure { margin:0; }
-.mmx-director-root .mmx-join-pair img { display:block;width:100%;border-radius:5px; }
-.mmx-director-root .mmx-join-pair figcaption { font-size:10.5px;color:#8ea2b4;margin-top:3px; }
 .mmx-director-root .mmx-lora-auto { border-left-color:#5fb39a; }
 .mmx-director-root .mmx-lora-auto-name { display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;min-width:0;font-size:12.5px;color:#e8edf2; }
 .mmx-director-root .mmx-lora-auto-name small { flex-basis:100%;font-size:11px;color:#8ea2b4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
@@ -4143,7 +4142,7 @@ function mountDirectorUI(node) {
     if(value!==M.independent)value=isStartImageClip(clip)?M.frame:value===M.frame?M.carry:value;
     return value;
   };
-  const antiburnText = burn => burn?.enabled===false ? "Anti-burn LoRA is switched off for this clip (LoRAs tab)." : `Anti-burn LoRA is added automatically at strength ${Number(burn?.strength ?? .5).toFixed(2)} (change it in the LoRAs tab).`;
+  const antiburnText = burn => burn?.enabled===false ? "Anti-burn LoRA is switched off for this clip (LoRAs tab)." : `Continuing the previous clip adds the anti-burn LoRA automatically at strength ${Number(burn?.strength ?? .5).toFixed(2)}, whichever method or switches you use (change it in the LoRAs tab).`;
   const continuesFromLastFrame = clip => timelineState.clips.indexOf(clip)>0 && isStartImageClip(clip) && effectiveContinuity(clip)===CONTINUITY_MODES.frame;
   const clipCode = clip => clip.locked ? 'VIDEO' : ({T2VA:'T2V',I2VA:'I2V',FL2VA:'FL2V',L2VA:'L2V',REF2VA:'REF2V','Image Inpaint':'IMG','IMAGE INPAINT':'IMG'})[clip.type] || clip.type || 'T2V';
   const referenceTypes = clip => {
@@ -5039,7 +5038,7 @@ function mountDirectorUI(node) {
       drawAntiburn();
       if (!activeClip.loras.length) {
         const empty = document.createElement("div"); empty.className = "mmx-lora-empty";
-        empty.textContent = "No LoRAs on this clip. The model runs as loaded in the workflow.";
+        empty.textContent = carriesPrevious ? "No other LoRAs on this clip. Add one below if you need it." : "No LoRAs on this clip. The model runs as loaded in the workflow.";
         loraRows.appendChild(empty);
       }
       activeClip.loras.forEach((row, index) => {
@@ -5325,21 +5324,11 @@ function mountDirectorUI(node) {
       if(!lookIsNeutral(activeClip[key])){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}
       box.append(head);
       if(extra.note){const p=document.createElement("p");p.className="mmx-continuity-mode-note";p.textContent=extra.note;box.append(p);}
-      box.append(createLookEditor({imageUrl,emptyText,look:activeClip[key],beforeLabel:extra.before || "Original",afterLabel:extra.after || "Adjusted",
-        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,
-        onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}}));
+      box.editor=createLookEditor({imageUrl,emptyText,look:activeClip[key],beforeLabel:extra.before || "Original",afterLabel:extra.after || "Adjusted",
+        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,steer:extra.steer,stepsNote:extra.stepsNote,afterLabelFor:extra.afterLabelFor,
+        onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}});
+      box.append(box.editor);
       return box;
-    };
-    const joinResult=(caption)=>{
-      if(!previousClip || !cachedClipResults[activeClip.id] || mode===MODE.independent)return;
-      const result=document.createElement("div");result.className="mmx-join-result";
-      const title=document.createElement("strong");title.textContent="Join result";result.append(title);
-      const pair=document.createElement("div");pair.className="mmx-join-pair";
-      for(const [label,src] of [["Previous clip · last frame",frameUrl(previousClip,"last")],[caption,frameUrl(activeClip,"first")]]){
-        const fig=document.createElement("figure");const img=document.createElement("img");img.src=src;img.alt=label;img.onerror=()=>fig.remove();
-        const cap=document.createElement("figcaption");cap.textContent=label;fig.append(img,cap);pair.append(fig);
-      }
-      result.append(pair);continuityPanel.append(result);
     };
     if(startImage){
       const code=clipCode(activeClip);
@@ -5355,12 +5344,15 @@ function mountDirectorUI(node) {
         empty=first?"This reference has no file to preview. Adjustments still apply.":"Choose the start image in References to preview it.";
       }
       continuityPanel.append(lookSection("Start image look","start_look",url,empty,{note:"Adjust the start image before it is used. The preview shows exactly what the model receives."}));
-      if(on)joinResult("This clip · first frame");
     } else {
       const method=document.createElement("select");method.className="mmx-shot-continuity-mode";
       for(const [value,label] of [[MODE.independent,"Independent"],[MODE.motion,"Motion Context"],[MODE.carry,"Latent Carry"]]){const option=document.createElement("option");option.value=value;option.textContent=label;method.append(option);}
       method.value=mode;method.disabled=!!activeClip.locked;method.onchange=()=>commitContinuity(method.value);
       continuityPanel.append(field("Method",method,"Independent starts fresh. Motion Context guides the new clip with the previous clip's ending. Latent Carry continues the previous clip's ending directly (recommended: least drift)."));
+      if(mode!==MODE.independent){
+        const burnNote=document.createElement("p");burnNote.className="mmx-antiburn-note";
+        burnNote.textContent=antiburnText(activeClip.antiburn);continuityPanel.append(burnNote);
+      }
       if(mode===MODE.independent){
         const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);
       } else {
@@ -5383,22 +5375,22 @@ function mountDirectorUI(node) {
         }
         continuityPanel.append(grid);
         const fixes=document.createElement("div");fixes.className="mmx-switch-group";
-        fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
+        let preview=null;
+        fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();preview?.editor.refresh();},
           "Keeps sharpness, contrast and colour cast from building up at each join. Recommended."));
-        fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
+        fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();preview?.editor.refresh();},
           "After decoding, gently pulls brightness and colour back to the first clip of this chain, ramping from the join so there is no jump."));
-        const burn=activeClip.antiburn || {};
-        const burnNote=document.createElement("p");burnNote.className="mmx-continuity-mode-note mmx-antiburn-note";
-        burnNote.textContent=antiburnText(burn);
-        fixes.append(burnNote);
         continuityPanel.append(fixes);
         const anchor=chainStart();
-        continuityPanel.append(lookSection("Previous clip's last frame","tail_look",frameUrl(previousClip,"last",true),
+        preview=lookSection("Previous clip's last frame","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
-          {note:"Optional manual correction of the tail this clip continues from. Leave it untouched for a pure latent join; when adjusted, the tail is re-encoded from these pixels (the join is slightly softer).",
+          {note:"The right side shows your manual adjustment plus the join fix and hold look switched on above, live. Leave the sliders untouched for a pure latent join; when adjusted, the tail is re-encoded from these pixels (the join is slightly softer).",
            anchorUrl:anchor && anchor!==activeClip?frameUrl(anchor,"last"):null,anchorLabel:`Change vs. the last frame of ${anchor?.name || "the chain's first clip"}`,
-           before:"As generated",after:"Carried"}));
-        joinResult("This clip · first frame (after the join fix)");
+           steer:()=>({contrast:activeClip.auto_fix!==false,hold:!!activeClip.hold_look}),
+           stepsNote:"Join fix and hold are estimated from the chain's first clip; the exact amounts are measured during generation.",
+           afterLabelFor:steer=>steer.contrast||steer.hold?"Expected look":lookIsNeutral(activeClip.tail_look)?"Carried as is":"Carried",
+           before:"As generated"});
+        continuityPanel.append(preview);
       }
     }
     shotSections.prepend(continuityPanel);
