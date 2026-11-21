@@ -4143,6 +4143,7 @@ function mountDirectorUI(node) {
     if(value!==M.independent)value=isStartImageClip(clip)?M.frame:value===M.frame?M.carry:value;
     return value;
   };
+  const antiburnText = burn => burn?.enabled===false ? "Anti-burn LoRA is switched off for this clip (LoRAs tab)." : `Anti-burn LoRA is added automatically at strength ${Number(burn?.strength ?? .5).toFixed(2)} (change it in the LoRAs tab).`;
   const continuesFromLastFrame = clip => timelineState.clips.indexOf(clip)>0 && isStartImageClip(clip) && effectiveContinuity(clip)===CONTINUITY_MODES.frame;
   const clipCode = clip => clip.locked ? 'VIDEO' : ({T2VA:'T2V',I2VA:'I2V',FL2VA:'FL2V',L2VA:'L2V',REF2VA:'REF2V','Image Inpaint':'IMG','IMAGE INPAINT':'IMG'})[clip.type] || clip.type || 'T2V';
   const referenceTypes = clip => {
@@ -5022,7 +5023,8 @@ function mountDirectorUI(node) {
       slider.value = strength.value = Number(burn.strength ?? .5).toFixed(2);
       const save = value => { const next = {...(activeClip.antiburn || {})}; Object.assign(next, value);
         if (next.enabled !== false) delete next.enabled; if (Number(next.strength ?? .5) === .5) delete next.strength;
-        if (Object.keys(next).length) activeClip.antiburn = next; else delete activeClip.antiburn; syncState(); };
+        if (Object.keys(next).length) activeClip.antiburn = next; else delete activeClip.antiburn; syncState();
+        const note = inspector.querySelector(".mmx-antiburn-note"); if (note) note.textContent = antiburnText(activeClip.antiburn); };
       enabled.onchange = () => { card.dataset.enabled = String(enabled.checked); save({enabled: enabled.checked}); };
       slider.oninput = () => { strength.value = Number(slider.value).toFixed(2); };
       slider.onchange = () => save({strength: Number(slider.value)});
@@ -5386,8 +5388,8 @@ function mountDirectorUI(node) {
         fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
           "After decoding, gently pulls brightness and colour back to the first clip of this chain, ramping from the join so there is no jump."));
         const burn=activeClip.antiburn || {};
-        const burnNote=document.createElement("p");burnNote.className="mmx-continuity-mode-note";
-        burnNote.textContent=burn.enabled===false?"Anti-burn LoRA is switched off for this clip (LoRAs tab).":`Anti-burn LoRA is added automatically at strength ${Number(burn.strength ?? .5).toFixed(2)} (change it in the LoRAs tab).`;
+        const burnNote=document.createElement("p");burnNote.className="mmx-continuity-mode-note mmx-antiburn-note";
+        burnNote.textContent=antiburnText(burn);
         fixes.append(burnNote);
         continuityPanel.append(fixes);
         const anchor=chainStart();
