@@ -2390,17 +2390,23 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-zoom button.active { background:#3d4f63!important;color:#fff!important; }
 .mmx-director-root .mmx-look-zoom { align-items:center; }
 .mmx-director-root .mmx-look-zoom span { font-size:11px;color:#dfe6ee;padding-right:2px; }
-.mmx-director-root .mmx-look-zoom-box { width:46px;height:20px;padding:0 4px!important;border:1px solid #4b5866!important;border-radius:4px!important;background:#1b2128!important;color:#fff!important;font-size:11px!important;text-align:right;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-look-zoom-box { width:58px;height:20px;padding:0 4px!important;border:1px solid #4b5866!important;border-radius:4px!important;background:#1b2128!important;color:#fff!important;font-size:11px!important;text-align:right;font-variant-numeric:tabular-nums; }
 .mmx-director-root .mmx-look-mode { position:absolute;left:6px;bottom:6px;display:flex;gap:2px;padding:2px;border-radius:6px;background:rgba(0,0,0,.55); }
 .mmx-director-root .mmx-look-mode[hidden] { display:none; }
 .mmx-director-root .mmx-look-mode button { height:20px;padding:0 8px!important;border:0!important;border-radius:4px!important;background:transparent!important;color:#dfe6ee!important;font-size:11px!important;font-weight:600;cursor:pointer; }
 .mmx-director-root .mmx-look-mode button.active { background:#3d4f63!important;color:#fff!important; }
 .mmx-director-root .mmx-look-notice { position:absolute;right:8px;top:32px;max-width:48%;padding:4px 8px;border-radius:4px;background:rgba(0,0,0,.7);color:#f0c674;font-size:11px;pointer-events:none; }
 .mmx-director-root .mmx-look-notice[hidden] { display:none; }
-.mmx-director-root .mmx-look-curve { width:100%;height:32px; }
+.mmx-director-root .mmx-look-curve-text { grid-column:2 / span 2;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;color:#9fb0c0; }
+.mmx-director-root .mmx-look-curve-text b { color:#e8edf2;font-weight:600;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-look-curve-text .up b { color:#f0c674; }
+.mmx-director-root .mmx-look-curve-text .down b { color:#7bb4ff; }
+.mmx-director-root .mmx-look-readout-line { display:flex;flex-wrap:wrap;gap:4px 14px;width:100%; }
+.mmx-director-root .mmx-look-readout-line i { font-style:normal;color:#8ea2b4;min-width:120px; }
 .mmx-director-root .mmx-look-curve-row[hidden] { display:none; }
 .mmx-director-root .mmx-look-missing .mmx-look-mode { display:none; }
-.mmx-director-root .mmx-look-labels { position:absolute;left:0;right:0;top:6px;display:flex;justify-content:space-between;padding:0 8px;pointer-events:none; }
+.mmx-director-root .mmx-look-labels { position:absolute;left:0;right:0;top:6px;display:grid;grid-template-columns:1fr 1fr;padding:0 6px;gap:12px;pointer-events:none; }
+.mmx-director-root .mmx-look-labels span { justify-self:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .mmx-director-root .mmx-look-labels span { font-size:10.5px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:4px; }
 .mmx-director-root .mmx-look-empty { display:flex;align-items:center;justify-content:center;min-height:90px;padding:14px;text-align:center;font-size:11.5px;color:#8ea2b4; }
 .mmx-director-root .mmx-look-empty[hidden] { display:none; }
@@ -5490,11 +5496,11 @@ function mountDirectorUI(node) {
         continuityPanel.append(fixes);
         const tailSection=lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
-          {note:"The same region of both images, zoomed. Preview: left, the previous clip's last frame; right, that frame with these sliders and the calibrated tone curve, as the model receives it. Generated: right shows this clip's real first frame. Drag to move the region; scroll over the picture or use the zoom box to zoom. The first second follows the tail closely; after that the model's own look takes over. Auto calibrate fits a tone curve from the last take so darks, mids and whites each match the previous clip's end. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
+          {note:"The same region of three images, zoomed: the previous clip's last frame; that frame with these sliders and the tone curve, as the model receives it; and this clip's real first frame as generated (one frame later, so a small movement is normal). Drag to move the region; scroll over the picture or use the zoom box to zoom. Auto calibrate measures the last take and sets the tone curve so darks, mids and whites each start the way the previous clip ended; regenerate to use it. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
            compareOriginal:true,anchorLabel:"Predicted start of this clip vs. the previous clip's end",
-           generatedUrl:cachedClipResults[activeClip.id]?.generation?frameUrl(activeClip,"first",true):null,generatedLabel:"This clip's first frame, generated",
+           generatedUrl:cachedClipResults[activeClip.id]?.generation?frameUrl(activeClip,"first",true):null,generatedLabel:"Generated start",
            generatedNote:"Left: the previous clip's last frame. Right: this clip's real first frame as generated (colour correction removed). It is one frame later, so a small movement is normal.",
-           before:"Previous clip's end",after:"Start of this clip"});
+           before:"Previous clip's end",after:"Model receives"});
         continuityPanel.append(tailSection);
         if(previousClip)addAutoCalibrate(tailSection);
       }
