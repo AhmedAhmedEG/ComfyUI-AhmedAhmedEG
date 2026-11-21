@@ -270,7 +270,7 @@
       "Measured on this take",
       "After a continuing clip is generated, shows how its first second joined the previous clip and how its end drifted from the chain's first clip.",
       "Checking a generated join or a long chain's colour.",
-      "Report only. The first second follows the previous-tail sliders; drift toward the end is corrected by Hold look."
+      "Calibrate sets the previous-tail sliders from the Join row so the next take starts the way the previous clip ended; drift toward the end is corrected by Hold look."
     ],
     [
       "Anti-burn (Auto)",

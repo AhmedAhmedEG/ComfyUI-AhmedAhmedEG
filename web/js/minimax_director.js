@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 import {transferRequest,transferLabel} from "./minimax_transfer.js";
-import {createLookEditor,lookIsNeutral} from "./minimax_look.js";
+import {createLookEditor,lookIsNeutral,calibrateLook,lookChanges} from "./minimax_look.js";
 
 const CONTINUITY_MODES={independent:"Independent (No Continuity)",motion:"Motion Context (Chained)",carry:"Latent Carry (Pinned)",frame:"Last Frame (Start Image)"};
 
@@ -2397,6 +2397,10 @@ const embeddedCSS = `
 .mmx-director-root .mmx-calib-table td.ok { color:#8fd19e; }
 .mmx-director-root .mmx-calib-table td.warn { color:#f0c674; }
 .mmx-director-root .mmx-calib-table td.bad { color:#ff8f8f; }
+.mmx-director-root .mmx-calib-actions { display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap; }
+.mmx-director-root .mmx-calib-actions small { font-size:11px;color:#b9c3cf; }
+.mmx-director-root .mmx-calib-btn { height:28px;padding:0 12px!important;border-radius:6px!important;border:1px solid #6b5a2a!important;background:#3a3220!important;color:#f6dfa4!important;font-size:12px!important;font-weight:600;cursor:pointer; }
+.mmx-director-root .mmx-calib-btn:disabled { opacity:.6;cursor:default; }
 .mmx-director-root .mmx-calib-note { margin:6px 0 0;font-size:11px;color:#8ea2b4;line-height:1.4; }
 .mmx-director-root .mmx-calib-note.warn { color:#f0c674; }
 .mmx-director-root .mmx-look-readout { display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 2px;font-size:11px;color:#9fb0c0;font-variant-numeric:tabular-nums; }
@@ -5395,8 +5399,25 @@ function mountDirectorUI(node) {
         // later the model's own look takes over. So the sliders only shape the
         // start, and Hold look is what corrects colour drift toward the end.
         const note=document.createElement("p");note.className="mmx-calib-note";
-        note.textContent="This clip's first second follows the previous-tail sliders, predicted live in the preview below; about a second later the model's own look takes over. Leave the sliders neutral for a seamless join.";
-        body.append(note);
+        note.textContent="This clip's first second follows the previous-tail sliders (predicted live in the preview below); about a second later the model's own look takes over. Calibrate sets the sliders so the next take starts the way the previous clip ended.";
+        // Calibrate on the join: the start follows the graded tail almost 1:1,
+        // so correcting the measured Join row from the look this take used
+        // should land in one round. Drift toward the end is Hold look's job.
+        const current=activeClip.tail_look||null;
+        const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
+        if(activeClip.calibrated_from && activeClip.calibrated_from!==m.generation)delete activeClip.calibrated_from;
+        const withContrast=m.auto_fix===false;
+        const next=calibrateLook(used,m.previous_end,m.first,{contrast:withContrast});
+        const changes=lookChanges(used,next);
+        const actions=document.createElement("div");actions.className="mmx-calib-actions";
+        const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
+        const summary=document.createElement("small");
+        if(!changes.length){button.textContent="On target";button.disabled=true;summary.textContent="The join matches; no slider change needed.";}
+        else if(activeClip.calibrated_from===m.generation){button.textContent="Calibrated";button.disabled=true;summary.textContent="Regenerate this clip to use the calibrated sliders.";}
+        else{button.textContent="Calibrate sliders";summary.textContent=changes.join(" · ");
+          button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look=next;activeClip.calibrated_from=m.generation;syncState();renderTimeline();renderInspector();};}
+        actions.append(button,summary);body.append(actions,note);
+        if(activeClip.calibrated_from!==m.generation && m.tail_look_known && JSON.stringify(used||null)!==JSON.stringify(lookIsNeutral(current)?null:current) && changes.length){const w=document.createElement("p");w.className="mmx-calib-note warn";w.textContent="The sliders changed since this take. Calibrating replaces them with a correction of the look this take actually used.";body.append(w);}
         if(m.anchor){
           const endOff=[pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
           if(endOff){const p=document.createElement("p");p.className="mmx-calib-note"+(m.hold_gain?"":" warn");
@@ -5458,7 +5479,7 @@ function mountDirectorUI(node) {
         if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
         continuityPanel.append(lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
-          {note:"Left: the previous clip's last frame. Right: how this clip will start. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. Leave them neutral for a seamless join; when adjusted, the tail is re-encoded from these pixels (slightly softer join).",
+          {note:"The same part of the frame twice: left, the previous clip's last frame; right, how this clip will start. Drag across the picture to compare another part. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
            compareOriginal:true,anchorLabel:"Predicted start of this clip vs. the previous clip's end",
            before:"Previous clip's end",after:"Start of this clip"}));
       }

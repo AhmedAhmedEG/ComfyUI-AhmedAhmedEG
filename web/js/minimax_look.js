@@ -33,6 +33,37 @@ export function applyLookPixels(data, look) {
   return data;
 }
 
+// Calibration from a generated clip. ``target`` and ``result`` are
+// {rgb:[r,g,b] 0..1, std} from /minimax_director/clip/calibration. Returns the
+// look that, applied to the carried tail instead of ``used``, should move the
+// next take's result onto the target: per-channel gains are inverted into
+// exposure / temperature / tint with this module's grade, contrast from the
+// luma spread. Saturation and black level are kept. One step; repeat if needed.
+export function calibrateLook(used, target, result, {contrast = true} = {}) {
+  const base = {...LOOK_NEUTRAL, ...(used || {})};
+  const c = target.rgb.map((v, i) => Math.min(1.6, Math.max(.6, v / Math.max(1e-3, result.rgb[i]))));
+  const rho = c[0] / c[2], t = 10 * (rho - 1) / (rho + 1);
+  const m = Math.sqrt(Math.max(1e-6, (1 + .1*t) * (1 - .1*t)));
+  const q = c[1] / Math.sqrt(c[0] * c[2]) * m, g = (q - 1) / (.1 + .05*q);
+  const e = Math.log2(Math.max(1e-3, c[1] / (1 + .1*g)));
+  const lumaGain = .299*c[0] + .587*c[1] + .114*c[2];
+  const k = contrast && result.std > 1e-4 ? target.std / result.std / lumaGain : 1;
+  const clampTo = (key, v) => { const row = LOOK_CONTROLS.find(r => r[0] === key); const step = row[4]; return Math.min(row[3], Math.max(row[2], Math.round(v / step) * step)); };
+  const next = {...base,
+    exposure: clampTo("exposure", base.exposure + e),
+    temperature: clampTo("temperature", base.temperature + t),
+    tint: clampTo("tint", base.tint + g),
+    contrast: clampTo("contrast", base.contrast * k)};
+  for (const key of Object.keys(next)) next[key] = Number(next[key].toFixed(4));
+  return next;
+}
+
+export function lookChanges(from, to) {
+  const a = {...LOOK_NEUTRAL, ...(from || {})}, b = {...LOOK_NEUTRAL, ...(to || {})};
+  return LOOK_CONTROLS.filter(([key]) => Math.abs(b[key] - a[key]) > 1e-6).map(([key, title, , , , format]) => `${title} ${format(b[key])}`);
+}
+
+
 export function frameStats(data) {
   let lum = 0, dark = 0, R = 0, G = 0, B = 0, n = 0;
   for (let i = 0; i < data.length; i += 16) {
@@ -72,7 +103,8 @@ export function createLookEditor(opts) {
   const stage = document.createElement("div"); stage.className = "mmx-look-stage";
   const canvas = document.createElement("canvas"); canvas.className = "mmx-look-canvas";
   const split = document.createElement("input"); split.type = "range"; split.min = "0"; split.max = "100"; split.value = "50";
-  split.className = "mmx-look-split"; split.setAttribute("aria-label", "Compare before and after");
+  split.className = "mmx-look-split"; split.setAttribute("aria-label", "Part of the frame to compare");
+  split.title = "Drag to choose which part of the frame is compared";
   const labels = document.createElement("div"); labels.className = "mmx-look-labels";
   labels.innerHTML = `<span>${opts.beforeLabel || "Before"}</span><span>${opts.afterLabel || "After"}</span>`;
   const empty = document.createElement("div"); empty.className = "mmx-look-empty"; empty.textContent = "Loading frame…";
@@ -88,10 +120,13 @@ export function createLookEditor(opts) {
     const ctx = canvas.getContext("2d");
     const after = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
     applyLookPixels(after.data, look);
-    const cut = Math.round(original.width * Number(split.value) / 100);
-    ctx.putImageData(original, 0, 0);
-    ctx.putImageData(after, 0, 0, cut, 0, original.width - cut, original.height);
-    ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillRect(Math.max(0, cut - 1), 0, 2, original.height);
+    // The same half of the frame twice: before on the left, after on the
+    // right; the slider chooses which part of the frame is compared.
+    const w = original.width, h = original.height, half = Math.max(1, Math.round(w / 2));
+    const x0 = Math.round((w - half) * Number(split.value) / 100);
+    ctx.putImageData(original, -x0, 0, x0, 0, half, h);
+    ctx.putImageData(after, half - x0, 0, x0, 0, half, h);
+    ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillRect(half - 1, 0, 2, h);
     const s = frameStats(after.data);
     const delta = (value, base, digits = 1, pct = false) => {
       if (base == null) return "";
