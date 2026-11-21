@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias, repair_boundary_frame
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias, repair_boundary_frame
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -1398,7 +1398,9 @@ class MiniMaxH3MasterDirector:
                 v_first,a_first=extract_streams_from_av_latent(sampled_latent)
                 first_frames=decode_video_latent(video_vae,v_first)
                 if source is not None: first_frames=first_frames[:source["frames"].shape[0]]
-                elif continuation_prefix: first_frames=first_frames[:int(is_chained_from_previous)+visible_frames]
+                elif continuation_prefix:
+                    first_frames=first_frames[:int(is_chained_from_previous)+visible_frames]
+                    first_frames,_=repair_boundary_frame(first_frames,int(is_chained_from_previous))
                 first_frames=spill_frames(first_frames,cache_mgr.project_dir)
                 first_audio=decode_audio_latent(audio_vae,a_first) if audio_vae else {'waveform':torch.zeros((1,2,round(first_frames.shape[0]/FPS*48000))),'sample_rate':48000}
                 first_audio=choose_audio(audio_mode,first_audio,source,first_frames.shape[0])
@@ -1496,6 +1498,9 @@ class MiniMaxH3MasterDirector:
                 decoded_frames = decoded_frames[:source["frames"].shape[0]]
             elif continuation_prefix:
                 decoded_frames = decoded_frames[:int(is_chained_from_previous)+visible_frames]
+                decoded_frames, repaired = repair_boundary_frame(decoded_frames, int(is_chained_from_previous))
+                if repaired:
+                    log.info("Master Director: clip %s first new frame was a copy of the reused context; replaced with the next frame.", clip_id)
             sampled_latent["_mmx_visible_end"] = int(decoded_frames.shape[0])
             if canon_mode == MODE_INPAINT:
                 decoded_frames = decoded_frames[-1:]

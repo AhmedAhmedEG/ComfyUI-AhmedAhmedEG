@@ -53,6 +53,29 @@ class LookMath(unittest.TestCase):
         self.assertAlmostEqual(frame_stats(frames * 255)["rgb"][0], start["rgb"][0], places=4)
 
 
+class BoundaryFrame(unittest.TestCase):
+    def frames(self, levels):
+        noise = torch.rand((len(levels), 8, 8, 3)) * 0.01
+        return torch.tensor(levels).view(-1, 1, 1, 1) + noise
+
+    def test_context_copy_after_the_cut_is_replaced(self):
+        from core.continuity import repair_boundary_frame
+        # context ... 0.70 0.70 | 0.70 (copy) 0.60 0.60 0.60
+        frames = self.frames([0.7, 0.7, 0.7, 0.7, 0.6, 0.6, 0.6])
+        out, repaired = repair_boundary_frame(frames.clone(), 3)
+        self.assertTrue(repaired)
+        self.assertTrue(torch.equal(out[3], out[4]))
+        self.assertEqual(out.shape, frames.shape)
+
+    def test_smooth_joins_and_real_cuts_are_left_alone(self):
+        from core.continuity import repair_boundary_frame
+        smooth = self.frames([0.70, 0.69, 0.68, 0.67, 0.66, 0.65, 0.64])
+        self.assertFalse(repair_boundary_frame(smooth.clone(), 3)[1])
+        cut_at_join = self.frames([0.7, 0.7, 0.7, 0.3, 0.3, 0.3, 0.3])
+        self.assertFalse(repair_boundary_frame(cut_at_join.clone(), 3)[1])
+        self.assertFalse(repair_boundary_frame(smooth.clone(), 1)[1])
+
+
 class ContinuityRules(unittest.TestCase):
     # Borrow the mock pipeline without re-running every RuntimeContracts test.
     setUp = runtime.RuntimeContracts.setUp

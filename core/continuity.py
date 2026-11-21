@@ -232,6 +232,34 @@ def anchor_chain_contrast(latent_dict: Dict[str, Any], guide_video: torch.Tensor
     return out, seam, end
 
 
+def repair_boundary_frame(frames, boundary):
+    """Replace a first new frame that is still a decoded copy of the reused context.
+
+    H3's video decoder ties the first frame of each latent step to the step
+    before it. When a continued clip's new content jumps away from its context
+    (for example after a graded previous tail), the frame right after the
+    context comes out as a copy of the context and the clip "starts" one frame
+    later: a one-frame flash or stutter at the join. Measured on saved takes:
+    that frame differs from the context by about as much as neighbouring
+    frames do, while the next step is 4-8x larger. In that case the frame is
+    replaced by the next one, so length and audio stay unchanged. Returns
+    ``(frames, repaired)``.
+    """
+    b = int(boundary)
+    if frames is None or b < 2 or int(frames.shape[0]) < b + 3:
+        return frames, False
+    sample = frames[b - 2:b + 3, ::4, ::4].float()
+    if sample.numel() and float(sample.max()) > 2:
+        sample = sample / 255
+    steps = [float((sample[k + 1] - sample[k]).abs().mean()) for k in range(4)]
+    before, cut, jump, after = steps
+    calm = max(before, after, 0.05 / 255)
+    if jump > 3 * calm and cut < 0.5 * jump:
+        frames[b] = frames[b + 1].clone()
+        return frames, True
+    return frames, False
+
+
 JOIN_COLOUR_MAX_SHIFT = 0.25
 
 
