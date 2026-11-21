@@ -642,6 +642,44 @@ if getattr(PromptServer, "instance", None) is not None:
         except (ValueError, TypeError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
 
+    @routes.get("/minimax_director/clip/calibration")
+    async def clip_calibration(request):
+        """Measured look of a generated continued clip, for "Calibrate" in the Continuity tab.
+
+        ``before`` lists the earlier clip ids in timeline order. Compares this
+        clip's first second with the previous clip's end (the join) and its last
+        second, before the hold-look gain, with the end of the chain's first clip
+        (the same anchor Hold look uses). Reads saved frames only; writes nothing."""
+        try:
+            from .core.look import undo_hold, frame_stats
+            mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
+            clip_id = request.query.get("clip_id", "")
+            before = [v for v in request.query.get("before", "").split(",") if v]
+            if not clip_id or not before:
+                raise ValueError("Choose a clip that continues an earlier clip.")
+            def build():
+                clips = mgr._manifest.get("clips", {})
+                meta = clips.get(clip_id, {})
+                frames = mgr.load_clip_frames(clip_id)
+                previous = mgr.load_clip_frames(before[-1])
+                if frames is None or previous is None or not frames.shape[0] or not previous.shape[0]:
+                    raise FileNotFoundError("Generate this clip and the previous clip first.")
+                anchor_id = next((cid for cid in reversed(before) if int(clips.get(cid, {}).get("trim_prefix", 0) or 0) <= 1), None)
+                anchor = mgr.load_clip_frames(anchor_id) if anchor_id else None
+                total, trim = int(frames.shape[0]), int(meta.get("trim_prefix", 0) or 0)
+                hold = meta.get("hold_gain")
+                raw_end = undo_hold(frames[-24:], hold, total) if hold else frames[-24:]
+                return {"generation": meta.get("generation"), "anchor_id": anchor_id,
+                        "tail_look": meta.get("tail_look"), "tail_look_known": "tail_look" in meta, "auto_fix": meta.get("auto_fix"), "hold_gain": hold,
+                        "first": frame_stats(frames[trim:]), "previous_end": frame_stats(previous, from_end=True),
+                        "end": frame_stats(frames, from_end=True), "raw_end": frame_stats(raw_end, from_end=True),
+                        "anchor": frame_stats(anchor, from_end=True) if anchor is not None and anchor.shape[0] else None}
+            return web.json_response(await asyncio.to_thread(build), headers={"Cache-Control": "no-store"})
+        except FileNotFoundError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        except (ValueError, TypeError) as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
     @routes.post("/minimax_director/project/merge")
     async def merge_project(request):
         try:

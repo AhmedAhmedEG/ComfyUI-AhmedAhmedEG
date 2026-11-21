@@ -1588,7 +1588,7 @@ class MiniMaxH3MasterDirector:
                 clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
-                    "hold_gain": hold,
+                    "hold_gain": hold, "tail_look": clip_tail_look, "auto_fix": bool(clip_auto_fix),
                     'preflight_key':preflight.key(clip_idx),
                     'model_identity':model_identity(preflight.graph,preflight.node_id,clip_item.get('type','T2V')) if isinstance(preflight.graph,dict) else None,
                     'cache_report':cache_report(),

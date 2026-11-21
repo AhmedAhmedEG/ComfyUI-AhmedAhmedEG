@@ -39,6 +39,17 @@ class LookMath(unittest.TestCase):
         self.assertTrue(torch.allclose(tail, frames[-4:], atol=1e-5))
 
 
+    def test_frame_stats_measure_colour_and_spread_for_calibration(self):
+        from core.look import frame_stats
+        frames = torch.zeros((30, 8, 8, 3))
+        frames[:, :, :, 0] = 0.6; frames[:, :, :, 2] = 0.2
+        frames[-24:, :4] = 0.0
+        start, end = frame_stats(frames), frame_stats(frames, from_end=True)
+        self.assertAlmostEqual(start["rgb"][1], 0.0, places=5)
+        self.assertGreater(end["std"], start["std"])
+        self.assertAlmostEqual(frame_stats(frames * 255)["rgb"][0], start["rgb"][0], places=4)
+
+
 class ContinuityRules(unittest.TestCase):
     # Borrow the mock pipeline without re-running every RuntimeContracts test.
     setUp = runtime.RuntimeContracts.setUp

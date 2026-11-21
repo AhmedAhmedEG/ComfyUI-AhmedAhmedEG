@@ -70,6 +70,18 @@ def _curve(hold, total, start, stop, like):
     return (a + (b - a) * k.view(-1, 1)).view(-1, 1, 1, 3).to(like.device)
 
 
+def frame_stats(frames, count=24, from_end=False):
+    """Mean RGB (0..1) and luma spread of up to ``count`` frames, sampled cheaply."""
+    total = int(frames.shape[0])
+    n = min(int(count), total)
+    part = frames[total - n:] if from_end else frames[:n]
+    x = part[::3, ::4, ::4].float()
+    if x.numel() and float(x.max()) > 2:
+        x = x / 255
+    luma = 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
+    return {"rgb": [float(v) for v in x.mean(dim=(0, 1, 2))], "std": float(luma.std())}
+
+
 def apply_hold(frames, hold, directory=None):
     """Return frames with the hold gain applied (bounded windows when ``directory``)."""
     total = int(frames.shape[0])

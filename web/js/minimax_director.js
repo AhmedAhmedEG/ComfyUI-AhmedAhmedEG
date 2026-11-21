@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 import {transferRequest,transferLabel} from "./minimax_transfer.js";
-import {createLookEditor,lookIsNeutral} from "./minimax_look.js";
+import {createLookEditor,lookIsNeutral,calibrateLook,lookChanges} from "./minimax_look.js";
 
 const CONTINUITY_MODES={independent:"Independent (No Continuity)",motion:"Motion Context (Chained)",carry:"Latent Carry (Pinned)",frame:"Last Frame (Start Image)"};
 
@@ -2387,6 +2387,22 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-empty[hidden] { display:none; }
 .mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-split { display:none; }
 .mmx-director-root .mmx-antiburn-note { margin:2px 0 8px;padding:6px 10px;border-left:3px solid #8b7bf0;border-radius:4px;background:#22232e;font-size:11.5px;color:#b9c3cf;line-height:1.4; }
+.mmx-director-root .mmx-calib { margin:8px 0 10px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid #f0c674;border-radius:8px;background:#1f252b; }
+.mmx-director-root .mmx-calib-head strong { font-size:12.5px;color:#e8edf2; }
+.mmx-director-root .mmx-calib-body { margin-top:6px;font-size:12px;color:#9fb0c0; }
+.mmx-director-root .mmx-calib-table { width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-calib-table th { text-align:left;font-weight:600;color:#8ea2b4;padding:3px 6px 3px 0;white-space:nowrap; }
+.mmx-director-root .mmx-calib-table thead th { font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#7d8e9e; }
+.mmx-director-root .mmx-calib-table td { padding:3px 6px;text-align:right;color:#e8edf2; }
+.mmx-director-root .mmx-calib-table td.ok { color:#8fd19e; }
+.mmx-director-root .mmx-calib-table td.warn { color:#f0c674; }
+.mmx-director-root .mmx-calib-table td.bad { color:#ff8f8f; }
+.mmx-director-root .mmx-calib-actions { display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap; }
+.mmx-director-root .mmx-calib-actions small { font-size:11px;color:#b9c3cf; }
+.mmx-director-root .mmx-calib-btn { height:28px;padding:0 12px!important;border-radius:6px!important;border:1px solid #6b5a2a!important;background:#3a3220!important;color:#f6dfa4!important;font-size:12px!important;font-weight:600;cursor:pointer; }
+.mmx-director-root .mmx-calib-btn:disabled { opacity:.6;cursor:default; }
+.mmx-director-root .mmx-calib-note { margin:6px 0 0;font-size:11px;color:#8ea2b4;line-height:1.4; }
+.mmx-director-root .mmx-calib-note.warn { color:#f0c674; }
 .mmx-director-root .mmx-look-steps { display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:6px; }
 .mmx-director-root .mmx-look-steps:empty { display:none; }
 .mmx-director-root .mmx-look-steps span { font-size:10.5px;padding:2px 7px;border-radius:10px;background:#2a3340;color:#cfe0ef;font-variant-numeric:tabular-nums; }
@@ -5348,6 +5364,50 @@ function mountDirectorUI(node) {
       box.append(box.editor);
       return box;
     };
+    // Measure the generated take and offer slider values that pre-compensate
+    // its drift (see /minimax_director/clip/calibration and calibrateLook).
+    const calibrationCard=()=>{
+      const card=document.createElement("div");card.className="mmx-calib";
+      const head=document.createElement("div");head.className="mmx-calib-head";
+      head.innerHTML="<strong>Measured on this take</strong>";card.append(head);
+      const body=document.createElement("div");body.className="mmx-calib-body";body.textContent="Measuring the generated clip…";card.append(body);
+      const before=timelineState.clips.slice(0,clipIndex).map(c=>c.id).join(",");
+      requestJson(`/minimax_director/clip/calibration?${new URLSearchParams({project_id:timelineState.project_id||"",clip_id:activeClip.id,before})}`).then(m=>{
+        body.replaceChildren();
+        const luma=s=>.299*s.rgb[0]+.587*s.rgb[1]+.114*s.rgb[2];
+        const pct=(a,b)=>(a/Math.max(1e-6,b)-1)*100;
+        const cell=v=>{const td=document.createElement("td");td.textContent=`${v>0?"+":""}${v.toFixed(1)}%`;td.className=Math.abs(v)<1.5?"ok":Math.abs(v)<5?"warn":"bad";return td;};
+        const table=document.createElement("table");table.className="mmx-calib-table";
+        table.innerHTML="<thead><tr><th></th><th>Brightness</th><th>Warm</th><th>Cool</th><th>Contrast</th></tr></thead>";
+        const tbody=document.createElement("tbody");
+        const row=(label,title,a,b)=>{const tr=document.createElement("tr");const th=document.createElement("th");th.textContent=label;th.title=title;tr.append(th,cell(pct(luma(a),luma(b))),cell(pct(a.rgb[0]/a.rgb[1],b.rgb[0]/b.rgb[1])),cell(pct(a.rgb[2]/a.rgb[1],b.rgb[2]/b.rgb[1])),cell(pct(a.std,b.std)));tbody.append(tr);};
+        row("Join","This clip's first second vs. the previous clip's last second",m.first,m.previous_end);
+        if(m.anchor){
+          row(m.hold_gain?"End, before hold":"End","This clip's last second"+(m.hold_gain?" without the hold-look gain":"")+" vs. the last second of the chain's first clip",m.raw_end,m.anchor);
+          if(m.hold_gain)row("End, delivered","This clip's last second as delivered, after Hold look",m.end,m.anchor);
+        }
+        table.append(tbody);body.append(table);
+        if(!m.anchor){const p=document.createElement("p");p.className="mmx-calib-note";p.textContent="Generate the chain's first clip to measure drift and calibrate.";body.append(p);return;}
+        const current=activeClip.tail_look||null;
+        const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
+        if(activeClip.calibrated_from && activeClip.calibrated_from!==m.generation)delete activeClip.calibrated_from;
+        const withContrast=m.auto_fix===false;
+        const next=calibrateLook(used,m.anchor,m.raw_end,{contrast:withContrast});
+        const changes=lookChanges(used,next);
+        const note=document.createElement("p");note.className="mmx-calib-note";
+        note.textContent=`Calibrate sets the sliders below so the next take of this clip should end on the chain's first clip. It starts from the look this take was made with${withContrast?"":"; contrast is left to the join fix"}. Regenerate this clip after calibrating, then check again; repeat if a number is still off.`;
+        const actions=document.createElement("div");actions.className="mmx-calib-actions";
+        const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
+        const summary=document.createElement("small");
+        if(!changes.length){button.textContent="On target";button.disabled=true;summary.textContent="No slider change needed.";}
+        else if(activeClip.calibrated_from && activeClip.calibrated_from===m.generation){button.textContent="Calibrated";button.disabled=true;summary.textContent="Regenerate this clip to use the calibrated sliders, then check again.";}
+        else{button.textContent="Calibrate sliders";summary.textContent=changes.join(" · ");
+          button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look=next;activeClip.calibrated_from=m.generation;syncState();renderTimeline();renderInspector();};}
+        actions.append(button,summary);body.append(actions,note);
+        if(activeClip.calibrated_from!==m.generation && m.tail_look_known && JSON.stringify(used||null)!==JSON.stringify(lookIsNeutral(current)?null:current) && changes.length && button.textContent!=="Calibrated"){const w=document.createElement("p");w.className="mmx-calib-note warn";w.textContent="The sliders changed since this take. Calibrating replaces them with a correction of the look this take actually used.";body.append(w);}
+      }).catch(error=>{if(error.status===404)card.remove();else body.textContent=`Could not measure this take: ${error.message}`;});
+      return card;
+    };
     if(startImage){
       const code=clipCode(activeClip);
       const on=mode===MODE.frame && clipIndex>0;
@@ -5399,6 +5459,7 @@ function mountDirectorUI(node) {
         fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();preview?.editor.refresh();},
           "After decoding, gently pulls brightness and colour back to the first clip of this chain, ramping from the join so there is no jump."));
         continuityPanel.append(fixes);
+        if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
         const anchor=chainStart();
         preview=lookSection("Previous clip's last frame","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
