@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 import {transferRequest,transferLabel} from "./minimax_transfer.js";
-import {createLookEditor,lookIsNeutral,calibrateLook,lookChanges} from "./minimax_look.js";
+import {createLookEditor,lookIsNeutral} from "./minimax_look.js";
 
 const CONTINUITY_MODES={independent:"Independent (No Continuity)",motion:"Motion Context (Chained)",carry:"Latent Carry (Pinned)",frame:"Last Frame (Start Image)"};
 
@@ -2388,11 +2388,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-split { display:none; }
 .mmx-director-root .mmx-antiburn-note { margin:2px 0 8px;padding:6px 10px;border-left:3px solid #8b7bf0;border-radius:4px;background:#22232e;font-size:11.5px;color:#b9c3cf;line-height:1.4; }
 .mmx-director-root .mmx-calib { margin:8px 0 10px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid #f0c674;border-radius:8px;background:#1f252b; }
-.mmx-director-root .mmx-calib-head { display:flex;align-items:center;gap:8px; }
 .mmx-director-root .mmx-calib-head strong { font-size:12.5px;color:#e8edf2; }
-.mmx-director-root .mmx-calib-test { margin-left:auto;height:26px;padding:0 12px!important;border-radius:6px!important;border:1px solid #3d5a78!important;background:#22344a!important;color:#cfe4fa!important;font-size:12px!important;font-weight:600;cursor:pointer; }
-.mmx-director-root .mmx-calib-test:disabled { opacity:.6;cursor:default; }
-.mmx-director-root .mmx-calib > .mmx-calib-note:empty { display:none; }
 .mmx-director-root .mmx-calib-body { margin-top:6px;font-size:12px;color:#9fb0c0; }
 .mmx-director-root .mmx-calib-table { width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums; }
 .mmx-director-root .mmx-calib-table th { text-align:left;font-weight:600;color:#8ea2b4;padding:3px 6px 3px 0;white-space:nowrap; }
@@ -2401,16 +2397,8 @@ const embeddedCSS = `
 .mmx-director-root .mmx-calib-table td.ok { color:#8fd19e; }
 .mmx-director-root .mmx-calib-table td.warn { color:#f0c674; }
 .mmx-director-root .mmx-calib-table td.bad { color:#ff8f8f; }
-.mmx-director-root .mmx-calib-actions { display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap; }
-.mmx-director-root .mmx-calib-actions small { font-size:11px;color:#b9c3cf; }
-.mmx-director-root .mmx-calib-btn { height:28px;padding:0 12px!important;border-radius:6px!important;border:1px solid #6b5a2a!important;background:#3a3220!important;color:#f6dfa4!important;font-size:12px!important;font-weight:600;cursor:pointer; }
-.mmx-director-root .mmx-calib-btn:disabled { opacity:.6;cursor:default; }
 .mmx-director-root .mmx-calib-note { margin:6px 0 0;font-size:11px;color:#8ea2b4;line-height:1.4; }
 .mmx-director-root .mmx-calib-note.warn { color:#f0c674; }
-.mmx-director-root .mmx-look-steps { display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:6px; }
-.mmx-director-root .mmx-look-steps:empty { display:none; }
-.mmx-director-root .mmx-look-steps span { font-size:10.5px;padding:2px 7px;border-radius:10px;background:#2a3340;color:#cfe0ef;font-variant-numeric:tabular-nums; }
-.mmx-director-root .mmx-look-steps small { flex-basis:100%;font-size:10.5px;color:#7d8e9e; }
 .mmx-director-root .mmx-look-readout { display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 2px;font-size:11px;color:#9fb0c0;font-variant-numeric:tabular-nums; }
 .mmx-director-root .mmx-look-readout:empty { display:none; }
 .mmx-director-root .mmx-look-readout b { color:#e8edf2;font-weight:600; }
@@ -3126,28 +3114,6 @@ function mountDirectorUI(node) {
     return api.apiURL(`/view?${new URLSearchParams({ filename: parts.pop(), subfolder: parts.join("/"), type: "input" })}`);
   };
   const refreshFileRefs = () => {}; // Media is supplied by connected Reference Packs.
-  // "Test join": queue only this Master node and the nodes feeding it, plus the
-  // hidden MiniMaxH3JoinTestSink on its status output, with the timeline asking
-  // for a join test of one clip. No save/preview/combine node runs.
-  const runJoinTest = async clip => {
-    const {output} = await app.graphToPrompt();
-    const id = String(node.id);
-    if (!output?.[id]) throw new Error("The Master node is muted or bypassed.");
-    const keep = {};
-    const visit = nid => { nid = String(nid); if (keep[nid] || !output[nid]) return; keep[nid] = output[nid];
-      for (const value of Object.values(output[nid].inputs || {})) if (Array.isArray(value) && value.length === 2 && ["string","number"].includes(typeof value[0]) && Number.isInteger(value[1])) visit(value[0]); };
-    visit(id);
-    const master = {...keep[id], inputs: {...keep[id].inputs}};
-    const state = JSON.parse(master.inputs.timeline_data || "{}");
-    state.join_test = {clip_id: clip.id};
-    master.inputs.timeline_data = JSON.stringify(state);
-    keep[id] = master;
-    keep["mmx_join_test"] = {class_type: "MiniMaxH3JoinTestSink", inputs: {status: [id, 8]}};
-    const response = await api.fetchApi("/prompt", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({prompt: keep, client_id: api.clientId})});
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result?.error?.message || result?.error || `Queue refused the test (${response.status})`);
-    return result;
-  };
   const requestJson = async (url, body) => {
     const response = await api.fetchApi(url, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json();
@@ -5396,27 +5362,18 @@ function mountDirectorUI(node) {
       box.append(head);
       if(extra.note){const p=document.createElement("p");p.className="mmx-continuity-mode-note";p.textContent=extra.note;box.append(p);}
       box.editor=createLookEditor({imageUrl,emptyText,look:activeClip[key],beforeLabel:extra.before || "Original",afterLabel:extra.after || "Adjusted",
-        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,steer:extra.steer,stepsNote:extra.stepsNote,afterLabelFor:extra.afterLabelFor,
+        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,compareOriginal:extra.compareOriginal,
         onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}});
       box.append(box.editor);
       return box;
     };
-    // Join test + measured take: compare this clip's opening with the previous
-    // clip's end and offer previous-tail slider values that fix the join (see
-    // /minimax_director/clip/calibration, core/join_test.py and calibrateLook).
+    // Report how the generated take joined and drifted
+    // (see /minimax_director/clip/calibration).
     const calibrationCard=()=>{
       const card=document.createElement("div");card.className="mmx-calib";
       const head=document.createElement("div");head.className="mmx-calib-head";
-      const title=document.createElement("strong");title.textContent="Join check";head.append(title);
-      const testBtn=document.createElement("button");testBtn.type="button";testBtn.className="mmx-calib-test";testBtn.textContent="Test join";
-      testBtn.title="Sample only the opening of this clip (its reused context plus about a second) with the same seed, settings and noise, and measure the join. Nothing is saved as a take; the clips before it must be saved.";
-      testBtn.disabled=externallyAuthored || !!activeClip.validated;
-      testBtn.onclick=async()=>{testBtn.disabled=true;testBtn.textContent="Queued…";
-        try{await runJoinTest(activeClip);status.textContent="Join test queued. Its result appears here when it finishes.";}
-        catch(error){status.textContent=`Could not start the join test: ${error.message}`;testBtn.disabled=false;testBtn.textContent="Test join";}};
-      head.append(testBtn);card.append(head);
-      const status=document.createElement("p");status.className="mmx-calib-note";card.append(status);
-      const body=document.createElement("div");body.className="mmx-calib-body";body.textContent="Measuring…";card.append(body);
+      head.innerHTML="<strong>Measured on this take</strong>";card.append(head);
+      const body=document.createElement("div");body.className="mmx-calib-body";body.textContent="Measuring the generated clip…";card.append(body);
       const before=timelineState.clips.slice(0,clipIndex).map(c=>c.id).join(",");
       requestJson(`/minimax_director/clip/calibration?${new URLSearchParams({project_id:timelineState.project_id||"",clip_id:activeClip.id,before})}`).then(m=>{
         body.replaceChildren();
@@ -5426,45 +5383,26 @@ function mountDirectorUI(node) {
         const table=document.createElement("table");table.className="mmx-calib-table";
         table.innerHTML="<thead><tr><th></th><th>Brightness</th><th>Warm</th><th>Cool</th><th>Contrast</th></tr></thead>";
         const tbody=document.createElement("tbody");
-        const row=(label,tip,a,b)=>{const tr=document.createElement("tr");const th=document.createElement("th");th.textContent=label;th.title=tip;tr.append(th,cell(pct(luma(a),luma(b))),cell(pct(a.rgb[0]/a.rgb[1],b.rgb[0]/b.rgb[1])),cell(pct(a.rgb[2]/a.rgb[1],b.rgb[2]/b.rgb[1])),cell(pct(a.std,b.std)));tbody.append(tr);};
-        const test=m.join_test && !m.join_test.stale ? m.join_test : null;
-        if(test)row("Join · test","Opening of the last join test vs. the previous clip's last second",test.first,m.previous_end);
-        if(m.first)row("Join · take","This take's first second vs. the previous clip's last second",m.first,m.previous_end);
-        if(m.first && m.anchor){
-          row(m.hold_gain?"End, before hold":"End","This take's last second"+(m.hold_gain?" without the hold-look gain":"")+" vs. the last second of the chain's first clip",m.raw_end,m.anchor);
-          if(m.hold_gain)row("End, delivered","This take's last second as delivered, after Hold look",m.end,m.anchor);
+        const row=(label,title,a,b)=>{const tr=document.createElement("tr");const th=document.createElement("th");th.textContent=label;th.title=title;tr.append(th,cell(pct(luma(a),luma(b))),cell(pct(a.rgb[0]/a.rgb[1],b.rgb[0]/b.rgb[1])),cell(pct(a.rgb[2]/a.rgb[1],b.rgb[2]/b.rgb[1])),cell(pct(a.std,b.std)));tbody.append(tr);};
+        row("Join","This clip's first second vs. the previous clip's last second",m.first,m.previous_end);
+        if(m.anchor){
+          row(m.hold_gain?"End, before hold":"End","This clip's last second"+(m.hold_gain?" without the hold-look gain":"")+" vs. the last second of the chain's first clip",m.raw_end,m.anchor);
+          if(m.hold_gain)row("End, delivered","This clip's last second as delivered, after Hold look",m.end,m.anchor);
         }
-        if(!tbody.children.length){body.textContent=m.join_test?.stale?"The previous clip changed since the last join test. Run Test join again.":"No measurement yet. Run Test join to check the join in seconds, or generate the clip.";return;}
         table.append(tbody);body.append(table);
-        if(test){const p=document.createElement("p");p.className="mmx-calib-note";p.textContent=`Last test: ${new Date(test.time*1000).toLocaleTimeString()}, seed ${test.seed}, ${test.frames} opening frames.`;body.append(p);}
-        // Calibrate on the join, from the newest measurement and the look it used.
-        const current=activeClip.tail_look||null;
-        const fromTest=!!test, mark=fromTest?`test:${test.time}`:m.generation;
-        const used=fromTest?(test.tail_look||null):m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
-        const measured=fromTest?test.first:m.first;
-        if(activeClip.calibrated_from && activeClip.calibrated_from!==mark)delete activeClip.calibrated_from;
-        const withContrast=(fromTest?test.auto_fix:m.auto_fix)===false;
-        const next=calibrateLook(used,m.previous_end,measured,{contrast:withContrast});
-        const changes=lookChanges(used,next);
-        const actions=document.createElement("div");actions.className="mmx-calib-actions";
-        const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
-        const summary=document.createElement("small");
-        if(!changes.length){button.textContent="On target";button.disabled=true;summary.textContent="The join matches; no slider change needed.";}
-        else if(activeClip.calibrated_from===mark){button.textContent="Calibrated";button.disabled=true;summary.textContent=`Run Test join again (or regenerate) to check the calibrated sliders.`;}
-        else{button.textContent="Calibrate sliders";summary.textContent=changes.join(" · ");
-          button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look=next;activeClip.calibrated_from=mark;syncState();renderTimeline();renderInspector();};}
-        actions.append(button,summary);body.append(actions);
+        // Measured on 2026-11-21: a clip's first second follows the graded
+        // previous tail within ~1% (the join fix forces it); about a second
+        // later the model's own look takes over. So the sliders only shape the
+        // start, and Hold look is what corrects colour drift toward the end.
         const note=document.createElement("p");note.className="mmx-calib-note";
-        note.textContent=`Calibrate fixes the ${fromTest?"Join · test":"Join"} row: it sets the previous-tail sliders so this clip starts the way the previous clip ended${withContrast?"":" (contrast is left to the join fix)"}. Then Test join again; generate the full clip once the join is right.`;
+        note.textContent="This clip's first second follows the previous-tail sliders, predicted live in the preview below; about a second later the model's own look takes over. Leave the sliders neutral for a seamless join.";
         body.append(note);
-        if(m.first && m.anchor){
+        if(m.anchor){
           const endOff=[pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
           if(endOff){const p=document.createElement("p");p.className="mmx-calib-note"+(m.hold_gain?"":" warn");
             p.textContent=m.hold_gain?"The end's colour is corrected after decoding by Hold look (see End, delivered); its brightness is left as generated.":"The end's colour drifts from the chain's first clip. Turn on Hold look above to correct the colour after decoding; brightness changes toward the end are left as generated.";body.append(p);}
         }
-        if(activeClip.calibrated_from!==mark && JSON.stringify(used||null)!==JSON.stringify(lookIsNeutral(current)?null:current) && changes.length){const w=document.createElement("p");w.className="mmx-calib-note warn";w.textContent=`The sliders changed since this ${fromTest?"test":"take"}. Calibrating replaces them with a correction of the look it actually used.`;body.append(w);}
-      }).catch(error=>{if(error.status===404 && /previous clip first/.test(error.message)){testBtn.disabled=true;body.textContent="Generate the previous clip first; the join is checked against its last second.";}
-        else body.textContent=error.status===404?"No measurement yet. Run Test join to check the join in seconds, or generate the clip.":`Could not measure: ${error.message}`;});
+      }).catch(error=>{if(error.status===404)card.remove();else body.textContent=`Could not measure this take: ${error.message}`;});
       return card;
     };
     if(startImage){
@@ -5512,23 +5450,17 @@ function mountDirectorUI(node) {
         }
         continuityPanel.append(grid);
         const fixes=document.createElement("div");fixes.className="mmx-switch-group";
-        let preview=null;
-        fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();preview?.editor.refresh();},
+        fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
           "Keeps sharpness, contrast and colour cast from building up at each join. Recommended."));
-        fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();preview?.editor.refresh();},
+        fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
           "After decoding, gently pulls the colour balance back to the first clip of this chain, ramping from the join so there is no jump. Brightness is left as generated."));
         continuityPanel.append(fixes);
-        if(previousClip)continuityPanel.append(calibrationCard());
-        const anchor=chainStart();
-        preview=lookSection("Previous clip's last frame","tail_look",frameUrl(previousClip,"last",true),
+        if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
+        continuityPanel.append(lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
-          {note:"The right side shows your manual adjustment plus the join fix and hold look switched on above, live. Leave the sliders untouched for a pure latent join; when adjusted, the tail is re-encoded from these pixels (the join is slightly softer).",
-           anchorUrl:anchor && anchor!==activeClip?frameUrl(anchor,"last"):null,anchorLabel:`Change vs. the last frame of ${anchor?.name || "the chain's first clip"}`,
-           steer:()=>({contrast:activeClip.auto_fix!==false,hold:!!activeClip.hold_look}),
-           stepsNote:"Join fix and hold are estimated from the chain's first clip; the exact amounts are measured during generation.",
-           afterLabelFor:steer=>steer.contrast||steer.hold?"Expected look":lookIsNeutral(activeClip.tail_look)?"Carried as is":"Carried",
-           before:"As generated"});
-        continuityPanel.append(preview);
+          {note:"Left: the previous clip's last frame. Right: how this clip will start. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. Leave them neutral for a seamless join; when adjusted, the tail is re-encoded from these pixels (slightly softer join).",
+           compareOriginal:true,anchorLabel:"Predicted start of this clip vs. the previous clip's end",
+           before:"Previous clip's end",after:"Start of this clip"}));
       }
     }
     shotSections.prepend(continuityPanel);
@@ -6158,11 +6090,7 @@ function mountDirectorUI(node) {
     const detail = event.detail;
     if (!detail || String(detail.node).split(':').at(-1) !== String(node.id) || detail.project_id !== timelineState.project_id) return;
     if(detail.sequence){if(Number(detail.sequence)<progressSequence || (Number(detail.sequence)===progressSequence && !event.snapshot))return;progressSequence=Number(detail.sequence);}
-    if(detail.phase==='join_test_done' || detail.phase==='join_test_sampling'){
-      progressLabel.textContent=detail.phase==='join_test_done'?'Join test finished':'Testing the join…';
-      if(detail.phase==='join_test_done' && String(detail.clip_id)===String(activeClipId))renderInspector();
-    }
-    const runningPhase=['preparing','sampling','refining','decoding','face_refining','join_test_sampling'].includes(detail.phase);
+    const runningPhase=['preparing','sampling','refining','decoding','face_refining'].includes(detail.phase);
     if(runningPhase)watchClipProgress();
     if(detail.stale_clip_ids?.length){
       // The upstream clip's new take is saved. These clips continue from it,

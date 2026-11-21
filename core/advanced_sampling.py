@@ -22,13 +22,12 @@ def _progress(model):
 
 
 def sample_stage(model, latent, steps, cfg, sampler, scheduler, positive, negative,
-                 seed, denoise=1., sigmas=None, tile_count=1, tile_overlap=128, noise=None):
+                 seed, denoise=1., sigmas=None, tile_count=1, tile_overlap=128):
     from .vendor.aimixer.director.core_sampling import sample_single_stage
     return sample_single_stage(model=model, positive=positive, negative=negative,
         latent=latent, seed=seed, cfg=cfg, steps=steps, sampler_name=sampler,
         scheduler=scheduler, denoise=denoise, sigmas=sigmas, apply_shift=False,
         enable_tiling=tile_count > 1, tile_count=tile_count, tile_overlap=tile_overlap, on_step_preview=_progress(model),
-        noise_override=noise,
         after_shift=_install_scoped_remask if latent.get("_director_continue_prefix_steps") else None)
 
 

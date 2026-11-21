@@ -33,69 +33,6 @@ export function applyLookPixels(data, look) {
   return data;
 }
 
-// Browser estimate of what "Automatic join fix" and "Hold look" do downstream,
-// steering the frame back toward the chain start (anchor). Uses the bounds of
-// core/continuity.py anchor_chain_contrast (2% deadband, 10% max) and
-// core/look.py hold_target (per-channel gain 0.75..1.33). Returns a summary.
-export function steerToAnchor(data, anchor, {contrast = false, hold = false} = {}) {
-  if (!anchor || (!contrast && !hold)) return [];
-  const moments = px => {
-    let R = 0, G = 0, B = 0, L = 0, L2 = 0, n = 0;
-    for (let i = 0; i < px.length; i += 16) { const r = px[i], g = px[i+1], b = px[i+2], l = .299*r+.587*g+.114*b; R += r; G += g; B += b; L += l; L2 += l*l; n++; }
-    const m = L/n; return {rgb: [R/n, G/n, B/n], std: Math.sqrt(Math.max(0, L2/n - m*m))};
-  };
-  const a = moments(anchor), steps = [];
-  if (contrast) {
-    const s = moments(data), ratio = a.std / Math.max(1e-3, s.std);
-    let k = Math.abs(ratio - 1) <= .02 ? 1 : ratio > 1 ? ratio - .02 : ratio + .02;
-    k = Math.min(1.1, Math.max(.9, k));
-    if (Math.abs(k - 1) > 1e-3) {
-      const [mr, mg, mb] = s.rgb;
-      for (let i = 0; i < data.length; i += 4) { data[i] = mr+(data[i]-mr)*k; data[i+1] = mg+(data[i+1]-mg)*k; data[i+2] = mb+(data[i+2]-mb)*k; }
-    }
-    steps.push(`Join fix · contrast ×${k.toFixed(2)}`);
-  }
-  if (hold) {
-    // Colour balance only, brightness kept (core/look.py hold_target).
-    const s = moments(data), raw = s.rgb.map((v, c) => a.rgb[c] / Math.max(1, v));
-    const keep = (.299*s.rgb[0] + .587*s.rgb[1] + .114*s.rgb[2]) / Math.max(1e-6, .299*raw[0]*s.rgb[0] + .587*raw[1]*s.rgb[1] + .114*raw[2]*s.rgb[2]);
-    const gain = raw.map(g => Math.min(1.33, Math.max(.75, g * keep)));
-    for (let i = 0; i < data.length; i += 4) { data[i] *= gain[0]; data[i+1] *= gain[1]; data[i+2] *= gain[2]; }
-    steps.push(`Hold look · R×${gain[0].toFixed(2)} G×${gain[1].toFixed(2)} B×${gain[2].toFixed(2)}`);
-  }
-  return steps;
-}
-
-// Calibration from a generated clip. ``target`` and ``result`` are
-// {rgb:[r,g,b] 0..1, std} from /minimax_director/clip/calibration. Returns the
-// look that, applied to the carried tail instead of ``used``, should move the
-// next take's result onto the target: per-channel gains are inverted into
-// exposure / temperature / tint with this module's grade, contrast from the
-// luma spread. Saturation and black level are kept. One step; repeat if needed.
-export function calibrateLook(used, target, result, {contrast = true} = {}) {
-  const base = {...LOOK_NEUTRAL, ...(used || {})};
-  const c = target.rgb.map((v, i) => Math.min(1.6, Math.max(.6, v / Math.max(1e-3, result.rgb[i]))));
-  const rho = c[0] / c[2], t = 10 * (rho - 1) / (rho + 1);
-  const m = Math.sqrt(Math.max(1e-6, (1 + .1*t) * (1 - .1*t)));
-  const q = c[1] / Math.sqrt(c[0] * c[2]) * m, g = (q - 1) / (.1 + .05*q);
-  const e = Math.log2(Math.max(1e-3, c[1] / (1 + .1*g)));
-  const lumaGain = .299*c[0] + .587*c[1] + .114*c[2];
-  const k = contrast && result.std > 1e-4 ? target.std / result.std / lumaGain : 1;
-  const clampTo = (key, v) => { const row = LOOK_CONTROLS.find(r => r[0] === key); const step = row[4]; return Math.min(row[3], Math.max(row[2], Math.round(v / step) * step)); };
-  const next = {...base,
-    exposure: clampTo("exposure", base.exposure + e),
-    temperature: clampTo("temperature", base.temperature + t),
-    tint: clampTo("tint", base.tint + g),
-    contrast: clampTo("contrast", base.contrast * k)};
-  for (const key of Object.keys(next)) next[key] = Number(next[key].toFixed(4));
-  return next;
-}
-
-export function lookChanges(from, to) {
-  const a = {...LOOK_NEUTRAL, ...(from || {})}, b = {...LOOK_NEUTRAL, ...(to || {})};
-  return LOOK_CONTROLS.filter(([key]) => Math.abs(b[key] - a[key]) > 1e-6).map(([key, title, , , , format]) => `${title} ${format(b[key])}`);
-}
-
 export function frameStats(data) {
   let lum = 0, dark = 0, R = 0, G = 0, B = 0, n = 0;
   for (let i = 0; i < data.length; i += 16) {
@@ -127,8 +64,7 @@ async function imagePixels(url, maxWidth = 560) {
 /**
  * Build a look editor.
  * opts: {imageUrl, emptyText, look, onInput(look), onChange(look), anchorUrl, anchorLabel, beforeLabel, afterLabel,
- *        steer(): {contrast, hold} read on every render, stepsNote}
- * The returned element has refresh() to redraw after outside settings change.
+ *        compareOriginal: readouts compare the adjusted frame with the unadjusted one}
  */
 export function createLookEditor(opts) {
   const look = {...LOOK_NEUTRAL, ...(opts.look || {})};
@@ -143,9 +79,8 @@ export function createLookEditor(opts) {
   stage.classList.add("mmx-look-missing");
   stage.append(canvas, labels, split, empty);
   const readout = document.createElement("div"); readout.className = "mmx-look-readout";
-  const steps = document.createElement("div"); steps.className = "mmx-look-steps";
   const controls = document.createElement("div"); controls.className = "mmx-look-controls";
-  root.append(stage, steps, readout, controls);
+  root.append(stage, readout, controls);
 
   let original = null, anchor = null;
   const render = () => {
@@ -153,12 +88,6 @@ export function createLookEditor(opts) {
     const ctx = canvas.getContext("2d");
     const after = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
     applyLookPixels(after.data, look);
-    const steer = opts.steer ? opts.steer() : {};
-    const applied = steerToAnchor(after.data, anchor?.data, steer);
-    labels.lastElementChild.textContent = opts.afterLabelFor ? opts.afterLabelFor(steer) : (opts.afterLabel || "After");
-    if (applied.length) steps.innerHTML = `<span>${applied.join("</span><span>")}</span>${opts.stepsNote ? `<small>${opts.stepsNote}</small>` : ""}`;
-    else if (!anchor && Object.values(steer).some(Boolean)) steps.innerHTML = `<small>The join fix and hold preview appear once the chain's first clip is generated.</small>`;
-    else steps.innerHTML = "";
     const cut = Math.round(original.width * Number(split.value) / 100);
     ctx.putImageData(original, 0, 0);
     ctx.putImageData(after, 0, 0, cut, 0, original.width - cut, original.height);
@@ -169,7 +98,7 @@ export function createLookEditor(opts) {
       const d = pct ? (value/base-1)*100 : value - base;
       return ` <em class="${Math.abs(d) < (pct ? 1 : .5) ? "" : d > 0 ? "up" : "down"}">${d > 0 ? "+" : ""}${d.toFixed(digits)}${pct ? "%" : ""}</em>`;
     };
-    const a = anchor ? frameStats(anchor.data) : null;
+    const a = opts.compareOriginal ? frameStats(original.data) : anchor ? frameStats(anchor.data) : null;
     readout.innerHTML =
       `<span title="Average brightness of the adjusted frame (0-255)">Brightness <b>${s.brightness.toFixed(1)}</b>${delta(s.brightness, a?.brightness, 1, true)}</span>` +
       `<span title="Share of pixels darker than 16/255">Near-black <b>${s.dark.toFixed(1)}%</b>${delta(s.dark, a?.dark)}</span>` +
@@ -212,6 +141,5 @@ export function createLookEditor(opts) {
     }).catch(() => { empty.textContent = opts.emptyText || "Frame not available yet."; stage.classList.add("mmx-look-missing"); });
     if (opts.anchorUrl) imagePixels(opts.anchorUrl).then(pixels => { anchor = pixels; render(); }).catch(() => {});
   } else { empty.textContent = opts.emptyText || "No frame to preview."; stage.classList.add("mmx-look-missing"); }
-  root.refresh = render;
   return root;
 }

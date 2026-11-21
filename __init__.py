@@ -658,33 +658,22 @@ if getattr(PromptServer, "instance", None) is not None:
             if not clip_id or not before:
                 raise ValueError("Choose a clip that continues an earlier clip.")
             def build():
-                from .core.join_test import load_result
                 clips = mgr._manifest.get("clips", {})
                 meta = clips.get(clip_id, {})
                 frames = mgr.load_clip_frames(clip_id)
                 previous = mgr.load_clip_frames(before[-1])
-                if previous is None or not previous.shape[0]:
-                    raise FileNotFoundError("Generate the previous clip first.")
-                test = load_result(mgr.project_dir, clip_id)
-                if test is not None:
-                    test = {**test, "stale": test.get("previous_generation") != clips.get(before[-1], {}).get("generation")}
-                has_take = frames is not None and bool(frames.shape[0])
-                if not has_take and test is None:
-                    raise FileNotFoundError("Generate this clip or run a join test first.")
+                if frames is None or previous is None or not frames.shape[0] or not previous.shape[0]:
+                    raise FileNotFoundError("Generate this clip and the previous clip first.")
                 anchor_id = next((cid for cid in reversed(before) if int(clips.get(cid, {}).get("trim_prefix", 0) or 0) <= 1), None)
                 anchor = mgr.load_clip_frames(anchor_id) if anchor_id else None
-                out = {"generation": meta.get("generation") if has_take else None, "anchor_id": anchor_id,
-                       "tail_look": meta.get("tail_look"), "tail_look_known": "tail_look" in meta, "auto_fix": meta.get("auto_fix"),
-                       "hold_gain": meta.get("hold_gain"), "previous_end": frame_stats(previous, from_end=True),
-                       "anchor": frame_stats(anchor, from_end=True) if anchor is not None and anchor.shape[0] else None,
-                       "join_test": test, "first": None, "end": None, "raw_end": None}
-                if has_take:
-                    total, trim = int(frames.shape[0]), int(meta.get("trim_prefix", 0) or 0)
-                    hold = meta.get("hold_gain")
-                    raw_end = undo_hold(frames[-24:], hold, total) if hold else frames[-24:]
-                    out.update({"first": frame_stats(frames[trim:]), "end": frame_stats(frames, from_end=True),
-                                "raw_end": frame_stats(raw_end, from_end=True)})
-                return out
+                total, trim = int(frames.shape[0]), int(meta.get("trim_prefix", 0) or 0)
+                hold = meta.get("hold_gain")
+                raw_end = undo_hold(frames[-24:], hold, total) if hold else frames[-24:]
+                return {"generation": meta.get("generation"), "anchor_id": anchor_id,
+                        "tail_look": meta.get("tail_look"), "tail_look_known": "tail_look" in meta, "auto_fix": meta.get("auto_fix"), "hold_gain": hold,
+                        "first": frame_stats(frames[trim:]), "previous_end": frame_stats(previous, from_end=True),
+                        "end": frame_stats(frames, from_end=True), "raw_end": frame_stats(raw_end, from_end=True),
+                        "anchor": frame_stats(anchor, from_end=True) if anchor is not None and anchor.shape[0] else None}
             return web.json_response(await asyncio.to_thread(build), headers={"Cache-Control": "no-store"})
         except FileNotFoundError as exc:
             return web.json_response({"error": str(exc)}, status=404)

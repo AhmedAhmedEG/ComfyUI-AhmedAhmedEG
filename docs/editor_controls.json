@@ -263,14 +263,14 @@
     [
       "Look editor (start image / previous tail)",
       "Brightness, contrast, black level, saturation, temperature and tint with a live before/after preview.",
-      "You want to correct a start frame or the tail a clip continues from.",
-      "The preview shows exactly what the model receives; adjusted tails are re-encoded from pixels."
+      "You want to correct a start frame, or change how a continuing clip starts.",
+      "Start images: the preview is exactly what the model receives. Previous tail: the right side predicts this clip's first second (within about 1% in tests); after that the model's own look takes over."
     ],
     [
-      "Measured on this take / Calibrate sliders",
-      "After a continuing clip is generated, shows its real join and end-of-clip shift against the previous clip and the chain's first clip.",
-      "A generated clip still drifts in brightness or colour.",
-      "Calibrate sets the previous-tail sliders so the clip starts the way the previous clip ended (the Join row); drift toward the end is corrected by Hold look."
+      "Measured on this take",
+      "After a continuing clip is generated, shows how its first second joined the previous clip and how its end drifted from the chain's first clip.",
+      "Checking a generated join or a long chain's colour.",
+      "Report only. The first second follows the previous-tail sliders; drift toward the end is corrected by Hold look."
     ],
     [
       "Anti-burn (Auto)",

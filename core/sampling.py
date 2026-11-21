@@ -6,7 +6,7 @@ from __future__ import annotations
 def sample_latent(model, latent, steps, cfg, sampler_name, scheduler,
                   positive, negative, seed, denoise=1.0, *, sigmas=None,
                   disable_noise=False, start_step=None, last_step=None,
-                  force_full_denoise=False, noise=None):
+                  force_full_denoise=False):
     import comfy.sample
     from .stage_progress import stage
     stage('Preparing latent and sampling noise')
@@ -24,9 +24,8 @@ def sample_latent(model, latent, steps, cfg, sampler_name, scheduler,
     samples = comfy.sample.fix_empty_latent_channels(
         model, samples, latent.get("downscale_ratio_spacial"),
         latent.get("downscale_ratio_temporal"))
-    if noise is None:  # a join test passes its cut full-length noise
-        noise = (comfy.sample.prepare_empty_noise(samples) if disable_noise else
-                 comfy.sample.prepare_noise(samples, seed, latent.get("batch_index")))
+    noise = (comfy.sample.prepare_empty_noise(samples) if disable_noise else
+             comfy.sample.prepare_noise(samples, seed, latent.get("batch_index")))
     try:
         import latent_preview
         callback = latent_preview.prepare_callback(model, steps)
