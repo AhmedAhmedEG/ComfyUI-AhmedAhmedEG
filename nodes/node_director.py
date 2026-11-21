@@ -1400,7 +1400,8 @@ class MiniMaxH3MasterDirector:
                 if source is not None: first_frames=first_frames[:source["frames"].shape[0]]
                 elif continuation_prefix:
                     first_frames=first_frames[:int(is_chained_from_previous)+visible_frames]
-                    first_frames,_=repair_boundary_frame(first_frames,int(is_chained_from_previous))
+                    if not latent_carry:
+                        first_frames,_=repair_boundary_frame(first_frames,int(is_chained_from_previous))
                 first_frames=spill_frames(first_frames,cache_mgr.project_dir)
                 first_audio=decode_audio_latent(audio_vae,a_first) if audio_vae else {'waveform':torch.zeros((1,2,round(first_frames.shape[0]/FPS*48000))),'sample_rate':48000}
                 first_audio=choose_audio(audio_mode,first_audio,source,first_frames.shape[0])
@@ -1498,7 +1499,12 @@ class MiniMaxH3MasterDirector:
                 decoded_frames = decoded_frames[:source["frames"].shape[0]]
             elif continuation_prefix:
                 decoded_frames = decoded_frames[:int(is_chained_from_previous)+visible_frames]
-                decoded_frames, repaired = repair_boundary_frame(decoded_frames, int(is_chained_from_previous))
+                # Motion Context only: its context is guide rows the model
+                # re-renders, so new content can jump at the join. Latent Carry
+                # samples the context inside the latent and joins continuously.
+                repaired = False
+                if not latent_carry:
+                    decoded_frames, repaired = repair_boundary_frame(decoded_frames, int(is_chained_from_previous))
                 if repaired:
                     log.info("Master Director: clip %s first new frame was a copy of the reused context; replaced with the next frame.", clip_id)
             sampled_latent["_mmx_visible_end"] = int(decoded_frames.shape[0])

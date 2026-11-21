@@ -242,8 +242,10 @@ def repair_boundary_frame(frames, boundary):
     later: a one-frame flash or stutter at the join. Measured on saved takes:
     that frame differs from the context by about as much as neighbouring
     frames do, while the next step is 4-8x larger. In that case the frame is
-    replaced by the next one, so length and audio stay unchanged. Returns
-    ``(frames, repaired)``.
+    replaced by the next one, so length and audio stay unchanged. Used for
+    Motion Context only (its context is guide rows the model re-renders);
+    Latent Carry samples the context inside the latent and joins continuously.
+    Returns ``(frames, repaired)``.
     """
     b = int(boundary)
     if frames is None or b < 2 or int(frames.shape[0]) < b + 3:
