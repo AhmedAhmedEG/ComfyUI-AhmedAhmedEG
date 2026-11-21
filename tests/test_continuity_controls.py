@@ -76,6 +76,42 @@ class BoundaryFrame(unittest.TestCase):
         self.assertFalse(repair_boundary_frame(smooth.clone(), 1)[1])
 
 
+class HoldUndoForMeasurement(unittest.TestCase):
+    def test_hold_gain_is_removed_anywhere_in_the_clip(self):
+        from core.look import undo_hold_at
+        frames = torch.full((20, 2, 2, 3), 0.5)
+        hold = {"start": [1.0, 1.0, 1.0], "end": [0.8, 1.0, 1.2]}
+        held = apply_hold(frames, hold)
+        self.assertTrue(torch.allclose(undo_hold_at(held[5:9], hold, 20, 5), frames[5:9], atol=1e-5))
+        self.assertTrue(torch.allclose(undo_hold_at((held[5:9] * 255), hold, 20, 5), frames[5:9], atol=1e-4))
+        self.assertIs(undo_hold_at(frames, None, 20, 0), frames)
+
+
+class GradedTailJoinFix(unittest.TestCase):
+    def test_latent_carry_context_becomes_the_guide_and_is_softened(self):
+        from core.continuity import graded_context_guide, latent_sharpness
+        torch.manual_seed(0)
+        video = torch.randn((1, 4, 8, 6, 6))
+        latent, guide, amount = graded_context_guide({"samples": video.clone()}, 3, baseline=latent_sharpness(video) * 0.3)
+        self.assertEqual(tuple(guide.shape), (1, 4, 3, 6, 6))
+        self.assertGreater(amount, 0)
+        self.assertTrue(torch.allclose(latent["samples"][:, :, :3], guide))
+        self.assertTrue(torch.equal(latent["samples"][:, :, 3:], video[:, :, 3:]))
+        same, guide2, amount2 = graded_context_guide({"samples": video.clone()}, 3, baseline=None)
+        self.assertEqual(amount2, 0.0)
+        self.assertTrue(torch.equal(guide2, video[:, :, :3]))
+
+    def test_motion_context_guide_blocks_are_collected_in_order(self):
+        from core.continuity import graded_guide_keyframes
+        blocks = [{"resolved_frame_index": f, "latent": torch.full((1, 4, 1, 2, 2), float(i))} for i, f in enumerate((0, 1, 5))]
+        audio = {"resolved_frame_index": 0.0, "audio_latent": torch.zeros(1)}
+        later = {"resolved_frame_index": 40, "latent": torch.zeros((1, 4, 1, 2, 2))}
+        positive = [[None, {"minimax_keyframes": [blocks[2], blocks[0], audio, blocks[1], later]}]]
+        guide, amount = graded_guide_keyframes(positive, span=22, baseline=None)
+        self.assertEqual(guide.shape[2], 3)
+        self.assertEqual([float(guide[0, 0, k, 0, 0]) for k in range(3)], [0.0, 1.0, 2.0])
+
+
 class ContinuityRules(unittest.TestCase):
     # Borrow the mock pipeline without re-running every RuntimeContracts test.
     setUp = runtime.RuntimeContracts.setUp

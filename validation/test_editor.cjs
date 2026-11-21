@@ -362,8 +362,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.textContent.includes('Transition flexibility'),'Pinned carry exposes its mask control');
   const methods=[...editorRoot.querySelector('.mmx-shot-continuity-mode').options].map(o=>o.value);
   assert.deepEqual(methods,['Independent (No Continuity)','Motion Context (Chained)','Latent Carry (Pinned)'],'Frame handoff is only offered on start-image clips');
-  assert(editorRoot.textContent.includes('Automatic join fix'),'The join fix is a visible switch');
-  assert(editorRoot.textContent.includes('Hold look to the chain'),'Look hold switch is offered');
+  assert(editorRoot.textContent.includes('Prevent build-up at joins'),'The join fix is a visible switch');
+  assert(editorRoot.textContent.includes("Keep colour on the chain's first clip"),'Look hold switch is offered');
   assert(editorRoot.querySelector('.mmx-look-section .mmx-look-controls'),'Previous tail has a live look editor');
   assert.equal(editorRoot.querySelectorAll('.mmx-look-row').length,6);
   assert([...editorRoot.querySelectorAll('details.mmx-section > summary')].some(s=>s.textContent.includes('Continuity')));

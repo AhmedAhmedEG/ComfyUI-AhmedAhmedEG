@@ -2369,6 +2369,9 @@ const embeddedCSS = `
 .mmx-director-root .mmx-switch-text { display:flex;flex-direction:column;gap:2px;min-width:0; }
 .mmx-director-root .mmx-switch-text strong { font-size:12.5px;color:#e8edf2;font-weight:600; }
 .mmx-director-root .mmx-switch-text small { font-size:11.5px;color:#9fb0c0;line-height:1.4; }
+.mmx-director-root .mmx-switch-group-title { display:flex;flex-direction:column;gap:2px;padding:6px 0 4px;border-bottom:1px solid #2c343d;margin-bottom:2px; }
+.mmx-director-root .mmx-switch-group-title strong { font-size:12.5px;color:#e8edf2; }
+.mmx-director-root .mmx-switch-group-title span { font-size:11px;color:#8ea2b4; }
 .mmx-director-root .mmx-switch-group { display:flex;flex-direction:column;margin:6px 0 4px;padding:4px 12px;border:1px solid #333d47;border-radius:8px;background:#1d2228; }
 .mmx-director-root .mmx-switch-group .mmx-continuity-mode-note { margin:2px 0 8px;padding-left:42px;font-size:11.5px;color:#9fb0c0;line-height:1.4; }
 .mmx-director-root .mmx-form-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 14px;margin:6px 0; }
@@ -5392,10 +5395,10 @@ function mountDirectorUI(node) {
         table.innerHTML="<thead><tr><th></th><th>Brightness</th><th>Warm</th><th>Cool</th><th>Contrast</th></tr></thead>";
         const tbody=document.createElement("tbody");
         const row=(label,title,a,b)=>{const tr=document.createElement("tr");const th=document.createElement("th");th.textContent=label;th.title=title;tr.append(th,cell(pct(luma(a),luma(b))),cell(pct(a.rgb[0]/a.rgb[1],b.rgb[0]/b.rgb[1])),cell(pct(a.rgb[2]/a.rgb[1],b.rgb[2]/b.rgb[1])),cell(pct(a.std,b.std)));tbody.append(tr);};
-        row("Join","This clip's first second vs. the previous clip's last second",m.first,m.previous_end);
+        row("Join","This clip's first second vs. the previous clip's last second, both as the model generated them (colour correction removed)",m.first,m.previous_end);
         if(m.anchor){
-          row(m.hold_gain?"End, before hold":"End","This clip's last second"+(m.hold_gain?" without the hold-look gain":"")+" vs. the last second of the chain's first clip",m.raw_end,m.anchor);
-          if(m.hold_gain)row("End, delivered","This clip's last second as delivered, after Hold look",m.end,m.anchor);
+          row(m.hold_gain?"End, before colour fix":"End","This clip's last second"+(m.hold_gain?" without the colour correction":"")+" vs. the last second of the chain's first clip",m.raw_end,m.anchor);
+          if(m.hold_gain)row("End, delivered","This clip's last second as delivered, after Keep colour on the chain's first clip",m.end,m.anchor);
         }
         table.append(tbody);body.append(table);
         // Measured on 2026-11-21: a clip's first second follows the graded
@@ -5429,7 +5432,7 @@ function mountDirectorUI(node) {
         if(m.anchor){
           const endOff=[pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
           if(endOff){const p=document.createElement("p");p.className="mmx-calib-note"+(m.hold_gain?"":" warn");
-            p.textContent=m.hold_gain?"The end's colour is corrected after decoding by Hold look (see End, delivered); its brightness is left as generated.":"The end's colour drifts from the chain's first clip. Turn on Hold look above to correct the colour after decoding; brightness changes toward the end are left as generated.";body.append(p);}
+            p.textContent=m.hold_gain?"The end's colour is corrected after decoding by Keep colour on the chain's first clip (see End, delivered); its brightness is left as generated.":"The end's colour drifts from the chain's first clip. Turn on Keep colour on the chain's first clip above to correct it after decoding; brightness changes toward the end are left as generated.";body.append(p);}
         }
       }).catch(error=>{if(error.status===404)card.remove();else body.textContent=`Could not measure this take: ${error.message}`;});
       return card;
@@ -5479,10 +5482,13 @@ function mountDirectorUI(node) {
         }
         continuityPanel.append(grid);
         const fixes=document.createElement("div");fixes.className="mmx-switch-group";
-        fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
-          "Keeps sharpness, contrast and colour cast from building up at each join. Recommended."));
-        fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
-          "After decoding, gently pulls the colour balance back to the first clip of this chain, ramping from the join so there is no jump. Brightness is left as generated."));
+        const fixesTitle=document.createElement("div");fixesTitle.className="mmx-switch-group-title";
+        fixesTitle.innerHTML="<strong>Continuity corrections</strong><span>Each fixes a different thing; Calibrate below fixes how this clip starts.</span>";
+        fixes.append(fixesTitle);
+        fixes.append(switchRow("Prevent build-up at joins",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
+          "During generation. Stops sharpness, contrast and the model's slight blue cast from adding up clip after clip. Works with calibrated sliders too. Recommended."));
+        fixes.append(switchRow("Keep colour on the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
+          "After decoding. A colour-only correction that starts at zero at the join and grows toward the end, so colour does not drift along a long chain. Brightness is left as generated; Calibrate measures without it."));
         continuityPanel.append(fixes);
         if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
         continuityPanel.append(lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),

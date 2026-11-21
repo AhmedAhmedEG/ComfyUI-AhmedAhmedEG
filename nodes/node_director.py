@@ -16,7 +16,7 @@ try:
     from ..core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from ..core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from ..core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias, repair_boundary_frame
+    from ..core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias, repair_boundary_frame, graded_context_guide, graded_guide_keyframes
     from ..core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -30,7 +30,7 @@ except (ImportError, ValueError):
     from core.task_modes import MODE_INPAINT, normalize_mode, get_required_model_type
     from core.refmod import process_refmod_rows, build_refmod_tag_map, translate_refmod_aliases
     from core.prompt_engine import build_keyframe_mode_prompt, build_ref2va_prompt
-    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias, repair_boundary_frame
+    from core.continuity import trim_continuity_prefix, trim_continuity_audio_prefix, match_color_temperature_and_grade, extract_streams_from_av_latent, dependent_successors, guard_carried_sharpness, latent_sharpness, latent_contrast, anchor_chain_contrast, remove_join_colour_bias, repair_boundary_frame, graded_context_guide, graded_guide_keyframes
     from core.executor import (
         MasterDirectorExecutor,
         decode_video_latent,
@@ -1209,6 +1209,22 @@ class MiniMaxH3MasterDirector:
                 continuity_source = "latent_carry"
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
+            # A graded (calibrated) tail is re-encoded from pixels, so the
+            # previous latent is not carried. Use the re-encoded context as the
+            # join-fix guide so the sharpness guard, contrast anchoring and
+            # colour-cast removal still run.
+            graded_guide = None
+            if continuation_prefix and carry_av is None and clip_tail_look is not None and clip_auto_fix:
+                try:
+                    if latent_carry:
+                        latent, graded_guide, softened = graded_context_guide(latent, latent.get("_director_continue_prefix_steps"), chain_baseline())
+                    else:
+                        graded_guide, softened = graded_guide_keyframes(positive, is_chained_from_previous, chain_baseline())
+                    if softened:
+                        log.info("Master Director: graded context for clip %s softened %.2f to the chain's baseline sharpness.", clip_id, softened)
+                except Exception as exc:
+                    graded_guide = None
+                    log.warning("Master Director: join fix guide from the graded tail failed for clip %s: %s", clip_id, exc)
             if clip_idx == 0 or clip_item.get("continuation_source"):
                 # External context never trims unrelated delivered footage.
                 previous_trim = 0
@@ -1461,15 +1477,18 @@ class MiniMaxH3MasterDirector:
             # Seamless at the join, contrast tied to the chain's first clip: H3
             # re-renders the overlap a few percent more contrasty, which used to
             # compound hop after hop (see anchor_chain_contrast).
-            if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry") and clip_auto_fix:
+            if is_chained_from_previous and clip_auto_fix and (graded_guide is not None or carry_av is not None and continuity_source in ("sampled_latent", "latent_carry")):
                 try:
                     from ..core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
                 except ImportError:
                     from core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
                 try:
-                    guide_blocks, *_ = _video_tail_blocks(carry_av, continuation_prefix,
-                        end_frame=carry_av.get("_mmx_visible_end") if clip_duration_policy == "new" else None)
-                    guide_video = torch.cat(guide_blocks, dim=2)
+                    if graded_guide is not None:
+                        guide_video = graded_guide
+                    else:
+                        guide_blocks, *_ = _video_tail_blocks(carry_av, continuation_prefix,
+                            end_frame=carry_av.get("_mmx_visible_end") if clip_duration_policy == "new" else None)
+                        guide_video = torch.cat(guide_blocks, dim=2)
                     sampled_latent, seam_scale, end_scale = anchor_chain_contrast(
                         sampled_latent, guide_video, chain_contrast(), int(guide_video.shape[2]))
                     log.info("Master Director: clip %s contrast anchored (join x%.3f, end x%.3f).", clip_id, seam_scale, end_scale)

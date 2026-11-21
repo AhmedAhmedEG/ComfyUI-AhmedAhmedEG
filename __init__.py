@@ -651,7 +651,7 @@ if getattr(PromptServer, "instance", None) is not None:
         second, before the hold-look gain, with the end of the chain's first clip
         (the same anchor Hold look uses). Reads saved frames only; writes nothing."""
         try:
-            from .core.look import undo_hold, frame_stats
+            from .core.look import undo_hold, undo_hold_at, frame_stats
             mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
             clip_id = request.query.get("clip_id", "")
             before = [v for v in request.query.get("before", "").split(",") if v]
@@ -669,9 +669,15 @@ if getattr(PromptServer, "instance", None) is not None:
                 total, trim = int(frames.shape[0]), int(meta.get("trim_prefix", 0) or 0)
                 hold = meta.get("hold_gain")
                 raw_end = undo_hold(frames[-24:], hold, total) if hold else frames[-24:]
+                # The model continues from the previous clip's raw tail (its own
+                # Hold look removed), so the join compares raw with raw.
+                previous_hold = clips.get(before[-1], {}).get("hold_gain")
+                previous_raw = undo_hold(previous[-24:], previous_hold, int(previous.shape[0])) if previous_hold else previous[-24:]
                 return {"generation": meta.get("generation"), "anchor_id": anchor_id,
                         "tail_look": meta.get("tail_look"), "tail_look_known": "tail_look" in meta, "auto_fix": meta.get("auto_fix"), "hold_gain": hold,
-                        "first": frame_stats(frames[trim:]), "previous_end": frame_stats(previous, from_end=True),
+                        # The join is measured on what the model generated: the
+                        # small Hold look ramp at the start is removed first.
+                        "first": frame_stats(undo_hold_at(frames[trim:trim + 24], hold, total, trim)), "previous_end": frame_stats(previous_raw, from_end=True),
                         "end": frame_stats(frames, from_end=True), "raw_end": frame_stats(raw_end, from_end=True),
                         "anchor": frame_stats(anchor, from_end=True) if anchor is not None and anchor.shape[0] else None}
             return web.json_response(await asyncio.to_thread(build), headers={"Cache-Control": "no-store"})

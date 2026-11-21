@@ -104,6 +104,17 @@ def apply_hold(frames, hold, directory=None):
     return process_video_frames(frames, directory, grade)
 
 
+def undo_hold_at(frames, hold, total, start):
+    """Invert the hold gain on ``frames`` that begin at frame ``start`` of a clip of ``total`` frames."""
+    if not hold:
+        return frames
+    n = int(frames.shape[0])
+    x = frames.float()
+    scale = 255.0 if x.numel() and float(x.max()) > 2 else 1.0
+    out = (x / scale / _curve(hold, total, int(start), int(start) + n, frames)).clamp(0, 1)
+    return out
+
+
 def undo_hold(tail, hold, total):
     """Invert the hold gain on the last ``tail`` frames of a clip of ``total`` frames."""
     if not hold:

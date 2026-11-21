@@ -232,6 +232,67 @@ def anchor_chain_contrast(latent_dict: Dict[str, Any], guide_video: torch.Tensor
     return out, seam, end
 
 
+def graded_context_guide(latent_dict, tokens, baseline):
+    """Latent Carry with a graded tail: run the sharpness guard on the context
+    tokens written into ``latent_dict`` and return them as the join-fix guide.
+
+    With a tail look the context is re-encoded from graded pixels instead of
+    carried as the previous latent, so the guard, contrast anchoring and colour
+    cast removal used to be skipped. The re-encoded context is a valid guide for
+    all three. Returns ``(latent_dict, guide_video, softened)``.
+    """
+    tokens = int(tokens or 0)
+    if latent_dict is None or tokens < 1:
+        return latent_dict, None, 0.0
+    samples = latent_dict.get("samples")
+    streams, nested = unpack_av_samples(samples)
+    video = streams[0]
+    if video.ndim != 5 or video.shape[2] < tokens:
+        return latent_dict, None, 0.0
+    context = video[:, :, :tokens].clone()
+    softened_dict, amount = guard_carried_sharpness({"samples": context}, baseline) if baseline else ({"samples": context}, 0.0)
+    guide = softened_dict["samples"]
+    if amount:
+        video = video.clone()
+        video[:, :, :tokens] = guide.to(video.dtype)
+        streams[0] = video
+        out = dict(latent_dict)
+        if not nested:
+            out["samples"] = streams[0]
+        elif isinstance(samples, (tuple, list)):
+            out["samples"] = type(samples)(streams)
+        else:
+            out["samples"] = type(samples)(tuple(streams))
+        latent_dict = out
+    return latent_dict, guide, amount
+
+
+def graded_guide_keyframes(positive, span, baseline):
+    """Motion Context with a graded tail: soften its re-encoded guide blocks to
+    the chain's baseline sharpness and return them as the join-fix guide.
+    Returns ``(guide_video, softened)``; the blocks are updated in place."""
+    rows = []
+    for entry in positive or ():
+        for kf in (entry[1] if len(entry) > 1 and isinstance(entry[1], dict) else {}).get("minimax_keyframes", []):
+            latent = kf.get("latent") if isinstance(kf, dict) else None
+            if latent is not None and float(kf.get("resolved_frame_index", 0)) < float(span) and all(kf is not r for r in rows):
+                rows.append(kf)
+        if rows:
+            break
+    if not rows:
+        return None, 0.0
+    rows.sort(key=lambda kf: float(kf.get("resolved_frame_index", 0)))
+    guide = torch.cat([kf["latent"] for kf in rows], dim=2)
+    amount = 0.0
+    if baseline:
+        softened, amount = guard_carried_sharpness({"samples": guide.clone()}, baseline)
+        if amount:
+            guide = softened["samples"]
+            for i, kf in enumerate(rows):
+                kf["latent"] = guide[:, :, i:i + 1].clone()
+    return guide, amount
+
+
 def repair_boundary_frame(frames, boundary):
     """Replace a first new frame that is still a decoded copy of the reused context.
 
