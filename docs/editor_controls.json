@@ -267,10 +267,10 @@
       "Start images: the preview is exactly what the model receives. Previous tail: the right side predicts this clip's first second (within about 1% in tests); after that the model's own look takes over."
     ],
     [
-      "Measured on this take",
-      "After a continuing clip is generated, shows how its first second joined the previous clip and how its end drifted from the chain's first clip.",
-      "Checking a generated join or a long chain's colour.",
-      "Calibrate sets the previous-tail sliders from the Join row so the next take starts the way the previous clip ended; drift toward the end is corrected by Hold look."
+      "Auto calibrate",
+      "A button above the previous-tail sliders. After a continuing clip is generated, it measures how the take's first second joined the previous clip's end and sets the sliders to correct it.",
+      "A generated join starts brighter, darker, warmer, cooler or flatter than the previous clip ended.",
+      "Updates the sliders in place, so the live compare keeps its zoom and position; click again to return to the calibrated values. Drift toward the end is corrected by Hold look."
     ],
     [
       "Anti-burn (Auto)",

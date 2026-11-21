@@ -2394,22 +2394,10 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-empty[hidden] { display:none; }
 .mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-zoom { display:none; }
 .mmx-director-root .mmx-antiburn-note { margin:2px 0 8px;padding:6px 10px;border-left:3px solid #8b7bf0;border-radius:4px;background:#22232e;font-size:11.5px;color:#b9c3cf;line-height:1.4; }
-.mmx-director-root .mmx-calib { margin:8px 0 10px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid #f0c674;border-radius:8px;background:#1f252b; }
-.mmx-director-root .mmx-calib-head strong { font-size:12.5px;color:#e8edf2; }
-.mmx-director-root .mmx-calib-body { margin-top:6px;font-size:12px;color:#9fb0c0; }
-.mmx-director-root .mmx-calib-table { width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums; }
-.mmx-director-root .mmx-calib-table th { text-align:left;font-weight:600;color:#8ea2b4;padding:3px 6px 3px 0;white-space:nowrap; }
-.mmx-director-root .mmx-calib-table thead th { font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#7d8e9e; }
-.mmx-director-root .mmx-calib-table td { padding:3px 6px;text-align:right;color:#e8edf2; }
-.mmx-director-root .mmx-calib-table td.ok { color:#8fd19e; }
-.mmx-director-root .mmx-calib-table td.warn { color:#f0c674; }
-.mmx-director-root .mmx-calib-table td.bad { color:#ff8f8f; }
-.mmx-director-root .mmx-calib-actions { display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap; }
-.mmx-director-root .mmx-calib-actions small { font-size:11px;color:#b9c3cf; }
+.mmx-director-root .mmx-look-actions { display:flex;align-items:center;gap:10px;margin:2px 0 8px;flex-wrap:wrap; }
+.mmx-director-root .mmx-calib-status { flex:1;min-width:180px;font-size:11px;color:#b9c3cf;line-height:1.4; }
 .mmx-director-root .mmx-calib-btn { height:28px;padding:0 12px!important;border-radius:6px!important;border:1px solid #6b5a2a!important;background:#3a3220!important;color:#f6dfa4!important;font-size:12px!important;font-weight:600;cursor:pointer; }
 .mmx-director-root .mmx-calib-btn:disabled { opacity:.6;cursor:default; }
-.mmx-director-root .mmx-calib-note { margin:6px 0 0;font-size:11px;color:#8ea2b4;line-height:1.4; }
-.mmx-director-root .mmx-calib-note.warn { color:#f0c674; }
 .mmx-director-root .mmx-look-readout { display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 2px;font-size:11px;color:#9fb0c0;font-variant-numeric:tabular-nums; }
 .mmx-director-root .mmx-look-readout:empty { display:none; }
 .mmx-director-root .mmx-look-readout b { color:#e8edf2;font-weight:600; }
@@ -2758,6 +2746,7 @@ function mountDirectorUI(node) {
   const freshApprovals=new Set(); // clips ticked since the last cache-status refresh
   let progressSequence=0,progressTimer=null,progressWatching=false,progressRequest=false;
   let cachedClipResults={},cacheStatusProject=null,cacheStatusRequest=0;
+  const calibrationCache=new Map(); // measurement promises per take, so redraws do not re-measure
   let serverStatus=null, savedProjectSignature=null;
   let draftRestored=false,draftTimer=null,pendingDraft=null;
   const flushDraft=()=>{clearTimeout(draftTimer);draftTimer=null;if(pendingDraft){writeDirectorDraft(...pendingDraft);pendingDraft=null;}};
@@ -5378,64 +5367,45 @@ function mountDirectorUI(node) {
       box.append(box.editor);
       return box;
     };
-    // Report how the generated take joined and drifted
-    // (see /minimax_director/clip/calibration).
-    const calibrationCard=()=>{
-      const card=document.createElement("div");card.className="mmx-calib";
-      const head=document.createElement("div");head.className="mmx-calib-head";
-      head.innerHTML="<strong>Measured on this take</strong>";card.append(head);
-      const body=document.createElement("div");body.className="mmx-calib-body";body.textContent="Measuring the generated clip…";card.append(body);
+    // Auto calibrate: one button in the look editor's own block. It measures
+    // the generated take (see /minimax_director/clip/calibration) and sets
+    // the sliders in place, so the live compare keeps its zoom and position
+    // and the change is visible immediately. Calibrate targets the Join row
+    // only (start vs. previous end, both raw); the start follows the graded
+    // tail almost 1:1, while drift toward the end is Hold look's job.
+    const addAutoCalibrate=section=>{
+      const editor=section.editor;if(!editor?.actions)return;
+      const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
+      button.textContent="Auto calibrate";button.disabled=true;
+      const status=document.createElement("small");status.className="mmx-calib-status";status.textContent="Measuring the generated take…";
+      editor.actions.append(button,status);editor.actions.hidden=false;
+      const generation=cachedClipResults[activeClip.id]?.generation ?? "none";
       const before=timelineState.clips.slice(0,clipIndex).map(c=>c.id).join(",");
-      requestJson(`/minimax_director/clip/calibration?${new URLSearchParams({project_id:timelineState.project_id||"",clip_id:activeClip.id,before})}`).then(m=>{
-        body.replaceChildren();
+      const cacheKey=[timelineState.project_id||"",activeClip.id,generation,cachedClipResults[previousClip?.id]?.generation ?? "none",before].join("|");
+      const measured=calibrationCache.get(cacheKey) || requestJson(`/minimax_director/clip/calibration?${new URLSearchParams({project_id:timelineState.project_id||"",clip_id:activeClip.id,before})}`);
+      calibrationCache.set(cacheKey,measured);
+      const pctText=v=>`${v>0?"+":""}${v.toFixed(1)}%`;
+      measured.then(m=>{
         const luma=s=>.299*s.rgb[0]+.587*s.rgb[1]+.114*s.rgb[2];
-        const pct=(a,b)=>(a/Math.max(1e-6,b)-1)*100;
-        const cell=v=>{const td=document.createElement("td");td.textContent=`${v>0?"+":""}${v.toFixed(1)}%`;td.className=Math.abs(v)<1.5?"ok":Math.abs(v)<5?"warn":"bad";return td;};
-        const table=document.createElement("table");table.className="mmx-calib-table";
-        table.innerHTML="<thead><tr><th></th><th>Brightness</th><th>Warm</th><th>Cool</th><th>Contrast</th></tr></thead>";
-        const tbody=document.createElement("tbody");
-        const row=(label,title,a,b)=>{const tr=document.createElement("tr");const th=document.createElement("th");th.textContent=label;th.title=title;tr.append(th,cell(pct(luma(a),luma(b))),cell(pct(a.rgb[0]/a.rgb[1],b.rgb[0]/b.rgb[1])),cell(pct(a.rgb[2]/a.rgb[1],b.rgb[2]/b.rgb[1])),cell(pct(a.std,b.std)));tbody.append(tr);};
-        row("Join","This clip's first second vs. the previous clip's last second, both as the model generated them (colour correction removed)",m.first,m.previous_end);
-        if(m.anchor){
-          row(m.hold_gain?"End, before colour fix":"End","This clip's last second"+(m.hold_gain?" without the colour correction":"")+" vs. the last second of the chain's first clip",m.raw_end,m.anchor);
-          if(m.hold_gain)row("End, delivered","This clip's last second as delivered, after Keep colour on the chain's first clip",m.end,m.anchor);
-        }
-        table.append(tbody);body.append(table);
-        // Measured on 2026-11-21: a clip's first second follows the graded
-        // previous tail within ~1% (the join fix forces it); about a second
-        // later the model's own look takes over. So the sliders only shape the
-        // start, and Hold look is what corrects colour drift toward the end.
-        const note=document.createElement("p");note.className="mmx-calib-note";
-        note.textContent="This clip's first second follows the previous-tail sliders (predicted live in the preview below); about a second later the model's own look takes over. Calibrate sets the sliders so the next take starts the way the previous clip ended.";
-        // Calibrate on the join: the start follows the graded tail almost 1:1,
-        // so correcting the measured Join row from the look this take used
-        // should land in one round. Drift toward the end is Hold look's job.
+        const pct=(x,y)=>(x/Math.max(1e-6,y)-1)*100;
+        const join=[["brightness",pct(luma(m.first),luma(m.previous_end))],["warm",pct(m.first.rgb[0]/m.first.rgb[1],m.previous_end.rgb[0]/m.previous_end.rgb[1])],["cool",pct(m.first.rgb[2]/m.first.rgb[1],m.previous_end.rgb[2]/m.previous_end.rgb[1])],["contrast",pct(m.first.std,m.previous_end.std)]];
+        const summary="This take's start vs. the previous end: "+join.map(([k,v])=>`${k} ${pctText(v)}`).join(", ")+".";
+        // Calibrate from the look this take actually used, not from edits made since.
         const current=activeClip.tail_look||null;
         const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
-        if(activeClip.calibrated_from && activeClip.calibrated_from!==m.generation)delete activeClip.calibrated_from;
-        // Contrast is always calibrated: with any tail slider set, the join
-        // fix's contrast step (latent only) no longer runs.
         const next=calibrateLook(used,m.previous_end,m.first,{contrast:true});
-        const changes=lookChanges(used,next);
-        const actions=document.createElement("div");actions.className="mmx-calib-actions";
-        const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
-        const summary=document.createElement("small");
-        // Always clickable: each click sets the sliders to this take's
-        // calibrated values, so edits on top of them can be reset.
-        const again=activeClip.calibrated_from===m.generation;
-        button.textContent=again?"Reset to calibrated":"Calibrate sliders";
-        summary.textContent=!changes.length?"The join already matches; calibrating keeps the sliders as this take used them."
-          :(again?"Sets the sliders back to: ":"")+changes.join(" · ")+(again?". Regenerate this clip to use them.":"");
-        button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look={...next};activeClip.calibrated_from=m.generation;syncState();renderTimeline();renderInspector();};
-        actions.append(button,summary);body.append(actions,note);
-        if(activeClip.calibrated_from!==m.generation && m.tail_look_known && JSON.stringify(used||null)!==JSON.stringify(lookIsNeutral(current)?null:current) && changes.length){const w=document.createElement("p");w.className="mmx-calib-note warn";w.textContent="The sliders changed since this take. Calibrating replaces them with a correction of the look this take actually used.";body.append(w);}
-        if(m.anchor){
-          const endOff=[pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
-          if(endOff){const p=document.createElement("p");p.className="mmx-calib-note"+(m.hold_gain?"":" warn");
-            p.textContent=m.hold_gain?"The end's colour is corrected after decoding by Keep colour on the chain's first clip (see End, delivered); its brightness is left as generated.":"The end's colour drifts from the chain's first clip. Turn on Keep colour on the chain's first clip above to correct it after decoding; brightness changes toward the end are left as generated.";body.append(p);}
-        }
-      }).catch(error=>{if(error.status===404)card.remove();else body.textContent=`Could not measure this take: ${error.message}`;});
-      return card;
+        button.disabled=false;status.textContent=summary;
+        button.title="Set the sliders so the next take starts the way the previous clip ended. Click again to go back to the calibrated values after editing.";
+        button.onclick=()=>{
+          editor.setLook(next);delete activeClip.calibrated_from;
+          const changes=lookChanges(used,next);
+          status.textContent=(changes.length?"Calibrated: "+changes.join(" · "):"The join already matches; sliders set to what this take used.")+" Regenerate this clip to use them.";
+        };
+      }).catch(error=>{
+        calibrationCache.delete(cacheKey);
+        if(error.status===404){status.textContent="Generate this clip once to auto calibrate from its take.";button.title="Needs a generated take of this clip";}
+        else status.textContent=`Could not measure this take: ${error.message}`;
+      });
     };
     if(startImage){
       const code=clipCode(activeClip);
@@ -5483,19 +5453,20 @@ function mountDirectorUI(node) {
         continuityPanel.append(grid);
         const fixes=document.createElement("div");fixes.className="mmx-switch-group";
         const fixesTitle=document.createElement("div");fixesTitle.className="mmx-switch-group-title";
-        fixesTitle.innerHTML="<strong>Continuity corrections</strong><span>Each fixes a different thing; Calibrate below fixes how this clip starts.</span>";
+        fixesTitle.innerHTML="<strong>Continuity corrections</strong><span>Each fixes a different thing; Auto calibrate below fixes how this clip starts.</span>";
         fixes.append(fixesTitle);
         fixes.append(switchRow("Prevent build-up at joins",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
           "During generation. Stops sharpness, contrast and the model's slight blue cast from adding up clip after clip. Works with calibrated sliders too. Recommended."));
         fixes.append(switchRow("Keep colour on the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
-          "After decoding. A colour-only correction that starts at zero at the join and grows toward the end, so colour does not drift along a long chain. Brightness is left as generated; Calibrate measures without it."));
+          "After decoding. A colour-only correction that starts at zero at the join and grows toward the end, so colour does not drift along a long chain. Brightness is left as generated; Auto calibrate measures without it."));
         continuityPanel.append(fixes);
-        if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
-        continuityPanel.append(lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
+        const tailSection=lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
           {note:"The same region of the frame, zoomed, from both images: left, the previous clip's last frame; right, how this clip will start. Drag the picture to move the region; 1× 2× 4× sets the zoom. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
            compareOriginal:true,anchorLabel:"Predicted start of this clip vs. the previous clip's end",
-           before:"Previous clip's end",after:"Start of this clip"}));
+           before:"Previous clip's end",after:"Start of this clip"});
+        continuityPanel.append(tailSection);
+        if(previousClip)addAutoCalibrate(tailSection);
       }
     }
     shotSections.prepend(continuityPanel);

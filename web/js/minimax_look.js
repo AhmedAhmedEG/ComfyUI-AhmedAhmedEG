@@ -106,6 +106,7 @@ async function imagePixels(url, maxWidth = 560) {
  * Build a look editor.
  * opts: {imageUrl, emptyText, look, onInput(look), onChange(look), anchorUrl, anchorLabel, beforeLabel, afterLabel,
  *        compareOriginal: readouts compare the adjusted frame with the unadjusted one}
+ * The returned element has .actions (a row above the sliders, hidden until used) and .setLook(look).
  */
 export function createLookEditor(opts) {
   const look = {...LOOK_NEUTRAL, ...(opts.look || {})};
@@ -130,7 +131,10 @@ export function createLookEditor(opts) {
   stage.title = "Drag to move the compared region";
   const readout = document.createElement("div"); readout.className = "mmx-look-readout";
   const controls = document.createElement("div"); controls.className = "mmx-look-controls";
-  root.append(stage, readout, controls);
+  // Optional action row (for example Auto calibrate) right above the sliders.
+  const actions = document.createElement("div"); actions.className = "mmx-look-actions"; actions.hidden = true;
+  root.append(stage, readout, actions, controls);
+  root.actions = actions;
 
   let original = null, anchor = null;
   const render = () => {
@@ -203,6 +207,13 @@ export function createLookEditor(opts) {
   resetAll.textContent = "Reset all";
   resetAll.onclick = () => { for (const key of Object.keys(LOOK_NEUTRAL)) { look[key] = LOOK_NEUTRAL[key]; } for (const [key, set] of Object.entries(inputs)) set(LOOK_NEUTRAL[key], false); opts.onChange?.({...look}); };
   controls.append(resetAll);
+  // Set every slider in place: the preview, its zoom and drag position stay
+  // as they are, so the change is visible right away. Commits once.
+  root.setLook = next => {
+    const target = {...LOOK_NEUTRAL, ...(next || {})};
+    for (const [key, set] of Object.entries(inputs)) set(target[key], false);
+    opts.onChange?.({...look});
+  };
 
   if (opts.imageUrl) {
     imagePixels(opts.imageUrl).then(pixels => {
