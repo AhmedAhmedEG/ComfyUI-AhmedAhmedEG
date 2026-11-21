@@ -5387,15 +5387,22 @@ function mountDirectorUI(node) {
           if(m.hold_gain)row("End, delivered","This clip's last second as delivered, after Hold look",m.end,m.anchor);
         }
         table.append(tbody);body.append(table);
-        if(!m.anchor){const p=document.createElement("p");p.className="mmx-calib-note";p.textContent="Generate the chain's first clip to measure drift and calibrate.";body.append(p);return;}
+        // The previous-tail look steers the START of this clip (the join fix
+        // matches the opening frames to the graded tail), so calibrate it on
+        // the join. Drift toward the end is left to Hold look, which corrects
+        // the decoded frames directly.
         const current=activeClip.tail_look||null;
         const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
         if(activeClip.calibrated_from && activeClip.calibrated_from!==m.generation)delete activeClip.calibrated_from;
         const withContrast=m.auto_fix===false;
-        const next=calibrateLook(used,m.anchor,m.raw_end,{contrast:withContrast});
+        const next=calibrateLook(used,m.previous_end,m.first,{contrast:withContrast});
         const changes=lookChanges(used,next);
         const note=document.createElement("p");note.className="mmx-calib-note";
-        note.textContent=`Calibrate sets the sliders below so the next take of this clip should end on the chain's first clip. It starts from the look this take was made with${withContrast?"":"; contrast is left to the join fix"}. Regenerate this clip after calibrating, then check again; repeat if a number is still off.`;
+        note.textContent=`Calibrate fixes the Join row: it sets the previous-tail sliders so this clip starts the way the previous clip ended, starting from the look this take was made with${withContrast?"":" (contrast is left to the join fix)"}. Regenerate this clip after calibrating.`;
+        const endOff=m.anchor && [pct(luma(m.raw_end),luma(m.anchor)),pct(m.raw_end.rgb[0]/m.raw_end.rgb[1],m.anchor.rgb[0]/m.anchor.rgb[1]),pct(m.raw_end.rgb[2]/m.raw_end.rgb[1],m.anchor.rgb[2]/m.anchor.rgb[1])].some(v=>Math.abs(v)>=1.5);
+        const endNote=document.createElement("p");
+        if(endOff){const p=endNote;p.className="mmx-calib-note"+(m.hold_gain?"":" warn");
+          p.textContent=m.hold_gain?"The end is corrected after decoding by Hold look (see End, delivered); the sliders are not used for that.":"The end drifts from the chain's first clip. Turn on Hold look above to correct it after decoding; the sliders cannot fix the end reliably.";}
         const actions=document.createElement("div");actions.className="mmx-calib-actions";
         const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
         const summary=document.createElement("small");
@@ -5403,7 +5410,7 @@ function mountDirectorUI(node) {
         else if(activeClip.calibrated_from && activeClip.calibrated_from===m.generation){button.textContent="Calibrated";button.disabled=true;summary.textContent="Regenerate this clip to use the calibrated sliders, then check again.";}
         else{button.textContent="Calibrate sliders";summary.textContent=changes.join(" · ");
           button.onclick=()=>{if(lookIsNeutral(next))delete activeClip.tail_look;else activeClip.tail_look=next;activeClip.calibrated_from=m.generation;syncState();renderTimeline();renderInspector();};}
-        actions.append(button,summary);body.append(actions,note);
+        actions.append(button,summary);body.append(actions,note);if(endNote.textContent)body.append(endNote);
         if(activeClip.calibrated_from!==m.generation && m.tail_look_known && JSON.stringify(used||null)!==JSON.stringify(lookIsNeutral(current)?null:current) && changes.length && button.textContent!=="Calibrated"){const w=document.createElement("p");w.className="mmx-calib-note warn";w.textContent="The sliders changed since this take. Calibrating replaces them with a correction of the look this take actually used.";body.append(w);}
       }).catch(error=>{if(error.status===404)card.remove();else body.textContent=`Could not measure this take: ${error.message}`;});
       return card;

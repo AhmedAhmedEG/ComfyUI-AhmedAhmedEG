@@ -270,7 +270,7 @@
       "Measured on this take / Calibrate sliders",
       "After a continuing clip is generated, shows its real join and end-of-clip shift against the previous clip and the chain's first clip.",
       "A generated clip still drifts in brightness or colour.",
-      "Calibrate sets the previous-tail sliders to cancel the measured drift; regenerate the clip and check again."
+      "Calibrate sets the previous-tail sliders so the clip starts the way the previous clip ended (the Join row); drift toward the end is corrected by Hold look."
     ],
     [
       "Anti-burn (Auto)",
