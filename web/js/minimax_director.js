@@ -2380,12 +2380,16 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-stage { position:relative;width:fit-content;max-width:100%;margin:0 auto;border-radius:6px;overflow:hidden;background:#111418;min-height:90px; }
 .mmx-director-root .mmx-look-stage.mmx-look-missing { width:auto; }
 .mmx-director-root .mmx-look-canvas { display:block;width:auto;height:auto;max-width:100%;max-height:300px; }
-.mmx-director-root .mmx-look-split { position:absolute;inset:0;width:100%!important;height:100%;margin:0;opacity:0;cursor:ew-resize; }
+.mmx-director-root .mmx-look-canvas { cursor:grab;touch-action:none; }
+.mmx-director-root .mmx-look-canvas:active { cursor:grabbing; }
+.mmx-director-root .mmx-look-zoom { position:absolute;right:6px;bottom:6px;display:flex;gap:2px;padding:2px;border-radius:6px;background:rgba(0,0,0,.55); }
+.mmx-director-root .mmx-look-zoom button { height:20px;min-width:26px;padding:0 5px!important;border:0!important;border-radius:4px!important;background:transparent!important;color:#dfe6ee!important;font-size:11px!important;font-weight:600;cursor:pointer; }
+.mmx-director-root .mmx-look-zoom button.active { background:#3d4f63!important;color:#fff!important; }
 .mmx-director-root .mmx-look-labels { position:absolute;left:0;right:0;top:6px;display:flex;justify-content:space-between;padding:0 8px;pointer-events:none; }
 .mmx-director-root .mmx-look-labels span { font-size:10.5px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:4px; }
 .mmx-director-root .mmx-look-empty { display:flex;align-items:center;justify-content:center;min-height:90px;padding:14px;text-align:center;font-size:11.5px;color:#8ea2b4; }
 .mmx-director-root .mmx-look-empty[hidden] { display:none; }
-.mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-split { display:none; }
+.mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-zoom { display:none; }
 .mmx-director-root .mmx-antiburn-note { margin:2px 0 8px;padding:6px 10px;border-left:3px solid #8b7bf0;border-radius:4px;background:#22232e;font-size:11.5px;color:#b9c3cf;line-height:1.4; }
 .mmx-director-root .mmx-calib { margin:8px 0 10px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid #f0c674;border-radius:8px;background:#1f252b; }
 .mmx-director-root .mmx-calib-head strong { font-size:12.5px;color:#e8edf2; }
@@ -5406,8 +5410,9 @@ function mountDirectorUI(node) {
         const current=activeClip.tail_look||null;
         const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
         if(activeClip.calibrated_from && activeClip.calibrated_from!==m.generation)delete activeClip.calibrated_from;
-        const withContrast=m.auto_fix===false;
-        const next=calibrateLook(used,m.previous_end,m.first,{contrast:withContrast});
+        // Contrast is always calibrated: with any tail slider set, the join
+        // fix's contrast step (latent only) no longer runs.
+        const next=calibrateLook(used,m.previous_end,m.first,{contrast:true});
         const changes=lookChanges(used,next);
         const actions=document.createElement("div");actions.className="mmx-calib-actions";
         const button=document.createElement("button");button.type="button";button.className="mmx-calib-btn";
@@ -5482,7 +5487,7 @@ function mountDirectorUI(node) {
         if(previousClip && cachedClipResults[activeClip.id]?.has_frames!==false)continuityPanel.append(calibrationCard());
         continuityPanel.append(lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
-          {note:"The same part of the frame twice: left, the previous clip's last frame; right, how this clip will start. Drag across the picture to compare another part. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
+          {note:"The same region of the frame, zoomed, from both images: left, the previous clip's last frame; right, how this clip will start. Drag the picture to move the region; 1× 2× 4× sets the zoom. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
            compareOriginal:true,anchorLabel:"Predicted start of this clip vs. the previous clip's end",
            before:"Previous clip's end",after:"Start of this clip"}));
       }

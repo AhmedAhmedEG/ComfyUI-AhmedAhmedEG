@@ -41,13 +41,21 @@ export function applyLookPixels(data, look) {
 // luma spread. Saturation and black level are kept. One step; repeat if needed.
 export function calibrateLook(used, target, result, {contrast = true} = {}) {
   const base = {...LOOK_NEUTRAL, ...(used || {})};
-  const c = target.rgb.map((v, i) => Math.min(1.6, Math.max(.6, v / Math.max(1e-3, result.rgb[i]))));
+  // Contrast pivots around mid-grey, so it also moves the average: solve the
+  // channel gains c and the contrast k together so that, after gain then
+  // contrast (the order of applyLookPixels), mean and spread both match.
+  //   target_i = 0.5 + (c_i * result_i - 0.5) * k
+  //   target_std = result_std * lumaGain(c) * k
+  let k = 1, c = [1, 1, 1];
+  for (let pass = 0; pass < 6; pass++) {
+    c = target.rgb.map((v, i) => Math.min(1.6, Math.max(.6, ((v - .5) / k + .5) / Math.max(1e-3, result.rgb[i]))));
+    const gain = .299*c[0] + .587*c[1] + .114*c[2];
+    if (contrast && result.std > 1e-4) k = Math.min(1.4, Math.max(.7, target.std / (result.std * gain)));
+  }
   const rho = c[0] / c[2], t = 10 * (rho - 1) / (rho + 1);
   const m = Math.sqrt(Math.max(1e-6, (1 + .1*t) * (1 - .1*t)));
   const q = c[1] / Math.sqrt(c[0] * c[2]) * m, g = (q - 1) / (.1 + .05*q);
   const e = Math.log2(Math.max(1e-3, c[1] / (1 + .1*g)));
-  const lumaGain = .299*c[0] + .587*c[1] + .114*c[2];
-  const k = contrast && result.std > 1e-4 ? target.std / result.std / lumaGain : 1;
   // Keep calibrated values precise (not snapped to the slider step): a coarse
   // step left takes a few percent off in brightness.
   const clampTo = (key, v) => { const row = LOOK_CONTROLS.find(r => r[0] === key); return Math.min(row[3], Math.max(row[2], Math.round(v * 1000) / 1000)); };
@@ -104,14 +112,22 @@ export function createLookEditor(opts) {
   const root = document.createElement("div"); root.className = "mmx-look";
   const stage = document.createElement("div"); stage.className = "mmx-look-stage";
   const canvas = document.createElement("canvas"); canvas.className = "mmx-look-canvas";
-  const split = document.createElement("input"); split.type = "range"; split.min = "0"; split.max = "100"; split.value = "50";
-  split.className = "mmx-look-split"; split.setAttribute("aria-label", "Part of the frame to compare");
-  split.title = "Drag to choose which part of the frame is compared";
+  // Compare view: the SAME zoomed region from both images side by side (before
+  // left, after right). Drag the picture to move the region; 1x/2x/4x zoom.
+  const view = {x: .5, y: .5, zoom: 2};
+  const zoomBar = document.createElement("div"); zoomBar.className = "mmx-look-zoom";
+  for (const z of [1, 2, 4]) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = `${z}×`; b.dataset.zoom = z;
+    b.title = z === 1 ? "Whole width of each half" : `Zoom ${z}×`;
+    b.onclick = event => { event.stopPropagation(); view.zoom = z; render(); };
+    zoomBar.append(b);
+  }
   const labels = document.createElement("div"); labels.className = "mmx-look-labels";
   labels.innerHTML = `<span>${opts.beforeLabel || "Before"}</span><span>${opts.afterLabel || "After"}</span>`;
   const empty = document.createElement("div"); empty.className = "mmx-look-empty"; empty.textContent = "Loading frame…";
   stage.classList.add("mmx-look-missing");
-  stage.append(canvas, labels, split, empty);
+  stage.append(canvas, labels, zoomBar, empty);
+  stage.title = "Drag to move the compared region";
   const readout = document.createElement("div"); readout.className = "mmx-look-readout";
   const controls = document.createElement("div"); controls.className = "mmx-look-controls";
   root.append(stage, readout, controls);
@@ -122,13 +138,18 @@ export function createLookEditor(opts) {
     const ctx = canvas.getContext("2d");
     const after = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
     applyLookPixels(after.data, look);
-    // The same half of the frame twice: before on the left, after on the
-    // right; the slider chooses which part of the frame is compared.
+    // The same region of the frame twice, zoomed: before left, after right.
     const w = original.width, h = original.height, half = Math.max(1, Math.round(w / 2));
-    const x0 = Math.round((w - half) * Number(split.value) / 100);
-    ctx.putImageData(original, -x0, 0, x0, 0, half, h);
-    ctx.putImageData(after, half - x0, 0, x0, 0, half, h);
+    const cw = half / view.zoom, ch = h / view.zoom;
+    const sx = Math.min(w - cw, Math.max(0, view.x * w - cw / 2)), sy = Math.min(h - ch, Math.max(0, view.y * h - ch / 2));
+    view.x = (sx + cw / 2) / w; view.y = (sy + ch / 2) / h;
+    sources.before.getContext("2d").putImageData(original, 0, 0);
+    sources.after.getContext("2d").putImageData(after, 0, 0);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(sources.before, sx, sy, cw, ch, 0, 0, half, h);
+    ctx.drawImage(sources.after, sx, sy, cw, ch, half, 0, w - half, h);
     ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillRect(half - 1, 0, 2, h);
+    for (const b of zoomBar.children) b.classList.toggle("active", Number(b.dataset.zoom) === view.zoom);
     const s = frameStats(after.data);
     const delta = (value, base, digits = 1, pct = false) => {
       if (base == null) return "";
@@ -143,7 +164,19 @@ export function createLookEditor(opts) {
       `<span title="Blue vs green balance">Cool <b>${s.cool.toFixed(3)}</b>${delta(s.cool, a?.cool, 1, true)}</span>` +
       (a ? `<small>${opts.anchorLabel || "Change vs. the chain's first clip"}</small>` : "");
   };
-  split.oninput = render;
+  const sources = {before: document.createElement("canvas"), after: document.createElement("canvas")};
+  let drag = null;
+  canvas.addEventListener("pointerdown", event => { drag = {x: event.clientX, y: event.clientY, vx: view.x, vy: view.y}; canvas.setPointerCapture(event.pointerId); });
+  canvas.addEventListener("pointermove", event => {
+    if (!drag || !original) return;
+    const rect = canvas.getBoundingClientRect();
+    // Moving across one half of the screen moves the region by its own width.
+    view.x = drag.vx - (event.clientX - drag.x) / (rect.width / 2) / view.zoom / 2;
+    view.y = drag.vy - (event.clientY - drag.y) / rect.height / view.zoom;
+    render();
+  });
+  const endDrag = () => { drag = null; };
+  canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
 
   const inputs = {};
   for (const [key, title, min, max, step, format] of LOOK_CONTROLS) {
@@ -174,6 +207,7 @@ export function createLookEditor(opts) {
   if (opts.imageUrl) {
     imagePixels(opts.imageUrl).then(pixels => {
       original = pixels; canvas.width = pixels.width; canvas.height = pixels.height;
+      for (const c of Object.values(sources)) { c.width = pixels.width; c.height = pixels.height; }
       empty.hidden = true; stage.classList.remove("mmx-look-missing"); render();
     }).catch(() => { empty.textContent = opts.emptyText || "Frame not available yet."; stage.classList.add("mmx-look-missing"); });
     if (opts.anchorUrl) imagePixels(opts.anchorUrl).then(pixels => { anchor = pixels; render(); }).catch(() => {});
