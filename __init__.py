@@ -20,7 +20,7 @@ from .core.refmod import list_available_refmods
 from .core.cache_manager import ProjectCacheManager
 from .core.media_io import resolve_input_path
 
-__version__ = "1.7.54"
+__version__ = "1.7.55"
 WEB_DIRECTORY = "./web/js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -596,6 +596,47 @@ if getattr(PromptServer, "instance", None) is not None:
                 return filmstrip(frames, trim, request.query.get("count", 8), request.query.get("height", 64))
             data = await asyncio.to_thread(build)
             return web.Response(body=data, headers={"Content-Type": "image/jpeg", "Cache-Control": "no-store"})
+        except FileNotFoundError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        except (ValueError, TypeError) as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+    @routes.get("/minimax_director/clip/frame")
+    async def clip_frame(request):
+        """One saved frame of a generated clip (first or last visible frame) for continuity previews.
+
+        ``carried=1`` returns the frame as the next clip receives it (hold-look gain removed)."""
+        try:
+            from .core.look import undo_hold
+            mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
+            clip_id = request.query.get("clip_id", "")
+            which = request.query.get("which", "last")
+            if not clip_id or which not in ("first", "last"):
+                raise ValueError("Choose a clip and first or last frame.")
+            height = max(64, min(1080, int(request.query.get("height", 540))))
+            def build():
+                import io
+                import numpy as np
+                from PIL import Image
+                frames = mgr.load_clip_frames(clip_id)
+                if frames is None or not frames.shape[0]:
+                    raise FileNotFoundError("This clip has not been generated yet.")
+                meta = mgr._manifest.get("clips", {}).get(clip_id, {})
+                total = int(frames.shape[0])
+                index = min(total - 1, int(meta.get("trim_prefix", 0) or 0)) if which == "first" else total - 1
+                frame = frames[index:index + 1].float()
+                if request.query.get("carried") == "1" and which == "last":
+                    frame = undo_hold(frame, meta.get("hold_gain"), total)
+                frame = frame[0]
+                if frame.max() > 2:
+                    frame = frame / 255
+                image = Image.fromarray((frame.clamp(0, 1).numpy() * 255).round().astype(np.uint8))
+                if image.height > height:
+                    image = image.resize((max(1, round(image.width * height / image.height)), height), Image.LANCZOS)
+                buffer = io.BytesIO(); image.save(buffer, "PNG")
+                return buffer.getvalue()
+            data = await asyncio.to_thread(build)
+            return web.Response(body=data, headers={"Content-Type": "image/png", "Cache-Control": "no-store"})
         except FileNotFoundError as exc:
             return web.json_response({"error": str(exc)}, status=404)
         except (ValueError, TypeError) as exc:

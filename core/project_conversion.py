@@ -146,7 +146,7 @@ def convert_project(data,source='auto'):
             'prompt':str(row.get('prompt','')),'seed':seed_string(row.get('seed',0)),'validated':False,'selected':False,
             'ref_ids':row.get('ref_ids',[]),'continuity_mode':'Independent (No Continuity)','context_length':22,'audio_context_length':22}
         )
-        aliases={'Independent':MODES[0],'Motion Context':MODES[1],'Latent Carry':MODES[2],'FL2VA Tail Handoff':MODES[3]}
+        aliases={'Independent':MODES[0],'Motion Context':MODES[1],'Latent Carry':MODES[2],'FL2VA Tail Handoff':MODES[3],'Last Frame':MODES[3]}
         mode=row.get('continuity_mode',row.get('continuity_method'))
         if mode is None and row.get('motion_context') is True:mode=MODES[1]
         if mode is None and row.get('continuity') is True:mode=MODES[1]

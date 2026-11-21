@@ -1,13 +1,12 @@
 {
-  "version": "1.7.54",
-  "reviewed": "2026-11-20",
+  "version": "1.7.55",
+  "reviewed": "2026-11-21",
   "title": "H3 Director — User Guide",
   "nodes": {
     "MiniMaxH3MasterNode": {
       "purpose": "Build and generate a sequence of clips from one timeline.",
       "use": "Start here for prompts, per-clip references, continuity, memory, approval and clip LoRAs.",
       "wiring": [
-        "Director Settings.config → Master.config",
         "Reference Pack.ref_pack → Master.ref_pack",
         "FL2VA model → Master.fl2va_model",
         "REF2VA model → Master.ref2va_model",
@@ -128,26 +127,6 @@
             "choices": [],
             "dynamic": false,
             "description": "Optional externally authored clips. Timeline Builder owns prompts, types and durations; Master owns approval and execution.",
-            "min": null,
-            "max": null,
-            "step": null,
-            "connection": true
-          }
-        },
-        "config": {
-          "what": "Director Settings configuration",
-          "when": "Supply global canvas and initial sampling settings.",
-          "effect": "Carries MMX_DIRECTOR_CONFIG data to this operation.",
-          "caution": "Use a matching output type and compatible media/model family.",
-          "advanced": true,
-          "contract": {
-            "name": "config",
-            "type": "MMX_DIRECTOR_CONFIG",
-            "required": false,
-            "default": null,
-            "choices": [],
-            "dynamic": false,
-            "description": "Sampling, canvas, and pipeline settings (MiniMaxH3DirectorSettings).",
             "min": null,
             "max": null,
             "step": null,
@@ -307,7 +286,7 @@
             "default": null,
             "choices": [],
             "dynamic": false,
-            "description": "External sigma schedule override.",
+            "description": "External sigma schedule. When connected it replaces the steps and scheduler settings.",
             "min": null,
             "max": null,
             "step": null,
@@ -417,6 +396,26 @@
             "step": null,
             "connection": false
           }
+        },
+        "steps": {
+          "what": "Sampling steps from another node",
+          "when": "Drive steps from a switch, for example 25 steps normally and 8 with a Lightning LoRA.",
+          "effect": "Overrides the Steps value in the Master's settings bar.",
+          "caution": "Ignored when a sigmas schedule is connected; the schedule decides the steps.",
+          "advanced": true,
+          "contract": {
+            "name": "steps",
+            "type": "INT",
+            "required": false,
+            "default": null,
+            "choices": [],
+            "dynamic": false,
+            "description": "Optional steps from another node (for example a LoRA on/off switch). Overrides the steps setting.",
+            "min": null,
+            "max": null,
+            "step": null,
+            "connection": true
+          }
         }
       },
       "output_descriptions": [
@@ -433,10 +432,10 @@
       ]
     },
     "MiniMaxH3DirectorSettings": {
-      "purpose": "Set the output canvas and initial sampling settings.",
-      "use": "Change generation dimensions and quality settings without filling the Master with global controls.",
+      "purpose": "Retired in 1.7.55: canvas, sampler and output settings now live in the settings bar at the top of the Master node.",
+      "use": "Old workflows that contain this node are migrated automatically when they load: its values move into the Master and the node is removed.",
       "wiring": [
-        "Director Settings.config → Master.config"
+        "None. Do not add this node to new workflows."
       ],
       "steps": [
         "Choose Manual canvas for an explicit width and height, or Auto for megapixels plus aspect.",

@@ -82,55 +82,6 @@ class TestDeepValidation(CacheIsolatedTestCase):
             self.assertEqual(ref_block["latent_h"], 48)
             self.assertEqual(ref_block["latent_w"], 84)
 
-    def test_ref2va_continuity_tail_injection(self):
-        """Verify that REF2VA clips inherit previous tail when continuity is enabled and local refs are empty."""
-        node = MiniMaxH3MasterDirector()
-        mock_model = MagicMock()
-        mock_model.clone.return_value = mock_model
-        mock_model.model_options = {}
-
-        mock_vae = MagicMock()
-        mock_vae.decode.return_value = torch.zeros((5, 64, 64, 3))
-
-        mock_audio_vae = MagicMock()
-        mock_audio_vae.decode.return_value = torch.zeros((1, 2, 48000))
-        mock_audio_vae.audio_sample_rate = 48000
-
-        mock_clip = MagicMock()
-        mock_clip.tokenize.return_value = {}
-        mock_clip.encode_from_tokens_scheduled.return_value = ([[torch.zeros((1, 10, 5120)), {}]], None)
-
-        timeline_data = """{
-            "clips": [
-                {"id": "c1", "type": "T2V", "duration": 1.0, "continuity": false, "validated": false},
-                {"id": "c2", "type": "REF2VA", "duration": 1.0, "continuity": true, "validated": false, "ref_ids": []}
-            ]
-        }"""
-
-        with patch("nodes.node_director.sample_latent") as mock_sample, \
-             patch("core.executor.get_native_h3_node") as mock_get_node:
-            mock_sample.return_value = {"samples": (torch.zeros((1, 24, 5, 48, 84)), torch.zeros((1, 32, 2, 40)))}
-            mock_native = MagicMock()
-            mock_native.execute.return_value = ([[torch.zeros((1, 10, 5120)), {"minimax_refs": []}]], {"samples": None})
-            mock_get_node.return_value = mock_native
-
-            res = node.execute(
-                model=mock_model,
-                video_vae=mock_vae,
-                audio_vae=mock_audio_vae,
-                clip=mock_clip,
-                timeline_data=timeline_data,
-                continuity_mode="FL2VA Tail Handoff",
-            )
-
-            # c1 conditioning, c2 cached reference encode, c2 conditioning.
-            self.assertEqual(mock_native.execute.call_count, 3)
-            c2_call_kwargs = mock_native.execute.call_args_list[-1][1]
-            self.assertIn("ref_images", c2_call_kwargs)
-            self.assertIn("ref_image_1", c2_call_kwargs["ref_images"])
-            self.assertIsNotNone(c2_call_kwargs["ref_images"]["ref_image_1"])
-
-
     def test_concatenate_multichannel_audio(self):
         """Verify concatenate_audio_clips standardizes mono, stereo, and 6-channel audio to stereo."""
         from core.audio_post import concatenate_audio_clips

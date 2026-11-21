@@ -2,7 +2,7 @@
   "id": "b6d8e7c1-60d3-498a-a713-bbcde0a64b02",
   "revision": 0,
   "last_node_id": 24,
-  "last_link_id": 18,
+  "last_link_id": 19,
   "nodes": [
     {
       "id": 1,
@@ -189,78 +189,6 @@
       "title": "Audio · Load VAE"
     },
     {
-      "id": 4,
-      "type": "MiniMaxH3DirectorSettings",
-      "pos": [
-        1040,
-        620
-      ],
-      "size": [
-        380,
-        455
-      ],
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "properties": {
-        "Node name for S&R": "MiniMaxH3DirectorSettings"
-      },
-      "inputs": [
-        {
-          "name": "settings_optional",
-          "type": "MMX_DIRECTOR_CONFIG",
-          "link": null
-        },
-        {
-          "name": "steps",
-          "type": "INT",
-          "widget": {
-            "name": "steps"
-          },
-          "link": 18
-        }
-      ],
-      "outputs": [
-        {
-          "name": "config",
-          "type": "MMX_DIRECTOR_CONFIG",
-          "links": [
-            12
-          ]
-        }
-      ],
-      "widgets_values": [
-        960,
-        544,
-        24,
-        25,
-        1,
-        "euler",
-        "simple",
-        12,
-        3,
-        "manual",
-        1,
-        "16:9",
-        "latest"
-      ],
-      "widgets_values_named": {
-        "width": 960,
-        "height": 544,
-        "frame_rate": 24,
-        "steps": 25,
-        "cfg": 1,
-        "sampler": "euler",
-        "scheduler": "simple",
-        "shift_video": 12,
-        "shift_audio": 3,
-        "canvas_policy": "manual",
-        "canvas_megapixels": 1,
-        "canvas_aspect": "16:9",
-        "decoded_output": "latest"
-      }
-    },
-    {
       "id": 5,
       "type": "MiniMaxH3MasterNode",
       "pos": [
@@ -292,11 +220,6 @@
           "name": "clip",
           "type": "CLIP",
           "link": 9
-        },
-        {
-          "name": "config",
-          "type": "MMX_DIRECTOR_CONFIG",
-          "link": 12
         },
         {
           "name": "ref_pack",
@@ -347,6 +270,11 @@
           "name": "latent_checkpoint",
           "type": "MMX_CONTINUATION",
           "link": null
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "link": 19
         }
       ],
       "outputs": [
@@ -405,11 +333,11 @@
       ],
       "widgets_values": [
         "Next clip",
-        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
+        "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\", \"settings\": {\"resolution\": {\"mode\": \"manual\", \"width\": 960, \"height\": 544, \"megapixels\": 1, \"aspect\": \"16:9\"}, \"width\": 960, \"height\": 544, \"sampler\": \"euler\", \"cfg\": 1, \"steps\": 25, \"scheduler\": \"simple\", \"decoded_output\": \"latest\"}}",
         "{}"
       ],
       "widgets_values_named": {
-        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\"}",
+        "timeline_data": "{\"version\": 2, \"project_id\": \"first_video\", \"clips\": [{\"id\": \"clip_1\", \"name\": \"Clip 1\", \"type\": \"T2VA\", \"duration\": 2, \"prompt\": \"Describe your clip, camera movement and soundscape.\", \"seed\": \"0\", \"selected\": false, \"ref_ids\": [], \"continuity\": true, \"continuity_mode\": \"Independent (No Continuity)\", \"context_length\": 22, \"audio_context_length\": 22}], \"references\": [], \"generation_mode\": \"Next shot\", \"settings\": {\"resolution\": {\"mode\": \"manual\", \"width\": 960, \"height\": 544, \"megapixels\": 1, \"aspect\": \"16:9\"}, \"width\": 960, \"height\": 544, \"sampler\": \"euler\", \"cfg\": 1, \"steps\": 25, \"scheduler\": \"simple\", \"decoded_output\": \"latest\"}}",
         "builder_state": "{}",
         "generation_mode": "Next clip"
       },
@@ -1008,7 +936,7 @@
           "name": "output",
           "type": "INT",
           "links": [
-            18
+            19
           ]
         }
       ],
@@ -1040,7 +968,7 @@
       11,
       0,
       5,
-      5,
+      4,
       "MODEL"
     ],
     [
@@ -1088,7 +1016,7 @@
       12,
       0,
       5,
-      6,
+      5,
       "MODEL"
     ],
     [
@@ -1116,19 +1044,11 @@
       "VAE"
     ],
     [
-      12,
-      4,
-      0,
-      5,
-      3,
-      "MMX_DIRECTOR_CONFIG"
-    ],
-    [
       13,
       16,
       0,
       5,
-      4,
+      3,
       "MMX_REF_PACK"
     ],
     [
@@ -1164,11 +1084,11 @@
       "BOOLEAN"
     ],
     [
-      18,
+      19,
       24,
       0,
-      4,
-      1,
+      5,
+      13,
       "INT"
     ]
   ],

@@ -305,14 +305,30 @@ def match_color_temperature_and_grade(
 
 
 # Per-shot continuity policy, with legacy global configuration fallback.
+# Start-image clips (I2V, FL2V) continue only from the previous clip's last
+# frame; every other generated type uses Motion Context or Latent Carry.
 MODES = ("Independent (No Continuity)", "Motion Context (Chained)",
-         "Latent Carry (Pinned)", "FL2VA Tail Handoff")
+         "Latent Carry (Pinned)", "Last Frame (Start Image)")
+LEGACY_MODES = {"FL2VA Tail Handoff": MODES[3]}
+START_IMAGE_TYPES = ("I2VA", "FL2VA")
+
+
+def start_image_type(shot):
+    try:
+        from .task_modes import normalize_mode
+    except ImportError:
+        from core.task_modes import normalize_mode
+    try:
+        return normalize_mode(str(shot.get("type", "T2V"))) in START_IMAGE_TYPES
+    except ValueError:
+        return False
 GRID = (5, 22, 39, 56)
 AUDIO_GRID = (0, 5, 22, 24, 39, 56)
 
 
 def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
     mode = shot.get("continuity_mode", legacy_mode)
+    mode = LEGACY_MODES.get(mode, mode)
     if mode not in MODES:
         raise ValueError("Unknown shot continuity method.")
     video = int(shot.get("context_length", legacy_frames))
@@ -326,6 +342,11 @@ def resolve_continuity(shot, legacy_mode=MODES[1], legacy_frames=22):
         raise ValueError("Continuity duration policy must be new or total.")
     if shot.get("continuity") is False or shot.get("locked") or shot.get("source"):
         mode = MODES[0]
+    if mode != MODES[0]:
+        if start_image_type(shot):
+            mode = MODES[3]
+        elif mode == MODES[3]:
+            mode = MODES[2]  # Retired frame handoff on other types: Latent Carry.
     if mode == MODES[0]:
         video = audio = 0
     elif mode == MODES[3]:

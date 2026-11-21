@@ -175,7 +175,7 @@ class MasterPreviewRepairs(unittest.TestCase):
         with master() as case:
             checkpoint = {'latent': None, 'frames': torch.ones((22, 32, 32, 3)),
                           'audio': {'waveform': torch.ones((1, 2, 32000)), 'sample_rate': 32000}}
-            result = case.execute([{'id': 'one', 'type': 'I2VA', 'duration': 1,
+            result = case.execute([{'id': 'one', 'type': 'T2VA', 'duration': 1,
                 'continuity': True, 'continuity_mode': 'Motion Context (Chained)'}], latent_checkpoint=checkpoint)
             self.assertEqual(len(case.sampling_calls), 1)
             self.assertTrue(case.sampling_calls[0]['positive'][0][1]['minimax_keyframes'])

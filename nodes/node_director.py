@@ -56,6 +56,7 @@ try:
     from ..core.advanced_sampling import sample_selflift
     from ..core.project import migrate_timeline, save_autosave, export_timeline_state
     from ..core.references import load_reference, edit_images, undo_image_edits
+    from ..core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold
 except ImportError:
     from core.sampling import sample_latent, native_outputs
     from core.cache_manager import fingerprint_value
@@ -65,8 +66,28 @@ except ImportError:
     from core.advanced_sampling import sample_selflift
     from core.project import migrate_timeline, save_autosave, export_timeline_state
     from core.references import load_reference, edit_images, undo_image_edits
+    from core.look import clean_look, apply_look, mean_rgb, hold_target, apply_hold, undo_hold
 
 CATEGORY = "ComfyUI-AhmedAhmedEG"
+
+
+def graph_shift(model, video, audio):
+    """Video/audio shifts: an outside MiniMaxH3SigmaShift node wins over defaults."""
+    options = (getattr(model, "model_options", None) or {}).get("transformer_options", {}) or {}
+    return (float(options.get("minimax_h3_sigma_shift_video", video)),
+            float(options.get("minimax_h3_sigma_shift_audio", audio)))
+
+
+def find_antiburn_lora():
+    """The anti-burn LoRA file name under models/loras, or None."""
+    try:
+        import folder_paths
+        names = folder_paths.get_filename_list("loras")
+    except Exception:
+        return None
+    matches = sorted((n.replace("\\", "/") for n in names if "antiburn" in n.lower().replace("-", "").replace("_", "")),
+                     key=lambda n: ("universal" not in n.lower(), n))
+    return matches[0] if matches else None
 
 
 class MiniMaxH3MasterDirector:
@@ -82,7 +103,6 @@ class MiniMaxH3MasterDirector:
             },
             "optional": {
                 "timeline": ("MMX_TIMELINE", {"tooltip":"Optional externally authored clips. Timeline Builder owns prompts, types and durations; Master owns approval and execution."}),
-                "config": ("MMX_DIRECTOR_CONFIG", {"tooltip": "Sampling, canvas, and pipeline settings (MiniMaxH3DirectorSettings)."}),
                 "ref_pack": ("MMX_REF_PACK", {"tooltip": "Reference pool containing images, videos, and audios (MiniMaxH3RefPack)."}),
                 "fl2va_model": ("MODEL", {"lazy": True, "tooltip": "Lazy-loaded FL2VA UNET."}),
                 "ref2va_model": ("MODEL", {"lazy": True, "tooltip": "Lazy-loaded REF2VA UNET."}),
@@ -90,7 +110,8 @@ class MiniMaxH3MasterDirector:
                 "refine": ("MMX_DIR_REFINE", {"tooltip": "Optional 2nd-pass refine and upscale settings."}),
                 "face_refine": ("MMX_DIR_FACE_REFINE", {"tooltip": "Optional FaceRefine close-up tracking & stitch."}),
                 "semantic_bridge": ("MMX_DIR_SEMANTIC_BRIDGE", {"tooltip": "Optional Semantic Bridge student MLP conditioning rewrite."}),
-                "sigmas": ("SIGMAS", {"forceInput": True, "tooltip": "External sigma schedule override."}),
+                "sigmas": ("SIGMAS", {"forceInput": True, "tooltip": "External sigma schedule. When connected it replaces the steps and scheduler settings."}),
+                "steps": ("INT", {"forceInput": True, "tooltip": "Optional steps from another node (for example a LoRA on/off switch). Overrides the steps setting."}),
                 "latent_checkpoint": ("MMX_CONTINUATION", {"tooltip": "Advanced: continue the first chained clip from saved audiovisual latent data. Video-file continuation is configured per clip in the timeline."}),
                 "model_pack": ("MMX_MODEL_PACK", {"tooltip": "Advanced: named models for per-clip overrides."}),
                 "generation_mode": (["Next clip", "All clips", "Conditioning only"], {"default": "Next clip", "tooltip": "Next clip preserves approved takes and generates one unapproved clip. All clips preserves approved takes and generates every eligible unapproved clip. Conditioning only prepares inputs for an external sampler."}),
@@ -225,6 +246,14 @@ class MiniMaxH3MasterDirector:
         # timeline's Generation mode. Source passthrough needs no diffusion model.
         # Extract settings from config with sensible defaults or legacy kwargs
         cfg_dict = config if config and isinstance(config, dict) else {}
+        if not cfg_dict:
+            # Canvas, sampler and output settings are authored on the Master
+            # itself (timeline "settings"); the Settings node is retired.
+            try:
+                raw_timeline = json.loads(timeline_data or "{}") if isinstance(timeline_data, str) else (timeline_data or {})
+                cfg_dict = dict(raw_timeline.get("settings") or {}) if isinstance(raw_timeline, dict) else {}
+            except (json.JSONDecodeError, TypeError):
+                cfg_dict = {}
         width = int(kwargs.get("width", cfg_dict.get("width", 1344)))
         height = int(kwargs.get("height", cfg_dict.get("height", 768)))
         duration = float(kwargs.get("duration", cfg_dict.get("duration", 5.0)))
@@ -509,6 +538,16 @@ class MiniMaxH3MasterDirector:
                 "tail_audio": continuation.get("audio"), "tail_latent": None}
             previous_fingerprint = fingerprint_value([previous_av, frames, continuation.get("audio")])
 
+        def chain_anchor_rgb(clip_idx):
+            """Mean colour of the end of the clip that started this carry chain."""
+            manifest_clips = cache_mgr._manifest.get("clips", {})
+            for index in range(clip_idx - 1, -1, -1):
+                anchor_id = str(clips[index].get("id"))
+                if int(manifest_clips.get(anchor_id, {}).get("trim_prefix", 0) or 0) <= 1:
+                    frames = cache_mgr.load_clip_frames(anchor_id)
+                    return mean_rgb(frames) if frames is not None and frames.shape[0] else None
+            return None
+
         def reuse_saved_take(clip_idx, clip_item, source=None):
             nonlocal last_latent, previous_av, low_carry, previous_tail, previous_fingerprint
             clip_id = str(clip_item["id"])
@@ -576,7 +615,8 @@ class MiniMaxH3MasterDirector:
                 aud_samples_c = min(wf_c.shape[-1], max(1, int(round(56 / frame_rate * sr_c))))
                 cached_tail_aud = {"waveform": wf_c[..., -aud_samples_c:].clone(), "sample_rate": sr_c}
                 saved_look = (cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("media_recovery") or {}).get("color", clip_item.get("color"))
-                graded_tail = cached_frames[-tail_count:].clone()
+                saved_hold = cache_mgr._manifest.get("clips", {}).get(clip_id, {}).get("hold_gain")
+                graded_tail = undo_hold(cached_frames[-tail_count:].clone(), saved_hold, int(cached_frames.shape[0]))
                 context_tail = undo_image_edits(graded_tail, saved_look)
                 previous_tail = {
                     "last_frame": context_tail[-1:].clone(),
@@ -704,7 +744,21 @@ class MiniMaxH3MasterDirector:
             if canon_mode == MODE_INPAINT:
                 clip_continuity = False
                 clip_dur = 5 / FPS
-            clip_lora_files = resolve_lora_files(clip_item.get("loras", [])) if clip_item.get("loras") and not clip_item.get("locked") else []
+            carry_mode = clip_continuity_mode in ("Motion Context (Chained)", "Latent Carry (Pinned)")
+            clip_auto_fix = bool(clip_item.get("auto_fix", True))
+            clip_start_look = clean_look(clip_item.get("start_look")) if canon_mode in ("I2VA", "FL2VA") else None
+            clip_tail_look = clean_look(clip_item.get("tail_look")) if carry_mode else None
+            clip_hold_look = bool(clip_item.get("hold_look", False)) and carry_mode
+            clip_lora_rows = list(clip_item.get("loras") or [])
+            antiburn = clip_item.get("antiburn") or {}
+            if (clip_continuity and carry_mode and previous_tail is not None and antiburn.get("enabled", True)
+                    and not clip_item.get("locked") and canon_mode not in ("V2V", "RV2V", MODE_INPAINT)):
+                antiburn_file = find_antiburn_lora()
+                if antiburn_file is None:
+                    log.warning("Master Director: clip %s continues another clip but no anti-burn LoRA file was found in models/loras.", clip_id)
+                elif not any(str(row.get("name", "")).replace("\\", "/") == antiburn_file for row in clip_lora_rows if isinstance(row, dict)):
+                    clip_lora_rows.append({"name": antiburn_file, "strength": float(antiburn.get("strength", 0.5)), "enabled": True})
+            clip_lora_files = resolve_lora_files(clip_lora_rows) if clip_lora_rows and not clip_item.get("locked") else []
 
             # Select model for this clip
             clip_active_model = fl2va_model if get_required_model_type(canon_mode) == "fl2va" else ref2va_model
@@ -810,25 +864,26 @@ class MiniMaxH3MasterDirector:
                 last_frame = None
                 is_chained_from_previous = False
             elif canon_mode == "I2VA":
-                if local_imgs:
+                if not is_chained_from_previous:
+                    if len(local_imgs) != 1:
+                        raise ValueError(f"Clip {clip_idx + 1}: I2V needs exactly one start image when it does not continue from the previous clip's last frame.")
                     first_frame = local_imgs[0]
-                    is_chained_from_previous = False
+                first_frame = apply_look(first_frame, clip_start_look)
             elif canon_mode == "L2VA":
                 if local_imgs:
                     last_frame = local_imgs[0]
                 first_frame = None
                 is_chained_from_previous = False
             elif canon_mode == "FL2VA":
-                if len(local_imgs) >= 2:
-                    first_frame = local_imgs[0]
-                    last_frame = local_imgs[1]
-                    is_chained_from_previous = False
-                elif len(local_imgs) == 1:
-                    if first_frame is not None:
-                        last_frame = local_imgs[0]
-                    else:
-                        first_frame = local_imgs[0]
-                        is_chained_from_previous = False
+                if is_chained_from_previous:
+                    if len(local_imgs) != 1:
+                        raise ValueError(f"Clip {clip_idx + 1}: FL2V continuing from the previous clip needs exactly one end image.")
+                    last_frame = local_imgs[0]
+                else:
+                    if len(local_imgs) != 2:
+                        raise ValueError(f"Clip {clip_idx + 1}: FL2V needs a start image and an end image.")
+                    first_frame, last_frame = local_imgs[0], local_imgs[1]
+                first_frame = apply_look(first_frame, clip_start_look)
             elif canon_mode in ("V2V", "REF2VA", "RV2V"):
                 first_frame = None
                 for i, img in enumerate(local_imgs):
@@ -908,9 +963,6 @@ class MiniMaxH3MasterDirector:
             visible_frames = source["frames"].shape[0] if source is not None else align_frame_count(int(clip_dur * FPS))
             continuation_prefix = 0
             latent_carry = clip_continuity_mode == "Latent Carry (Pinned)"
-            # Pure carry mirrors H3 Continuity Studio's plain masked continuation
-            # (core/studio_carry.py): frozen carried tokens, no chain corrections.
-            pure_carry = latent_carry and bool(clip_item.get("pure_carry", timeline.get("pure_carry", False)))
             continuity_source = None
             if source is None and canon_mode != MODE_INPAINT and clip_continuity and previous_tail is not None:
                 frames = previous_tail.get("tail_frames")
@@ -921,18 +973,8 @@ class MiniMaxH3MasterDirector:
                         from ..core.continuity import continuity_frame_budget
                     except ImportError:
                         from core.continuity import continuity_frame_budget
-                    if pure_carry:
-                        try:
-                            from ..core.studio_carry import continuing_budget
-                        except ImportError:
-                            from core.studio_carry import continuing_budget
-                        sample_frames, visible_frames = continuing_budget(visible_frames, count)
-                    else:
-                        sample_frames, visible_frames = continuity_frame_budget(visible_frames, count, clip_duration_policy)
+                    sample_frames, visible_frames = continuity_frame_budget(visible_frames, count, clip_duration_policy)
                     clip_dur = sample_frames / FPS
-                    if pure_carry and previous_tail.get("last_frame") is not None:
-                        # Studio's continuation_guide: the previous clip's last frame guides the first new frame.
-                        guide_frames = [*(guide_frames or []), {"frame": previous_tail["last_frame"][-1:], "frame_idx": count}]
                     if first_frame is not None and not is_chained_from_previous:
                         guide_frames = [*(guide_frames or []), {"frame": first_frame, "frame_idx": count}]
                     first_frame = None
@@ -1117,7 +1159,18 @@ class MiniMaxH3MasterDirector:
             # Carry a copy whose sharpness cannot exceed the chain's baseline, so
             # grain/contrast do not ratchet up hop after hop (delivered clips unchanged).
             carry_av = previous_av
-            if continuation_prefix and previous_av is not None and not pure_carry:
+            carry_tail = previous_tail
+            carry_end = previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None
+            if continuation_prefix and clip_tail_look is not None and previous_tail is not None:
+                # Manual tail look: the graded pixels are encoded as the context
+                # (the latent tail cannot be graded directly).
+                carry_tail = {**previous_tail,
+                    "tail_frames": apply_look(previous_tail["tail_frames"], clip_tail_look),
+                    "display_tail": apply_look(previous_tail.get("display_tail", previous_tail["tail_frames"]), clip_tail_look)}
+                carry_tail["last_frame"] = carry_tail["tail_frames"][-1:]
+                carry_av = carry_end = None
+                log.info("Master Director: clip %s continues from a graded copy of the previous tail.", clip_id)
+            if continuation_prefix and carry_av is not None and clip_auto_fix:
                 carry_av, softened = guard_carried_sharpness(previous_av, chain_baseline())
                 if softened:
                     log.info("Master Director: carried context for clip %s softened %.2f to the chain's baseline sharpness.", clip_id, softened)
@@ -1127,34 +1180,20 @@ class MiniMaxH3MasterDirector:
                 except ImportError:
                     from core.motion_context import apply_motion_context
                 positive, trim_count, previous_trim, continuity_source = apply_motion_context(
-                    positive, latent, previous_av=carry_av, previous_tail=previous_tail,
+                    positive, latent, previous_av=carry_av, previous_tail=carry_tail,
                     vae=video_vae, audio_vae=audio_vae, context_frames=continuation_prefix,
-                    audio_frames=clip_audio_context,
-                    context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None)
+                    audio_frames=clip_audio_context, context_end_frame=carry_end)
                 is_chained_from_previous = trim_count
                 clip_chained_flags[clip_idx] = trim_count
-            if pure_carry and continuation_prefix:
-                try:
-                    from ..core.studio_carry import build_continuation
-                except ImportError:
-                    from core.studio_carry import build_continuation
-                latent, carried_tokens, carried_ticks = build_continuation(latent, carry_av, continuation_prefix,
-                                                                           carry_audio=clip_audio_context > 0)
-                log.info("Master Director: clip %s pure carry: %d frames (%d tokens, %d audio ticks) frozen, guide at frame %d.",
-                         clip_id, continuation_prefix, carried_tokens, carried_ticks, continuation_prefix)
-                trim_count, previous_trim, continuity_source = continuation_prefix, 0, "latent_carry"
-                is_chained_from_previous = trim_count
-                clip_chained_flags[clip_idx] = trim_count
-            elif latent_carry and continuation_prefix:
+            if latent_carry and continuation_prefix:
                 try:
                     from ..core.vendor.aimixer.director.h3_latent_continue import apply_latent_continue
                 except ImportError:
                     from core.vendor.aimixer.director.h3_latent_continue import apply_latent_continue
                 latent, trim_count, previous_trim = apply_latent_continue(latent,
-                    prev_av=carry_av, prev_tail=previous_tail["tail_frames"], vae=video_vae,
-                    context_length=continuation_prefix,
-                    context_end_frame=previous_av.get("_mmx_visible_end") if previous_av and clip_duration_policy == "new" else None,
-                    context_audio=previous_tail.get("tail_audio"), audio_vae=audio_vae,
+                    prev_av=carry_av, prev_tail=carry_tail["tail_frames"], vae=video_vae,
+                    context_length=continuation_prefix, context_end_frame=carry_end,
+                    context_audio=carry_tail.get("tail_audio"), audio_vae=audio_vae,
                     pin_audio=clip_audio_context > 0, audio_context_length=clip_audio_context,
                     seam_min_mask=clip_item.get("continuity_redraw", timeline.get("continuity_redraw", .1)))
                 continuity_source = "latent_carry"
@@ -1192,7 +1231,9 @@ class MiniMaxH3MasterDirector:
                     "audio_context_length": clip_audio_context, "continuity_duration_policy": clip_duration_policy,
                     "native_guide_signature": native_guide_signature,
                     "ref_image_size": str(group.get("ref_image_size", "match") if group else "match"),
-                    **(({"pure_carry": 2} if pure_carry else {"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1}) if is_chained_from_previous else {}),
+                    **(({"carry_sharpness_guard": 1, "chain_contrast_anchor": 1, "join_colour_bias": 1} if clip_auto_fix else {"auto_fix": 0}) if is_chained_from_previous else {}),
+                    **({"tail_look": clip_tail_look} if clip_tail_look else {}),
+                    **({"hold_look": 1} if clip_hold_look and is_chained_from_previous else {}),
                     "tail_seconds": clip_tail_sec, "guides": guide_frames, "model": clip_active_model,
                     "audio_mode": audio_mode, "source_audio": source["audio"] if source is not None else None,
                     "color":clip_item.get('color'),"continuity_redraw":clip_item.get('continuity_redraw',timeline.get('continuity_redraw',.1)),
@@ -1281,7 +1322,7 @@ class MiniMaxH3MasterDirector:
                 shot_event(unique_id,project_id,clip_id,'sampling',index=clip_idx+1,total=len(clips))
                 try:
                     from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
-                    shifted_model = shifted_model_for(clip_active_model,float(shift_video),float(shift_audio))
+                    shifted_model = shifted_model_for(clip_active_model,*graph_shift(clip_active_model,shift_video,shift_audio))
                 except ImportError as exc: raise RuntimeError('Native H3 SigmaShift is required.') from exc
                 negative=[[torch.zeros_like(emb),dict(meta)] for emb,meta in positive]
             else:
@@ -1290,7 +1331,7 @@ class MiniMaxH3MasterDirector:
 
                 try:
                     from comfy_extras.nodes_minimax_h3 import MiniMaxH3SigmaShift
-                    shifted_model = shifted_model_for(clip_active_model, float(shift_video), float(shift_audio))
+                    shifted_model = shifted_model_for(clip_active_model, *graph_shift(clip_active_model, shift_video, shift_audio))
                 except ImportError as exc:
                     raise RuntimeError("Update ComfyUI: native MiniMaxH3SigmaShift is required for correct AV sampling.") from exc
 
@@ -1373,7 +1414,7 @@ class MiniMaxH3MasterDirector:
                 before_refine(shifted_model)
                 refine_model = refine.get("refine_model")
                 if refine_model is not None:
-                    refine_model = shifted_model_for(refine_model, shift_video, shift_audio)
+                    refine_model = shifted_model_for(refine_model, *graph_shift(refine_model, shift_video, shift_audio))
                 sampled_latent = apply_refine_pass(
                     model=shifted_model,
                     latent_dict=sampled_latent,
@@ -1407,7 +1448,7 @@ class MiniMaxH3MasterDirector:
             # Seamless at the join, contrast tied to the chain's first clip: H3
             # re-renders the overlap a few percent more contrasty, which used to
             # compound hop after hop (see anchor_chain_contrast).
-            if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry") and not pure_carry:
+            if is_chained_from_previous and carry_av is not None and continuity_source in ("sampled_latent", "latent_carry") and clip_auto_fix:
                 try:
                     from ..core.vendor.aimixer.director.h3_motion_context import _video_tail_blocks
                 except ImportError:
@@ -1456,12 +1497,13 @@ class MiniMaxH3MasterDirector:
                 from core.output_retention import process_video_frames
             decoded_frames = process_video_frames(decoded_frames, cache_mgr.project_dir,
                 lambda pixels: edit_images(pixels, clip_item.get('color')))
-            if clip_idx > 0 and clip_continuity and previous_tail is not None and "tail_frames" in previous_tail:
+            seam_grade = (clip_auto_fix and carry_mode) or (clip_continuity_mode == "Last Frame (Start Image)" and clip_start_look is None)
+            if seam_grade and clip_idx > 0 and clip_continuity and previous_tail is not None and "tail_frames" in previous_tail:
                 try:
                     blend_w = min(12, int(decoded_frames.shape[0]))
                     decoded_frames = match_color_temperature_and_grade(
                         decoded_frames,
-                        previous_tail.get("display_tail", previous_tail["tail_frames"]),
+                        carry_tail.get("display_tail", carry_tail["tail_frames"]),
                         blend_window=blend_w, inplace=True,
                     )
                 except Exception as cg_err:
@@ -1477,6 +1519,17 @@ class MiniMaxH3MasterDirector:
                 decoded_frames, face_report = refine_tracked_faces(decoded_frames, shifted_model,
                     video_vae, audio_vae, clip, clip_seed, face_refine, cfg,
                     ref_images=ref_images, continuity=clip_continuity)
+
+            hold = None
+            if clip_hold_look and is_chained_from_previous and source is None:
+                anchor_rgb = chain_anchor_rgb(clip_idx)
+                if anchor_rgb is not None:
+                    previous_hold = cache_mgr._manifest.get("clips", {}).get(str(clips[clip_idx - 1].get("id")), {}).get("hold_gain") or {}
+                    start = previous_hold.get("end", [1.0, 1.0, 1.0])
+                    hold = {"start": start, "end": hold_target(anchor_rgb, mean_rgb(decoded_frames))}
+                    decoded_frames = apply_hold(decoded_frames, hold, cache_mgr.project_dir)
+                    log.info("Master Director: clip %s look held to chain start (gain %s -> %s).", clip_id,
+                             [round(v, 3) for v in hold["start"]], [round(v, 3) for v in hold["end"]])
 
             # Keep the finalized pixels reclaimable before staging AudioVAE.
             # Sampling work tensors no longer participate in either decoder.
@@ -1523,6 +1576,7 @@ class MiniMaxH3MasterDirector:
                 clear_dependent_approvals(invalidated)
                 if source is not None: cache_mgr.store_source_media(clip_id,source.get("original_frames",source["frames"]),source["audio"])
                 cache_mgr.update_clip_metadata(clip_id, {"trim_prefix": int(is_chained_from_previous), "previous_trim": int(previous_trim), "seed": str(clip_seed), "mode": canon_mode,
+                    "hold_gain": hold,
                     'preflight_key':preflight.key(clip_idx),
                     'model_identity':model_identity(preflight.graph,preflight.node_id,clip_item.get('type','T2V')) if isinstance(preflight.graph,dict) else None,
                     'cache_report':cache_report(),
@@ -1548,7 +1602,7 @@ class MiniMaxH3MasterDirector:
             # The next clip continues from the ungraded generation (a graded tail
             # would be continued and graded again, compounding the Look); the
             # graded tail is kept only for seam colour matching.
-            graded_tail = decoded_frames[-tail_count:].clone()
+            graded_tail = undo_hold(decoded_frames[-tail_count:].clone(), hold, int(decoded_frames.shape[0]))
             context_tail = undo_image_edits(graded_tail, clip_item.get('color'))
             previous_tail = {
                 "last_frame": context_tail[-1:].clone(),

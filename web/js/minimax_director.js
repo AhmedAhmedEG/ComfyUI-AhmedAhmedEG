@@ -2,6 +2,9 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 import {transferRequest,transferLabel} from "./minimax_transfer.js";
+import {createLookEditor,lookIsNeutral} from "./minimax_look.js";
+
+const CONTINUITY_MODES={independent:"Independent (No Continuity)",motion:"Motion Context (Chained)",carry:"Latent Carry (Pinned)",frame:"Last Frame (Start Image)"};
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -2330,6 +2333,67 @@ const embeddedCSS = `
 .mmx-director-root .mmx-edit-tools .mmx-field:has(> input[type=range]) > input[type=range] { grid-column:1/-1;grid-row:2;width:100%;margin:0;accent-color:var(--mmx-accent,#a396ff); }
 .mmx-director-root .mmx-edit-tools .mmx-field:has(> input[type=range]) > span { grid-column:2;grid-row:1;min-width:42px;padding:1px 6px;border:1px solid #39434d;border-radius:5px;background:#1b2026;color:#e8edf2;text-align:right;font-variant-numeric:tabular-nums;font-size:11.5px; }
 /* Clip LoRA cards */
+.mmx-director-root .mmx-settings-bar { display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:7px 12px;margin:0 0 8px;background:#1d2228;border:1px solid #333d47;border-radius:8px; }
+.mmx-director-root .mmx-setting { display:inline-flex;align-items:center;gap:6px;margin:0;font-size:12px;color:#e1e7ef;white-space:nowrap; }
+.mmx-director-root .mmx-setting > span:first-child { font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8ea2b4; }
+.mmx-director-root .mmx-setting select,.mmx-director-root .mmx-setting input { height:26px;min-height:26px;padding:0 6px!important;border:1px solid #46525e;border-radius:6px;background:#1b2026;color:#e8edf2;font-size:12px!important; }
+.mmx-director-root .mmx-setting select { max-width:128px; }
+.mmx-director-root .mmx-setting-size { display:inline-flex;align-items:center;gap:4px;color:#8ea2b4; }
+.mmx-director-root .mmx-setting-divider { width:1px;height:20px;background:#3a444e; }
+.mmx-director-root .mmx-setting-external select:disabled,.mmx-director-root .mmx-setting-external input:disabled { opacity:.45;cursor:not-allowed; }
+.mmx-director-root .mmx-setting-note { font-size:11px;color:#7d8e9e; }
+.mmx-director-root .mmx-switch-row { display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;cursor:pointer; }
+.mmx-director-root .mmx-switch-row.disabled { opacity:.55;cursor:default; }
+.mmx-director-root .mmx-switch-row .mmx-lora-switch { margin-top:1px; }
+.mmx-director-root .mmx-switch-text { display:flex;flex-direction:column;gap:2px;min-width:0; }
+.mmx-director-root .mmx-switch-text strong { font-size:12.5px;color:#e8edf2;font-weight:600; }
+.mmx-director-root .mmx-switch-text small { font-size:11.5px;color:#9fb0c0;line-height:1.4; }
+.mmx-director-root .mmx-switch-group { display:flex;flex-direction:column;margin:6px 0 4px;padding:4px 12px;border:1px solid #333d47;border-radius:8px;background:#1d2228; }
+.mmx-director-root .mmx-switch-group .mmx-continuity-mode-note { margin:2px 0 8px;padding-left:42px;font-size:11.5px;color:#9fb0c0;line-height:1.4; }
+.mmx-director-root .mmx-form-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 14px;margin:6px 0; }
+.mmx-director-root .mmx-look-section { margin-top:12px;padding:10px 12px 12px;border:1px solid #333d47;border-radius:8px;background:#1d2228; }
+.mmx-director-root .mmx-look-head { display:flex;align-items:center;gap:8px;margin-bottom:4px; }
+.mmx-director-root .mmx-look-head strong { font-size:12.5px;color:#e8edf2; }
+.mmx-director-root .mmx-look-badge { font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#1b1530;background:var(--mmx-accent,#a396ff);border-radius:4px;padding:1px 6px; }
+.mmx-director-root .mmx-look-section .mmx-continuity-mode-note { margin:0 0 8px;font-size:11.5px;color:#9fb0c0;line-height:1.4; }
+.mmx-director-root .mmx-look-stage { position:relative;width:fit-content;max-width:100%;margin:0 auto;border-radius:6px;overflow:hidden;background:#111418;min-height:90px; }
+.mmx-director-root .mmx-look-stage.mmx-look-missing { width:auto; }
+.mmx-director-root .mmx-look-canvas { display:block;width:auto;height:auto;max-width:100%;max-height:300px; }
+.mmx-director-root .mmx-look-split { position:absolute;inset:0;width:100%!important;height:100%;margin:0;opacity:0;cursor:ew-resize; }
+.mmx-director-root .mmx-look-labels { position:absolute;left:0;right:0;top:6px;display:flex;justify-content:space-between;padding:0 8px;pointer-events:none; }
+.mmx-director-root .mmx-look-labels span { font-size:10.5px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:4px; }
+.mmx-director-root .mmx-look-empty { display:flex;align-items:center;justify-content:center;min-height:90px;padding:14px;text-align:center;font-size:11.5px;color:#8ea2b4; }
+.mmx-director-root .mmx-look-empty[hidden] { display:none; }
+.mmx-director-root .mmx-look-missing .mmx-look-canvas,.mmx-director-root .mmx-look-missing .mmx-look-labels,.mmx-director-root .mmx-look-missing .mmx-look-split { display:none; }
+.mmx-director-root .mmx-look-readout { display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 2px;font-size:11px;color:#9fb0c0;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-look-readout:empty { display:none; }
+.mmx-director-root .mmx-look-readout b { color:#e8edf2;font-weight:600; }
+.mmx-director-root .mmx-look-readout em { font-style:normal;margin-left:3px;color:#9fb0c0; }
+.mmx-director-root .mmx-look-readout em.up { color:#f0c674; }
+.mmx-director-root .mmx-look-readout em.down { color:#7fb8e6; }
+.mmx-director-root .mmx-look-readout small { flex-basis:100%;font-size:10.5px;color:#7d8e9e; }
+.mmx-director-root .mmx-look-controls { display:flex;flex-direction:column;gap:2px;margin-top:8px; }
+.mmx-director-root .mmx-look-row { display:grid;grid-template-columns:92px minmax(0,1fr) 92px 24px;align-items:center;gap:8px;font-size:11.5px;color:#b9c6d2; }
+.mmx-director-root .mmx-look-row input[type=range] { width:100%;margin:0;accent-color:var(--mmx-accent,#a396ff); }
+.mmx-director-root .mmx-look-row output { text-align:right;font-variant-numeric:tabular-nums;color:#8ea2b4;font-size:11px;white-space:nowrap; }
+.mmx-director-root .mmx-look-row.changed span,.mmx-director-root .mmx-look-row.changed output { color:#e8edf2; }
+.mmx-director-root .mmx-look-reset { width:24px;height:22px;min-height:22px;padding:0;border:1px solid transparent;border-radius:5px;background:transparent;color:#6f8090;cursor:pointer;font-size:13px;line-height:1; }
+.mmx-director-root .mmx-look-row.changed .mmx-look-reset { color:#dfe7ee;border-color:#4b5866; }
+.mmx-director-root .mmx-look-reset-all { align-self:flex-end;margin-top:6px;height:26px;padding:0 10px;border:1px solid #4b5866;border-radius:6px;background:#2c343d;color:#dfe7ee;font-size:11.5px;cursor:pointer; }
+.mmx-director-root .mmx-join-result { margin-top:12px; }
+.mmx-director-root .mmx-join-result > strong { font-size:12.5px;color:#e8edf2; }
+.mmx-director-root .mmx-join-pair { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px; }
+.mmx-director-root .mmx-join-pair figure { margin:0; }
+.mmx-director-root .mmx-join-pair img { display:block;width:100%;border-radius:5px; }
+.mmx-director-root .mmx-join-pair figcaption { font-size:10.5px;color:#8ea2b4;margin-top:3px; }
+.mmx-director-root .mmx-lora-auto { border-left-color:#5fb39a; }
+.mmx-director-root .mmx-lora-auto-name { display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;min-width:0;font-size:12.5px;color:#e8edf2; }
+.mmx-director-root .mmx-lora-auto-name small { flex-basis:100%;font-size:11px;color:#8ea2b4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.mmx-director-root .mmx-auto-badge { font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0f2a22;background:#5fb39a;border-radius:4px;padding:1px 6px; }
+.mmx-director-root .mmx-lora-auto .mmx-lora-card-head { grid-template-columns:auto minmax(0,1fr); }
+.mmx-director-root .mmx-lora-auto-note { font-size:11px;color:#8ea2b4;line-height:1.4;padding-left:40px; }
+.mmx-director-root .mmx-lora-missing .mmx-lora-auto-name small { color:#e6a36f;white-space:normal; }
+.mmx-director-root .mmx-legacy-note { display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;border:1px dashed #6b5a3a;border-radius:6px;font-size:11.5px;color:#e6cf9f; }
 .mmx-director-root .mmx-lora-list { display:flex;flex-direction:column;gap:8px;margin:4px 0 10px; }
 .mmx-director-root .mmx-lora-empty { padding:12px;border:1px dashed #3f4953;border-radius:8px;color:#8ea2b4;font-size:12px;text-align:center; }
 .mmx-director-root .mmx-lora-card { display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid #39434d;border-left:3px solid var(--mmx-accent,#a396ff);border-radius:8px;background:#1f252b;transition:opacity .15s,border-color .15s; }
@@ -3561,7 +3625,7 @@ function mountDirectorUI(node) {
     generationWidget.callback=function(value,...args){prior?.call(this,value,...args);timelineState.generation_mode=generationDisplay(value);syncState();};
   }
 
-  finishSection(projectTools,"Named server projects, file backups and recovery. Canvas and sampling are configured in the connected Settings node.");
+  finishSection(projectTools,"Named server projects, file backups and recovery. Canvas and sampling are set in the settings bar at the top of this node.");
   projectTools.classList.add("mmx-project-workspace");
   const group=(title,...controls)=>{const box=document.createElement("section");box.className="mmx-project-group";const heading=document.createElement("h3");heading.textContent=title;box.append(heading,...controls);return box;};
   const sharedPromptSection=document.createElement("section");sharedPromptSection.className="mmx-shared-prompt";
@@ -3576,6 +3640,54 @@ function mountDirectorUI(node) {
   const audioGroup=group("Output Audio",fadeLabel,gainLabel);
   audioGroup.classList.add("mmx-timeline-audio");
   audioGroup.title="Applies when joining completed clips: fades edges to reduce clicks and matches loudness. Separate from generation and continuity context.";
+  // Canvas, sampler and output settings (formerly the separate Settings node).
+  const settingsBar=document.createElement("section");settingsBar.className="mmx-settings-bar";
+  let samplerChoices=null;
+  const samplerChoicesReady=()=>samplerChoices ||= api.fetchApi("/object_info/KSampler").then(r=>r.json()).then(info=>{
+    const req=info?.KSampler?.input?.required || {};
+    return {samplers:req.sampler_name?.[0] || [],schedulers:req.scheduler?.[0] || []};
+  }).catch(()=>({samplers:[],schedulers:[]}));
+  const socketLinked=name=>node.inputs?.some(input=>input.name===name && input.link!=null);
+  const renderSettingsBar=()=>{
+    const st=timelineState.settings ||= {};
+    const res=st.resolution ||= {mode:"manual",width:st.width ?? 1344,height:st.height ?? 768,megapixels:1,aspect:"16:9"};
+    const save=()=>{if(res.mode==="manual"){st.width=Number(res.width);st.height=Number(res.height);}syncState();};
+    settingsBar.replaceChildren();
+    const item=(label,control,title="")=>{const wrap=document.createElement("label");wrap.className="mmx-setting";if(title)wrap.title=title;const cap=document.createElement("span");cap.textContent=label;wrap.append(cap,control);settingsBar.append(wrap);return wrap;};
+    const select=(values,value,onchange)=>{const el=document.createElement("select");for(const [v,t] of values){const o=document.createElement("option");o.value=v;o.textContent=t;el.append(o);}
+      if(value!=null && ![...el.options].some(o=>o.value===String(value))){const o=document.createElement("option");o.value=value;o.textContent=value;el.append(o);}el.value=String(value);el.onchange=()=>onchange(el.value);return el;};
+    const number=(value,min,max,step,onchange,width=64)=>{const el=document.createElement("input");el.type="number";el.min=min;el.max=max;el.step=step;el.value=value;el.style.width=width+"px";
+      el.onchange=()=>{let v=Number(el.value);if(!Number.isFinite(v))v=Number(min);v=Math.max(Number(min),Math.min(Number(max),v));if(step>=1)v=Math.round(v/step)*step;el.value=v;onchange(v);};return el;};
+    item("Canvas",select([["manual","Manual"],["original","Original size"],["auto","Auto"]],res.mode||"manual",v=>{res.mode=v;save();renderSettingsBar();}),"Manual: width and height below. Original: follow the source video. Auto: megapixels and aspect.");
+    if((res.mode||"manual")==="manual"){
+      const size=document.createElement("span");size.className="mmx-setting-size";
+      size.append(number(res.width ?? 1344,32,4096,32,v=>{res.width=v;save();},68),Object.assign(document.createElement("span"),{textContent:"×"}),number(res.height ?? 768,32,4096,32,v=>{res.height=v;save();},68));
+      item("Size",size,"Pixels; multiples of 32.");
+    } else if(res.mode==="auto"){
+      item("Megapixels",number(res.megapixels ?? 1,0.1,16,0.1,v=>{res.megapixels=v;save();},60));
+      item("Aspect",select(["16:9","9:16","1:1","4:3","3:4","21:9","3:2","2:3","auto"].map(v=>[v,v]),res.aspect||"16:9",v=>{res.aspect=v;save();}));
+    }
+    const divider=()=>{const d=document.createElement("span");d.className="mmx-setting-divider";settingsBar.append(d);};
+    divider();
+    const sampler=select([[st.sampler||"res_multistep",st.sampler||"res_multistep"]],st.sampler||"res_multistep",v=>{st.sampler=v;save();});
+    const scheduler=select([[st.scheduler||"simple",st.scheduler||"simple"]],st.scheduler||"simple",v=>{st.scheduler=v;save();});
+    samplerChoicesReady().then(({samplers,schedulers})=>{
+      for(const [el,list] of [[sampler,samplers],[scheduler,schedulers]]){const keep=el.value;for(const v of list)if(![...el.options].some(o=>o.value===v)){const o=document.createElement("option");o.value=v;o.textContent=v;el.append(o);}el.value=keep;}
+    });
+    item("Sampler",sampler,"Sampling method used for every clip.");
+    item("CFG",number(st.cfg ?? 1,0,20,0.1,v=>{st.cfg=v;save();},54),"Guidance scale. 1.0 for distilled or Lightning setups.");
+    const sigmas=socketLinked("sigmas"),stepsLinked=socketLinked("steps");
+    const steps=number(st.steps ?? 25,1,200,1,v=>{st.steps=v;save();},54);steps.disabled=sigmas||stepsLinked;
+    item("Steps",steps,sigmas?"Set by the connected sigmas input.":stepsLinked?"Set by the connected steps input.":"Sampling steps.").classList.toggle("mmx-setting-external",sigmas||stepsLinked);
+    scheduler.disabled=sigmas;
+    item("Scheduler",scheduler,sigmas?"Set by the connected sigmas input.":"Noise schedule.").classList.toggle("mmx-setting-external",sigmas);
+    for(const wrap of settingsBar.querySelectorAll(".mmx-setting-external")){const tag=document.createElement("span");tag.className="mmx-setting-note";tag.textContent=sigmas?"(sigmas)":"(input)";wrap.append(tag);}
+    divider();
+    item("Output",select([["latest","Latest clip"],["full","Full sequence"]],st.decoded_output||"latest",v=>{st.decoded_output=v;save();}),
+      "Latest returns the last generated clip as frames (all clips still save for Smart Preview and Project Video). Full assembles every clip.");
+  };
+  renderSettingsBar();
+  root.append(settingsBar);
   root.append(projectTools);
 
 
@@ -4001,10 +4113,20 @@ function mountDirectorUI(node) {
   };
 
   // Render Multi-Track Timeline & Clips
+  const isStartImageClip = clip => ['I2VA','FL2VA','I2V','FL2V'].includes(String(clip?.type || '').toUpperCase()) && !clip?.locked;
+  const effectiveContinuity = clip => {
+    const M=CONTINUITY_MODES;
+    let value=clip.continuity===false || clip.locked || clip.source ? M.independent : (clip.continuity_mode || M.independent);
+    if(value==="FL2VA Tail Handoff")value=M.frame;
+    if(value!==M.independent)value=isStartImageClip(clip)?M.frame:value===M.frame?M.carry:value;
+    return value;
+  };
+  const continuesFromLastFrame = clip => timelineState.clips.indexOf(clip)>0 && isStartImageClip(clip) && effectiveContinuity(clip)===CONTINUITY_MODES.frame;
   const clipCode = clip => clip.locked ? 'VIDEO' : ({T2VA:'T2V',I2VA:'I2V',FL2VA:'FL2V',L2VA:'L2V',REF2VA:'REF2V','Image Inpaint':'IMG','IMAGE INPAINT':'IMG'})[clip.type] || clip.type || 'T2V';
   const referenceTypes = clip => {
     const mode=clipCode(clip);
     if (mode==='T2V') return [];
+    if (mode==='I2V' && continuesFromLastFrame(clip)) return [];
     if (['I2V','FL2V','L2V','IMG'].includes(mode)) return ['image'];
     if (['VIDEO','V2V'].includes(mode)) return ['video'];
     return ['image','video','audio','refmod'];
@@ -4012,10 +4134,10 @@ function mountDirectorUI(node) {
   const selectionLimit = (clip,type) => {
     const code=clipCode(clip);
     if(['VIDEO','V2V','I2V','L2V','IMG'].includes(code)) return 1;
-    if(code==='FL2V') return 2;
+    if(code==='FL2V') return continuesFromLastFrame(clip) ? 1 : 2;
     return ({image:9,video:3,audio:3,refmod:12})[type] || 0;
   };
-  const selectionHelp = clip => ({T2V:'Text only.',VIDEO:'Choose exactly one source video.',V2V:'Choose exactly one source video.',I2V:'Choose one opening image.',L2V:'Choose one ending image.',FL2V:'Choose two images in order: opening, then ending. With continuity, one image can supply the ending.',IMG:'Choose exactly one image to edit.'})[clipCode(clip)] || (clipCode(clip)==='RV2V' ? 'The first selected video is the source. Up to 9 images, 3 videos including the source, 3 audio tracks and 12 total assets.' : 'Up to 9 images, 3 videos, 3 audio tracks and 12 total assets. Audio needs a visual reference.');
+  const selectionHelp = clip => continuesFromLastFrame(clip) ? (clipCode(clip)==='FL2V' ? "Choose one end image. The start is the previous clip's last frame." : "Starts from the previous clip's last frame; no references are used.") : ({T2V:'Text only.',VIDEO:'Choose exactly one source video.',V2V:'Choose exactly one source video.',I2V:'Choose exactly one start image.',L2V:'Choose one ending image.',FL2V:'Choose two images in order: start, then end.',IMG:'Choose exactly one image to edit.'})[clipCode(clip)] || (clipCode(clip)==='RV2V' ? 'The first selected video is the source. Up to 9 images, 3 videos including the source, 3 audio tracks and 12 total assets.' : 'Up to 9 images, 3 videos, 3 audio tracks and 12 total assets. Audio needs a visual reference.');
   const activeReferences = clip => (clip.ref_ids || []).map(id=>(timelineState.available_refs || []).find(row=>row.id===id)).filter(row=>row && referenceTypes(clip).includes(row.type));
   const refreshClipResults = async () => {
     const project=timelineState.project_id,request=++cacheStatusRequest;
@@ -4096,15 +4218,15 @@ function mountDirectorUI(node) {
     // Context is borrowed from the preceding clip, not added to visible duration.
     let elapsed=0;
     timelineState.clips.forEach((clip,index)=>{
-      const method=clip.continuity_mode || "Independent (No Continuity)";
-      if (index>0 && clip.continuity!==false && !clip.locked && !clip.source && method!=="Independent (No Continuity)" && !String(clip.type).includes("Inpaint")) {
+      const method=effectiveContinuity(clip);
+      if (index>0 && method!==CONTINUITY_MODES.independent && !String(clip.type).includes("Inpaint")) {
         const external=false;
         const priorDuration=external?Number(clip.continuation_source.end || 0):Number(timelineState.clips[index-1].duration || 5);
         const rawFrames=Math.floor(priorDuration*24);
         const priorFrames=external || timelineState.clips[index-1]?.source?rawFrames:Math.max(5,5+Math.ceil((rawFrames-5)/17)*17);
         const grid=[56,39,22,5].find(count=>count<=priorFrames && count<=Number(clip.context_length || 22)) || 0;
-        const video=method==="FL2VA Tail Handoff"?1:grid;
-        const audio=method==="FL2VA Tail Handoff"?0:Number(clip.audio_context_length ?? video);
+        const video=method===CONTINUITY_MODES.frame?1:grid;
+        const audio=method===CONTINUITY_MODES.frame?0:Number(clip.audio_context_length ?? video);
         if(video>0 || audio>0) {
           const link=document.createElement('span');link.className='mmx-continuity-link';link.dataset.start=elapsed;link.dataset.clipId=clip.id;
           link.dataset.videoFrames=video;link.dataset.audioFrames=audio;link.setAttribute('role','img');
@@ -4683,7 +4805,7 @@ function mountDirectorUI(node) {
     const shotSections = document.createElement("div");
     shotSections.className = "mmx-shot-sections";
     inspector.appendChild(shotSections);
-    const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Clip models, guides and grading";
+    const shotExtras = document.createElement("details"); const extrasTitle = document.createElement("summary"); extrasTitle.textContent = "Clip model and guides";
     shotExtras.appendChild(extrasTitle); shotSections.appendChild(shotExtras);
     const modelOverride = document.createElement("input"); modelOverride.placeholder = "Named model override";
     modelOverride.value = activeClip.model_override || "";
@@ -4713,15 +4835,14 @@ function mountDirectorUI(node) {
     addGuide.title=guideAssets.length?"Place a connected reference at a time within this clip":"Connect image, video or audio assets through Reference Pack first";
     addGuide.onclick = () => { if(!guideAssets.length)return;(activeClip.guides ||= []).push({ ref_id: guideAssets[0].id, time: 0 }); syncState(); drawGuides(); };
     shotExtras.appendChild(addGuide); drawGuides();
-    for (const [key, label, low, high, fallback] of [["exposure","Exposure",-10,10,0],["contrast","Contrast",0,4,1],["saturation","Saturation",0,4,1]]) {
-      const wrap = document.createElement("label"); wrap.className="mmx-field"; wrap.textContent = label;
-      const input = document.createElement("input"); input.type = "range"; input.min = low; input.max = high; input.step = ".05"; input.value = activeClip.color?.[key] ?? fallback;
-      const value = document.createElement("span"); value.textContent = input.value;
-      input.oninput = () => { (activeClip.color ||= {})[key] = Number(input.value); value.textContent = input.value; syncState(); };
-      wrap.append(input,value); shotExtras.appendChild(wrap);
+    if (activeClip.color) {
+      const legacy=document.createElement("div");legacy.className="mmx-legacy-note";
+      legacy.textContent="This clip still has an older after-decode grade. Look adjustments now live in the Continuity tab.";
+      const clear=document.createElement("button");clear.type="button";clear.textContent="Remove old grade";
+      clear.onclick=()=>{delete activeClip.color;syncState();renderInspector();};legacy.append(clear);shotExtras.appendChild(legacy);
     }
 
-    finishSection(shotExtras,"Optional changes for this clip: a model override, interior reference anchors, and grading after decode.");
+    finishSection(shotExtras,"Optional changes for this clip: a model override and interior reference anchors.");
 
     if (["V2V", "RV2V"].includes(activeClip.type)) {
       const sourcePanel = document.createElement("fieldset");
@@ -4843,8 +4964,45 @@ function mountDirectorUI(node) {
     });
     const addLora = document.createElement("button");
     addLora.type = "button"; addLora.className = "mmx-lora-add";
+    const carriesPrevious = timelineState.clips.indexOf(activeClip)>0 && [CONTINUITY_MODES.motion,CONTINUITY_MODES.carry].includes(effectiveContinuity(activeClip));
+    const drawAntiburn = () => {
+      if (!carriesPrevious) return;
+      const burn = activeClip.antiburn || {};
+      const card = document.createElement("div"); card.className = "mmx-lora-card mmx-lora-auto";
+      card.dataset.enabled = String(burn.enabled !== false);
+      const head = document.createElement("div"); head.className = "mmx-lora-card-head";
+      const toggle = document.createElement("label"); toggle.className = "mmx-lora-switch"; toggle.title = "Use the anti-burn LoRA on this clip";
+      const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.checked = burn.enabled !== false; enabled.setAttribute("aria-label", "Anti-burn enabled");
+      const knob = document.createElement("span"); knob.className = "mmx-lora-switch-track"; toggle.append(enabled, knob);
+      const name = document.createElement("div"); name.className = "mmx-lora-auto-name";
+      name.innerHTML = '<strong>Anti-burn</strong> <span class="mmx-auto-badge">Auto</span><small>Checking LoRA folder…</small>';
+      loraNamesReady().then(names => {
+        const file = names.map(n=>String(n).replaceAll("\\","/")).filter(n=>n.toLowerCase().replace(/[-_]/g,"").includes("antiburn")).sort((a,b)=>(!a.toLowerCase().includes("universal"))-(!b.toLowerCase().includes("universal")) || a.localeCompare(b))[0];
+        const small = name.querySelector("small");
+        small.textContent = file ? loraLabel(file) : "No anti-burn LoRA found in models/loras. This clip will run without it.";
+        if (!file) card.classList.add("mmx-lora-missing");
+      }).catch(() => {});
+      head.append(toggle, name);
+      const body = document.createElement("div"); body.className = "mmx-lora-card-body";
+      const label = document.createElement("span"); label.className = "mmx-lora-strength-label"; label.textContent = "Strength";
+      const slider = document.createElement("input"); slider.type = "range"; slider.min = "0"; slider.max = "1.5"; slider.step = "0.05"; slider.className = "mmx-lora-slider";
+      const strength = document.createElement("input"); strength.type = "number"; strength.min = "0"; strength.max = "2"; strength.step = "0.05"; strength.className = "mmx-lora-strength";
+      slider.value = strength.value = Number(burn.strength ?? .5).toFixed(2);
+      const save = value => { const next = {...(activeClip.antiburn || {})}; Object.assign(next, value);
+        if (next.enabled !== false) delete next.enabled; if (Number(next.strength ?? .5) === .5) delete next.strength;
+        if (Object.keys(next).length) activeClip.antiburn = next; else delete activeClip.antiburn; syncState(); };
+      enabled.onchange = () => { card.dataset.enabled = String(enabled.checked); save({enabled: enabled.checked}); };
+      slider.oninput = () => { strength.value = Number(slider.value).toFixed(2); };
+      slider.onchange = () => save({strength: Number(slider.value)});
+      strength.onchange = () => { const v = Math.max(0, Math.min(2, Number(strength.value) || 0)); strength.value = v.toFixed(2); slider.value = Math.min(1.5, v); save({strength: v}); };
+      body.append(label, slider, strength);
+      const note = document.createElement("small"); note.className = "mmx-lora-auto-note";
+      note.textContent = "Added automatically because this clip continues the previous one. Speed LoRAs such as Lightning stay in your workflow, outside the Master node.";
+      card.append(head, body, note); loraRows.appendChild(card);
+    };
     const drawLoras = () => {
       loraRows.replaceChildren();
+      drawAntiburn();
       if (!activeClip.loras.length) {
         const empty = document.createElement("div"); empty.className = "mmx-lora-empty";
         empty.textContent = "No LoRAs on this clip. The model runs as loaded in the workflow.";
@@ -5109,42 +5267,105 @@ function mountDirectorUI(node) {
     const continuityPanel=document.createElement("details");continuityPanel.open=true;
     continuityPanel.hidden=!!activeClip.locked || ["V2V","RV2V","IMAGE INPAINT","INPAINT"].includes(String(activeClip.type).toUpperCase());
     const continuityTitle=document.createElement("summary");continuityTitle.textContent="Continuity · context from previous clip";continuityPanel.append(continuityTitle);
-    const continuityModes=["Independent (No Continuity)","Motion Context (Chained)","Latent Carry (Pinned)","FL2VA Tail Handoff"];
-    const continuityMode=document.createElement("select");continuityMode.className="mmx-shot-continuity-mode";
-    for (const method of continuityModes) {const option=document.createElement("option");option.value=method;option.textContent=method.replace(/ \(.*\)$/, "");continuityMode.append(option);}
-    continuityMode.value=activeClip.continuity_mode || "Independent (No Continuity)";
-    const commitContinuity=()=>{activeClip.continuity=continuityMode.value!==continuityModes[0];activeClip.continuity_mode=continuityMode.value;syncState();renderTimeline();};
-    continuityMode.onchange=commitContinuity;
-    continuityPanel.append(field("Method",continuityMode,"Independent starts fresh. Motion Context uses saved audiovisual latent guides, with decoded footage as a fallback. Latent Carry copies the tail into the sample with tapered redraw masks. FL2VA hands off one final frame."));
-    if([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) for (const [key,title,choices,fallback] of [["context_length","Video Context (Seconds)",[5,22,39,56],22],["audio_context_length","Audio Context (Seconds)",[0,5,22,24,39,56],22]]) {
-      const input=document.createElement("select");input.className="mmx-shot-"+key;
-      for (const value of choices){const option=document.createElement("option");option.value=value;option.textContent=value===0?"Off":`${(value/24).toFixed(2)} s (${value} frames)`;input.append(option);}
-      input.value=activeClip[key] ?? fallback;input.disabled=!!activeClip.locked || [continuityModes[0],continuityModes[3]].includes(continuityMode.value);
-      input.onchange=()=>{activeClip[key]=Number(input.value);commitContinuity();};
-      continuityPanel.append(field(title,input,key==="audio_context_length"?"Audio is independent of video context: 24 frames = 1 second. Off disables audio carry.":"Context is sampled before the new clip and removed from its delivered frames."));
-    }
-    if ([continuityModes[1],continuityModes[2]].includes(continuityMode.value)) {
-      const policy=document.createElement("select");policy.className="mmx-shot-continuity-duration-policy";
-      for (const [value,label] of [["new","Keep full clip length"],["total","Shorten by reused frames"]]) {
-        const option=document.createElement("option");option.value=value;option.textContent=label;policy.append(option);
+    const MODE=CONTINUITY_MODES;
+    const clipIndex=timelineState.clips.indexOf(activeClip), previousClip=timelineState.clips[clipIndex-1];
+    const startImage=isStartImageClip(activeClip);
+    const mode=effectiveContinuity(activeClip);
+    const commitContinuity=(value,redraw=true)=>{activeClip.continuity=value!==MODE.independent;activeClip.continuity_mode=value;syncState();renderTimeline();if(redraw)renderInspector();};
+    const switchRow=(title,checked,onchange,help,disabled=false)=>{
+      const row=document.createElement("label");row.className="mmx-switch-row"+(disabled?" disabled":"");
+      const toggle=document.createElement("span");toggle.className="mmx-lora-switch";
+      const box=document.createElement("input");box.type="checkbox";box.checked=checked;box.disabled=disabled;box.onchange=()=>onchange(box.checked);
+      const track=document.createElement("span");track.className="mmx-lora-switch-track";toggle.append(box,track);
+      const text=document.createElement("span");text.className="mmx-switch-text";
+      const strong=document.createElement("strong");strong.textContent=title;text.append(strong);
+      if(help){const small=document.createElement("small");small.textContent=help;text.append(small);}
+      row.append(toggle,text);return row;
+    };
+    const frameUrl=(clip,which,carried=false)=>clip?api.apiURL(`/minimax_director/clip/frame?${new URLSearchParams({project_id:timelineState.project_id || "",clip_id:clip.id,which,carried:carried?"1":"0",height:"540",g:String(cachedClipResults[clip.id]?.generation ?? "none")})}`):null;
+    const chainStart=()=>{let j=clipIndex-1;while(j>0 && effectiveContinuity(timelineState.clips[j])!==MODE.independent && !isStartImageClip(timelineState.clips[j]))j--;return timelineState.clips[j];};
+    const lookSection=(title,key,imageUrl,emptyText,extra={})=>{
+      const box=document.createElement("div");box.className="mmx-look-section";
+      const head=document.createElement("div");head.className="mmx-look-head";
+      const h=document.createElement("strong");h.textContent=title;head.append(h);
+      if(!lookIsNeutral(activeClip[key])){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}
+      box.append(head);
+      if(extra.note){const p=document.createElement("p");p.className="mmx-continuity-mode-note";p.textContent=extra.note;box.append(p);}
+      box.append(createLookEditor({imageUrl,emptyText,look:activeClip[key],beforeLabel:extra.before || "Original",afterLabel:extra.after || "Adjusted",
+        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,
+        onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}}));
+      return box;
+    };
+    if(startImage){
+      const code=clipCode(activeClip);
+      const on=mode===MODE.frame && clipIndex>0;
+      continuityPanel.append(switchRow("Start from the previous clip's last frame",on,checked=>commitContinuity(checked?MODE.frame:MODE.independent),
+        clipIndex===0?"The first clip has no previous clip.":on?"The previous clip's final frame becomes this clip's first frame. References are not used for the start.":
+        code==="I2V"?"Off: choose exactly one start image in References.":"Off: choose a start image and an end image in References.",clipIndex===0));
+      let url=null,empty="";
+      if(on){url=frameUrl(previousClip,"last",true);empty="Generate the previous clip to preview its last frame. Adjustments you set here still apply.";}
+      else{
+        const first=activeReferences(activeClip).find(row=>row.type==="image");
+        if(first?.filename){const parts=String(first.filename).replaceAll("\\","/").split("/");url=api.apiURL(`/view?${new URLSearchParams({filename:parts.pop(),subfolder:parts.join("/"),type:"input"})}`);}
+        empty=first?"This reference has no file to preview. Adjustments still apply.":"Choose the start image in References to preview it.";
       }
-      policy.value=activeClip.continuity_duration_policy || "new";
-      policy.onchange=()=>{activeClip.continuity_duration_policy=policy.value;commitContinuity();};
-      continuityPanel.append(field("Clip length",policy,"Keep full clip length: add the previous clip's reused frames before generating the requested length. Shorten by reused frames: fit them inside the requested length, producing a shorter clip with less processing. Actual lengths round to supported frame counts."));
+      continuityPanel.append(lookSection("Start image look","start_look",url,empty,{note:"Adjust the start image before it is used. The preview shows exactly what the model receives."}));
+    } else {
+      const method=document.createElement("select");method.className="mmx-shot-continuity-mode";
+      for(const [value,label] of [[MODE.independent,"Independent"],[MODE.motion,"Motion Context"],[MODE.carry,"Latent Carry"]]){const option=document.createElement("option");option.value=value;option.textContent=label;method.append(option);}
+      method.value=mode;method.disabled=!!activeClip.locked;method.onchange=()=>commitContinuity(method.value);
+      continuityPanel.append(field("Method",method,"Independent starts fresh. Motion Context guides the new clip with the previous clip's ending. Latent Carry continues the previous clip's ending directly (recommended: least drift)."));
+      if(mode===MODE.independent){
+        const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);
+      } else {
+        const grid=document.createElement("div");grid.className="mmx-form-grid";
+        for (const [key,title,choices,fallback] of [["context_length","Video context",[5,22,39,56],22],["audio_context_length","Audio context",[0,5,22,24,39,56],22]]) {
+          const input=document.createElement("select");input.className="mmx-shot-"+key;
+          for (const value of choices){const option=document.createElement("option");option.value=value;option.textContent=value===0?"Off":`${(value/24).toFixed(2)} s (${value} frames)`;input.append(option);}
+          input.value=activeClip[key] ?? fallback;input.disabled=!!activeClip.locked;
+          input.onchange=()=>{activeClip[key]=Number(input.value);commitContinuity(mode,false);};
+          grid.append(field(title,input,key==="audio_context_length"?"24 frames = 1 second. Off disables audio carry.":"Reused from the previous clip and removed from this clip's delivered frames."));
+        }
+        const policy=document.createElement("select");policy.className="mmx-shot-continuity-duration-policy";
+        for (const [value,label] of [["new","Keep full clip length"],["total","Shorten by reused frames"]]) {const option=document.createElement("option");option.value=value;option.textContent=label;policy.append(option);}
+        policy.value=activeClip.continuity_duration_policy || "new";
+        policy.onchange=()=>{activeClip.continuity_duration_policy=policy.value;commitContinuity(mode,false);};
+        grid.append(field("Clip length",policy,"Keep: generate the full requested length after the reused frames. Shorten: fit them inside it."));
+        if(mode===MODE.carry){
+          const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="0.95";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
+          redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity(mode,false);};grid.append(field("Transition flexibility",redraw,"0 keeps the join closest to the previous clip; higher lets the model change more near the join."));
+        }
+        continuityPanel.append(grid);
+        const fixes=document.createElement("div");fixes.className="mmx-switch-group";
+        fixes.append(switchRow("Automatic join fix",activeClip.auto_fix!==false,checked=>{if(checked)delete activeClip.auto_fix;else activeClip.auto_fix=false;syncState();},
+          "Keeps sharpness, contrast and colour cast from building up at each join. Recommended."));
+        fixes.append(switchRow("Hold look to the chain's first clip",!!activeClip.hold_look,checked=>{if(checked)activeClip.hold_look=true;else delete activeClip.hold_look;syncState();},
+          "After decoding, gently pulls brightness and colour back to the first clip of this chain, ramping from the join so there is no jump."));
+        const burn=activeClip.antiburn || {};
+        const burnNote=document.createElement("p");burnNote.className="mmx-continuity-mode-note";
+        burnNote.textContent=burn.enabled===false?"Anti-burn LoRA is switched off for this clip (LoRAs tab).":`Anti-burn LoRA is added automatically at strength ${Number(burn.strength ?? .5).toFixed(2)} (change it in the LoRAs tab).`;
+        fixes.append(burnNote);
+        continuityPanel.append(fixes);
+        const anchor=chainStart();
+        continuityPanel.append(lookSection("Previous clip's last frame","tail_look",frameUrl(previousClip,"last",true),
+          "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
+          {note:"Optional manual correction of the tail this clip continues from. Leave it untouched for a pure latent join; when adjusted, the tail is re-encoded from these pixels (the join is slightly softer).",
+           anchorUrl:anchor && anchor!==activeClip?frameUrl(anchor,"last"):null,anchorLabel:`Change vs. the last frame of ${anchor?.name || "the chain's first clip"}`,
+           before:"As generated",after:"Carried"}));
+        if(previousClip && cachedClipResults[activeClip.id]){
+          const result=document.createElement("div");result.className="mmx-join-result";
+          const title=document.createElement("strong");title.textContent="Join result";result.append(title);
+          const pair=document.createElement("div");pair.className="mmx-join-pair";
+          for(const [label,src] of [["Previous clip · last frame",frameUrl(previousClip,"last")],["This clip · first frame (after the join fix)",frameUrl(activeClip,"first")]]){
+            const fig=document.createElement("figure");const img=document.createElement("img");img.src=src;img.alt=label;img.onerror=()=>fig.remove();
+            const cap=document.createElement("figcaption");cap.textContent=label;fig.append(img,cap);pair.append(fig);
+          }
+          result.append(pair);continuityPanel.append(result);
+        }
+      }
     }
-    if (continuityMode.value===continuityModes[2]){
-      const redraw=document.createElement("input");redraw.type="number";redraw.min="0";redraw.max="0.95";redraw.step="0.05";redraw.value=activeClip.continuity_redraw ?? .1;
-      redraw.onchange=()=>{activeClip.continuity_redraw=Number(redraw.value);commitContinuity();};continuityPanel.append(field("Transition flexibility",redraw,"0 keeps the join closest to the previous clip. Higher values let the model change more near the join. Affects video only; it does not change the previous saved clip."));
-    }
-    if(continuityMode.value===continuityModes[0]) {
-      const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Starts a fresh clip. No video or audio context is borrowed.';continuityPanel.append(note);
-    }
-    if(continuityMode.value===continuityModes[3]) {
-      const note=document.createElement('p');note.className='mmx-continuity-mode-note';note.textContent='Uses the preceding clip’s final image (0.04 s). Audio context is off. No context-length settings apply.';continuityPanel.append(note);
-    }
-    continuityMode.disabled=!!activeClip.locked;
     shotSections.prepend(continuityPanel);
-    finishSection(continuityPanel,continuityMode.value===continuityModes[0]?"Independent clips borrow no video or audio context.":timelineState.clips.indexOf(activeClip)===0?"There is no preceding clip. Add a video or generate an earlier clip on the timeline to provide context.":"The chain between clips shows continuity from the preceding clip. Short previous clips limit the usable video and audio context.");
+    finishSection(continuityPanel,clipIndex===0?"The first clip has no previous clip to continue from.":startImage?"Start-image clips can begin from the previous clip's last frame, with an optional look adjustment.":mode===MODE.independent?"Independent clips borrow no video or audio context.":"This clip continues the previous clip. Short previous clips limit the usable video and audio context.");
     titleWrap.appendChild(timingRow);
 
     // Seed controls in the clip header.
@@ -5282,7 +5503,7 @@ function mountDirectorUI(node) {
       if(item.disabled)item.title='Selection limit reached. Remove an asset before choosing another.';
       if(isChecked && ['FL2V','RV2V'].includes(clipCode(activeClip))) item.title=`Selection ${activeClip.ref_ids.indexOf(r.id)+1}${r.id===activeClip.source?.ref_id ? ' · Source Video' : ''}`;
       if(isChecked && (clipCode(activeClip)==='FL2V' || r.id===activeClip.source?.ref_id)) {
-        const inheritedOpening=timelineState.clips.indexOf(activeClip)>0 && activeClip.continuity_mode!=='Independent (No Continuity)' && selected.length===1;
+        const inheritedOpening=continuesFromLastFrame(activeClip);
         const role=document.createElement('strong');role.textContent=r.id===activeClip.source?.ref_id ? ' · Source Video' : activeClip.ref_ids.indexOf(r.id)===0 && !inheritedOpening ? ' · Opening Frame' : ' · Ending Frame';item.append(role);
       }
       item.onclick = async () => {
@@ -5552,10 +5773,11 @@ function mountDirectorUI(node) {
     helpButton.onclick=()=>{showToolHelp=!showToolHelp;tools.classList.toggle("mmx-show-help",showToolHelp);helpButton.setAttribute("aria-pressed",String(showToolHelp));};toolHeading.append(helpButton);
     const tabs=document.createElement("div");tabs.className="mmx-tool-tabs";tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Clip controls");
     shotSections.className="mmx-shot-sections mmx-tool-content";
-    const panels=[["Continuity",continuityPanel],["Look",shotExtras],["LoRAs",loraPanel],["Memory",memoryPanel]];
+    const panels=[["Continuity",continuityPanel],["Guides",shotExtras],["LoRAs",loraPanel],["Memory",memoryPanel]];
     const canContinue=!continuityPanel.hidden;
     const unavailable=label=>(label==="Continuity"&&!canContinue) || ((label==="LoRAs"||label==="Memory")&&!!activeClip.locked) || (label==="Memory"&&!memorySupported(activeClip));
-    if(unavailable(activeToolTab))activeToolTab="Look";
+    if(activeToolTab==="Look")activeToolTab="Guides";
+    if(unavailable(activeToolTab))activeToolTab="Guides";
     const selectTool=label=>{
       if(unavailable(label))return;
       activeToolTab=label;
@@ -5688,6 +5910,7 @@ function mountDirectorUI(node) {
   const origOnConnectionsChange = node.onConnectionsChange;
   node.onConnectionsChange = function () {
     if (origOnConnectionsChange) origOnConnectionsChange.apply(this, arguments);
+    renderSettingsBar();
     resolveAvailableRefsFromGraph();
     syncState();
     renderTimeline();
@@ -5846,6 +6069,57 @@ function mountDirectorUI(node) {
 // Dynamic RefPack widget visibility (no-op as label text boxes have been removed)
 const updateRefPackWidgets = (node) => {};
 
+// The Settings node is retired: its canvas, sampler and output values move into
+// the Master's timeline "settings", a linked steps input moves to the Master's
+// own steps socket, and the Settings node and its link are removed.
+function retireSettingsNodes(graphData) {
+  const nodes=graphData?.nodes || [], links=graphData?.links || [];
+  const linkId=row=>Array.isArray(row)?row[0]:row.id;
+  const origin=row=>Array.isArray(row)?row[1]:row.origin_id;
+  const findLink=value=>links.find(row=>linkId(row)===value);
+  const positional=["width","height","frame_rate","steps","cfg","sampler","scheduler","shift_video","shift_audio","canvas_policy","canvas_megapixels","canvas_aspect","decoded_output"];
+  const removeLink=value=>{const row=findLink(value);if(!row)return;links.splice(links.indexOf(row),1);
+    for(const n of nodes)for(const out of n.outputs || [])if(out.links)out.links=out.links.filter(id=>id!==value);};
+  for(const settings of nodes.filter(n=>n.type==="MiniMaxH3DirectorSettings")){
+    const values={...Object.fromEntries(positional.map((key,index)=>[key,settings.widgets_values?.[index]])),...(settings.widgets_values_named || {})};
+    const outLinks=new Set(settings.outputs?.[0]?.links || []);
+    const stepsLink=settings.inputs?.find(input=>input.name==="steps")?.link;
+    for(const master of nodes.filter(n=>["MiniMaxH3MasterNode","MiniMaxH3MasterDirector"].includes(n.type))){
+      const configInput=master.inputs?.find(input=>input.name==="config");
+      if(!configInput || !outLinks.has(configInput.link))continue;
+      try{
+        const raw=master.widgets_values_named?.timeline_data ?? master.widgets_values?.find(value=>typeof value==="string" && value.trim().startsWith("{") && value.includes("\"clips\""));
+        if(typeof raw==="string"){
+          const state=JSON.parse(raw);
+          if(!state.settings){
+            const width=Number(values.width) || 1344,height=Number(values.height) || 768;
+            state.settings={resolution:{mode:values.canvas_policy || "manual",width,height,megapixels:Number(values.canvas_megapixels) || 1,aspect:values.canvas_aspect || "16:9"},
+              width,height,sampler:values.sampler || "res_multistep",cfg:Number(values.cfg ?? 1),steps:Number(values.steps) || 25,scheduler:values.scheduler || "simple",
+              decoded_output:values.decoded_output || "latest"};
+            const serialized=JSON.stringify(state);
+            if(master.widgets_values){const index=master.widgets_values.indexOf(raw);if(index>=0)master.widgets_values[index]=serialized;}
+            (master.widgets_values_named ||= {}).timeline_data=serialized;
+          }
+        }
+      }catch(error){console.warn("[DirectorUI] Could not move Settings values into the Master node",error);}
+      removeLink(configInput.link);
+      master.inputs=master.inputs.filter(input=>input!==configInput);
+      if(stepsLink!=null && findLink(stepsLink) && !master.inputs.some(input=>input.name==="steps" && input.link!=null)){
+        const row=findLink(stepsLink);
+        let stepsInput=master.inputs.find(input=>input.name==="steps");
+        if(!stepsInput){stepsInput={name:"steps",type:"INT",link:null};master.inputs.push(stepsInput);}
+        stepsInput.link=linkId(row);
+        if(Array.isArray(row)){row[3]=master.id;}else{row.target_id=master.id;}
+      }
+      master.inputs.forEach((input,index)=>{const row=input.link!=null?findLink(input.link):null;if(row){if(Array.isArray(row))row[4]=index;else row.target_slot=index;}});
+    }
+    for(const input of settings.inputs || [])if(input.link!=null && input.link!==stepsLink)removeLink(input.link);
+    if(stepsLink!=null){const row=findLink(stepsLink);if(row && (Array.isArray(row)?row[3]:row.target_id)===settings.id)removeLink(stepsLink);}
+    for(const id of outLinks)removeLink(id);
+    nodes.splice(nodes.indexOf(settings),1);
+  }
+}
+
 function migrateMasterSockets(graphData) {
   const links=graphData.links || [];
   const id=row=>Array.isArray(row)?row[0]:row.id;
@@ -5974,6 +6248,7 @@ app.registerExtension({
         master.widgets_values_named.generation_mode ||= ({"Next shot":"Next clip","All shots":"All clips"})[state.generation_mode] || state.generation_mode;
       } catch (error) { console.warn('[DirectorUI] Could not migrate timeline controls',error); }
     }
+    retireSettingsNodes(graphData);
     // Retired global seed and its workflow-only randomization widget must not
     // shift canvas/output fields when saved workflows load into seed-free Settings.
     for(const node of graphData?.nodes || [])if(node.type==='MiniMaxH3DirectorSettings' && Array.isArray(node.widgets_values)){

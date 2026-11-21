@@ -26,6 +26,7 @@ w.XMLHttpRequest=undefined;
 w.eval(fs.readFileSync('web/js/minimax_transfer.js','utf8').replace(/^import .*;\r?\n/gm,'').replaceAll('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_preview.js','utf8').replace('export function','function'));
 w.eval(fs.readFileSync('web/js/minimax_timeline.js','utf8').replace('export function','function'));
+w.eval(fs.readFileSync('web/js/minimax_look.js','utf8').replaceAll('export function','function').replaceAll('export const','var'));
 w.eval(fs.readFileSync('web/js/minimax_director.js','utf8').replace(/^import .*;\r?\n/gm,''));
 const refPool={id:20,type:'MiniMaxH3RefPack',inputs:[{name:'image_1',link:11},{name:'image_2',link:null},{name:'video_1',link:null}],widgets:[{name:'image_1_name',value:'Alice'},{name:'refmod_1',value:'None'},{name:'refmod_2',value:'None'}]};
 const imageLoader={id:21,type:'LoadImage',widgets:[{name:'image',value:'alice.png'}]};
@@ -61,8 +62,9 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const oldExporter=[24,'H.264','mp4','8-bit',21,'Standard',false,true,'video/test',true,false,false,'Auto','192k',false,false];
   const oldGraph={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[...settingsValues]},{type:'MiniMaxH3VideoCombine',widgets_values:[...oldExporter]}]};
   w.extension.beforeConfigureGraph(oldGraph);
-  assert.strictEqual(oldGraph.nodes[0].widgets_values.length,9);
-  assert.strictEqual(oldGraph.nodes[0].widgets_values_named.generation_mode,'All shots');
+  // The retired Settings node is removed on load; the exporter migration still runs.
+  assert(!oldGraph.nodes.some(n=>n.type==='MiniMaxH3DirectorSettings'));
+  oldGraph.nodes.unshift({type:'removed'});
   assert.strictEqual(oldGraph.nodes[1].widgets_values[3],'ffmpeg');
   assert.strictEqual(oldGraph.nodes[1].widgets_values[4],'8-bit');
   assert.equal(oldGraph.nodes[1].widgets_values.length,15);
@@ -76,27 +78,25 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   w.extension.beforeConfigureGraph(exporterWithPreview);
   assert.equal(exporterWithPreview.nodes[0].widgets_values.length,15);
   assert.equal(exporterWithPreview.nodes[0].widgets_values[8],'video/test','Old serialized preview never shifts export settings');
-  w.extension.beforeConfigureGraph(oldGraph);assert.strictEqual(oldGraph.nodes[0].widgets_values.length,9);
   const namedLegacy={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[...settingsValues],widgets_values_named:{run_mode:'clip_by_clip',execution_mode:'Conditioning Guide Output',seed:'18446744073709551615'}}]};
-  w.extension.beforeConfigureGraph(namedLegacy);
-  assert.equal(namedLegacy.nodes[0].widgets_values_named.generation_mode,'Conditioning only','Named legacy controls migrate without shifting prompt mode into generation mode');
-  assert.equal(namedLegacy.nodes[0].widgets_values_named.seed,'18446744073709551615');
-  const noSeedControl={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[1344,768,24,25,1,'euler','simple',12,3,0,'All shots','Independent (No Continuity)','22']}]};
-  w.extension.beforeConfigureGraph(noSeedControl);
-  assert.equal(noSeedControl.nodes[0].widgets_values_named.generation_mode,'All shots');
-  const seededCanvas={nodes:[{type:'MiniMaxH3DirectorSettings',widgets_values:[1344,768,24,4,1,'euler','beta',12,3,123,'fixed','auto',.5,'16:9','latest']}]};
-  w.extension.beforeConfigureGraph(seededCanvas);
-  assert.deepEqual(Array.from(seededCanvas.nodes[0].widgets_values),[1344,768,24,4,1,'euler','beta',12,3,'auto',.5,'16:9','latest']);
-  w.extension.beforeConfigureGraph(seededCanvas);assert.equal(seededCanvas.nodes[0].widgets_values.length,13);
-  const migratedMaster={id:5,type:'MiniMaxH3MasterNode',inputs:[{name:'config',link:12}],widgets_values:[JSON.stringify({clips:[{id:'m',continuity:true}]}),'{}']};
-  const migratedSettings={id:4,...namedLegacy.nodes[0]};
-  const migrationGraph={nodes:[migratedSettings,migratedMaster],links:[[12,4,0,5,4,'MMX_DIRECTOR_CONFIG']]};
+  const migratedMaster={id:5,type:'MiniMaxH3MasterNode',inputs:[{name:'config',link:12},{name:'sigmas',link:null}],widgets_values:[JSON.stringify({clips:[{id:'m',continuity:true}]}),'{}']};
+  const migratedSettings={id:4,...namedLegacy.nodes[0],inputs:[{name:'steps',link:13}],outputs:[{links:[12]}]};
+  const stepSwitch={id:3,type:'ComfySwitchNode',outputs:[{links:[13]}]};
+  const migrationGraph={nodes:[stepSwitch,migratedSettings,migratedMaster],links:[[12,4,0,5,0,'MMX_DIRECTOR_CONFIG'],[13,3,0,4,0,'INT']]};
   w.extension.beforeConfigureGraph(migrationGraph);
   const migratedState=JSON.parse(migratedMaster.widgets_values[0]);
   assert.equal(migratedState.clips[0].seed,'18446744073709551615','Legacy fallback becomes a per-clip seed');
   assert.equal(migratedState.generation_mode,'Conditioning only');
   assert.equal(migratedState.clips[0].continuity_mode,'Motion Context (Chained)');
   assert.equal(migratedState.clips[0].context_length,22);
+  // Retired Settings node: values move into the Master, the steps link follows, the node goes.
+  assert(!migrationGraph.nodes.some(n=>n.type==='MiniMaxH3DirectorSettings'));
+  assert.deepEqual(migratedMaster.inputs.map(i=>i.name),['sigmas','steps']);
+  assert.equal(migratedMaster.inputs[1].link,13);
+  assert.deepEqual(Array.from(migrationGraph.links.find(l=>l[0]===13)),[13,3,0,5,1,'INT']);
+  assert(!migrationGraph.links.some(l=>l[0]===12));
+  assert.equal(migratedState.settings.width,1344);assert.equal(migratedState.settings.sampler,'euler');assert.equal(migratedState.settings.steps,25);
+  w.extension.beforeConfigureGraph(migrationGraph);assert.equal(migrationGraph.links.length,1,'Retirement is idempotent');
   function Exporter(){this.widgets=[{name:'quality',value:21},{name:'bit_depth',value:'10-bit'},{name:'encoder_backend',value:'pyav'},{name:'save_output',value:false},{name:'control_after_generate',value:'fixed',options:{serialize:false}},{name:'preview',value:'not_saved',serialize:false}];}
   Exporter.prototype.onSerialize=function(data){data.other_extension='preserved';};
   Exporter.prototype.onConfigure=function(){this.widgets[0].value='wrong positional value';};
@@ -159,12 +159,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(w.document.querySelector('.mmx-inspector-header input[aria-label="Clip Seed"]'),'Seed belongs beside the clip name');
   assert(!writingPanel.querySelector('.mmx-section'),'Advanced sections cannot push the prompt down');
   const chooseTool=label=>w.document.querySelector(`[role=tab][data-tool="${label}"]`);
-  chooseTool('Look').click();
+  chooseTool('Guides').click();
   assert.strictEqual(w.document.querySelector('.mmx-edit-main'),writingPanel,'Switching tools preserves the actual writing DOM and caret');
-  assert.equal(chooseTool('Look').getAttribute('aria-selected'),'true');
+  assert.equal(chooseTool('Guides').getAttribute('aria-selected'),'true');
   assert.equal(w.document.querySelectorAll('.mmx-tool-content > details:not([hidden])').length,1);
   assert(w.document.querySelector('.mmx-edit-main .mmx-textarea'),'Prompt remains mounted when tools change');
-  chooseTool('Look').onkeydown({key:'ArrowRight',preventDefault(){}});
+  chooseTool('Guides').onkeydown({key:'ArrowRight',preventDefault(){}});
   assert.equal(chooseTool('LoRAs').getAttribute('aria-selected'),'true','Keyboard moves between tool tabs');
   const savedLoraState=timeline.value;
   const loraFixture=JSON.parse(savedLoraState);loraFixture.clips[0].validated=true;loraFixture.clips[0].refine_approved=true;loraFixture.clips[0].loras=[{name:'adapter',strength:.7,active:false}];
@@ -198,7 +198,7 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
     timeline.value=savedLoraState;node.__mmxDirectorRefresh();
   }
   assert.equal(chooseTool('Project'),null,'Project is not a clip-specific tool');
-  assert.equal(w.document.querySelectorAll('.mmx-section').length,5,'Project configuration has one surface (plus Continuity, Look, LoRAs and Memory tools)');
+  assert.equal(w.document.querySelectorAll('.mmx-section').length,5,'Project configuration has one surface (plus Continuity, Guides, LoRAs and Memory tools)');
   const globalProject=w.document.querySelector('.mmx-project-workspace');
   assert.equal(globalProject.parentElement.className,'mmx-director-root');
   assert(globalProject.compareDocumentPosition(w.document.querySelector('.mmx-multitrack-panel')) & w.Node.DOCUMENT_POSITION_FOLLOWING,'Project precedes the timeline');
@@ -216,16 +216,18 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   const writer=w.document.querySelector('.mmx-edit-main .mmx-textarea');writer.setSelectionRange(2,8);
   chooseTool('Continuity').click();
   assert.equal(writer.selectionStart,2);assert.equal(writer.selectionEnd,8,'Tab navigation preserves the prompt selection');
-  assert(!w.document.body.textContent.includes('Canvas source'),'Canvas has one owner in Settings');
+  assert(!w.document.body.textContent.includes('Canvas source'),'Canvas has one owner: the settings bar');
   assert(!w.document.body.textContent.includes('Choose saved take for continuation'));
   assert(!w.document.body.textContent.includes('Create project exporter'));
   assert.equal(globalProject.querySelectorAll('details').length,0,'Project is a single panel without nested collapsibles');
   assert(!w.document.querySelector('.mmx-shot-context_length'),'Independent hides unused context inputs');
   assert(!w.document.querySelector('.mmx-continue-video'),'Independent hides context source controls');
-  const startContinuity=w.document.querySelector('.mmx-shot-continuity-mode');startContinuity.value='Motion Context (Chained)';startContinuity.onchange();
+  // An I2V clip offers one continuity option: start from the previous clip's last frame.
+  assert(!w.document.querySelector('.mmx-shot-continuity-mode'),'Start-image clips have no method menu');
+  const startSwitch=w.document.querySelector('.mmx-switch-row input');
+  assert(startSwitch && startSwitch.disabled,'The first clip cannot continue');
+  assert(w.document.body.textContent.includes('Start image look'),'Start image has a live look editor');
   assert(!w.document.querySelector('.mmx-continue-video'),'Continuity only uses preceding timeline clips');
-  assert([...w.document.querySelector('.mmx-shot-continuity-mode').options].every(option=>!option.textContent.includes('(')));
-  const freshMethod=w.document.querySelector('.mmx-shot-continuity-mode');freshMethod.value='Independent (No Continuity)';freshMethod.onchange();
   const previousLookup=w.app.graph.getNodeById;
   const videoSlot=refPool.inputs.find(row=>row.name==='video_1');videoSlot.link=12;
   const secondVideo={name:'video_2',link:13};refPool.inputs.push(secondVideo);
@@ -312,6 +314,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   generationControl.value='All clips';generationControl.callback('All clips');
   assert.equal(JSON.parse(timeline.value).generation_mode,'All clips');
   generationControl.value='Next clip';generationControl.callback('Next clip');
+  // Carry methods belong to non-start-image clips: inspect the last clip as REF2V.
+  {const st=JSON.parse(timeline.value);st.clips.at(-1).type='REF2VA';st.clips.at(-1).ref_ids=[];timeline.value=JSON.stringify(st);node.__mmxDirectorRefresh();}
   const continuityControl=editorRoot.querySelector('.mmx-shot-continuity-mode');
   continuityControl.value='Motion Context (Chained)';continuityControl.onchange();
   const videoContext=editorRoot.querySelector('.mmx-shot-context_length');videoContext.value='39';videoContext.onchange();
@@ -356,14 +360,12 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(!editorRoot.querySelector('.mmx-continuity-overlay.audio'),'Off removes the audio context card');
   const pinned=editorRoot.querySelector('.mmx-shot-continuity-mode');pinned.value='Latent Carry (Pinned)';pinned.onchange();
   assert(editorRoot.textContent.includes('Transition flexibility'),'Pinned carry exposes its mask control');
-  const handoff=editorRoot.querySelector('.mmx-shot-continuity-mode');handoff.value='FL2VA Tail Handoff';handoff.onchange();
-  assert(!editorRoot.querySelector('.mmx-shot-context_length'));
-  assert(!editorRoot.querySelector('.mmx-shot-audio_context_length'));
-  assert(!editorRoot.textContent.includes('Transition flexibility'));
-  assert(!editorRoot.querySelector('.mmx-continue-video'));
-  assert.equal(editorRoot.querySelector('.mmx-continuity-link').dataset.videoFrames,'1');
-  assert(editorRoot.querySelector('.mmx-continuity-link').title.includes('Video 0.04s'));
-  assert(!editorRoot.querySelector('.mmx-continuity-overlay.audio'));
+  const methods=[...editorRoot.querySelector('.mmx-shot-continuity-mode').options].map(o=>o.value);
+  assert.deepEqual(methods,['Independent (No Continuity)','Motion Context (Chained)','Latent Carry (Pinned)'],'Frame handoff is only offered on start-image clips');
+  assert(editorRoot.textContent.includes('Automatic join fix'),'The join fix is a visible switch');
+  assert(editorRoot.textContent.includes('Hold look to the chain'),'Look hold switch is offered');
+  assert(editorRoot.querySelector('.mmx-look-section .mmx-look-controls'),'Previous tail has a live look editor');
+  assert.equal(editorRoot.querySelectorAll('.mmx-look-row').length,6);
   assert([...editorRoot.querySelectorAll('details.mmx-section > summary')].some(s=>s.textContent.includes('Continuity')));
   const off=editorRoot.querySelector('.mmx-shot-continuity-mode');off.value='Independent (No Continuity)';off.onchange();
   assert.equal(editorRoot.querySelectorAll('.mmx-continuity-link').length,0);

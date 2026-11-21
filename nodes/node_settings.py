@@ -50,6 +50,11 @@ class MiniMaxH3DirectorSettings:
             },
         }
 
+    # Retired: the Master node now owns canvas, sampler and output settings.
+    # Kept registered only so old workflows load and migrate (see the web
+    # extension's beforeConfigureGraph); hidden from the node search.
+    DEPRECATED = True
+
     RETURN_TYPES = (MMX_DIRECTOR_CONFIG,)
     RETURN_NAMES = ("config",)
     FUNCTION = "build_config"

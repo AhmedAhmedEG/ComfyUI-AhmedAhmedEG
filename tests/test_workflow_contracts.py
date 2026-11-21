@@ -79,9 +79,9 @@ class WorkflowContracts(unittest.TestCase):
 
     def test_starter_uses_stock_loaders_and_both_model_families(self):
         data = json.loads((ROOT / "workflows/MiniMax H3 Start Here.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(data["nodes"]), 17)
+        self.assertEqual(len(data["nodes"]), 16)
         self.assertEqual({n["type"] for n in data["nodes"]}, {
-            "UNETLoader", "CLIPLoader", "VAELoader", "MiniMaxH3DirectorSettings",
+            "UNETLoader", "CLIPLoader", "VAELoader",
             "MiniMaxH3MasterNode", "MiniMaxH3SmartPreview", "MiniMaxH3RefPack", "H3SLAAttention", "LoraLoaderModelOnly", "PrimitiveBoolean", "PrimitiveInt", "ComfySwitchNode"})
         master = next(n for n in data["nodes"] if n["type"] == "MiniMaxH3MasterNode")
         self.assertTrue(all(i["link"] for i in master["inputs"] if i["name"] in ("fl2va_model", "ref2va_model")))
@@ -96,7 +96,8 @@ class WorkflowContracts(unittest.TestCase):
             source = lambda nid, name: next(link[1] for link in graph["links"]
                 if link[0] == next(i["link"] for i in nodes[nid]["inputs"] if i["name"] == name))
             self.assertEqual(source(14, "switch"), source(24, "switch"))
-            self.assertEqual(source(4, "steps"), 24)
+            master = next(n["id"] for n in graph["nodes"] if n["type"] == "MiniMaxH3MasterNode")
+            self.assertEqual(source(master, "steps"), 24)
             self.assertEqual(nodes[source(24, "on_false")]["widgets_values"][0], 25)
             self.assertEqual(nodes[source(24, "on_true")]["widgets_values"][0], 8)
             self.assertTrue(nodes[14]["flags"]["collapsed"])

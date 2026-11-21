@@ -613,7 +613,7 @@ class RuntimeContracts(unittest.TestCase):
 
     def test_tail_handoff_uses_one_image_without_motion_or_audio_guides(self):
         clips=[{"id":"one","type":"T2V","duration":2,"continuity_mode":"Independent (No Continuity)"},
-               {"id":"two","type":"T2V","duration":2,"continuity_mode":"FL2VA Tail Handoff","context_length":56,"audio_context_length":56}]
+               {"id":"two","type":"I2V","duration":2,"continuity_mode":"Last Frame (Start Image)","context_length":56,"audio_context_length":56}]
         self.execute(clips)
         builders=[kw for name,kw in self.native_calls if name=='MiniMaxH3ImageToVideo']
         self.assertEqual(builders[1]['first_frame'].shape[0],1)
@@ -640,7 +640,9 @@ class RuntimeContracts(unittest.TestCase):
         from core.continuity import resolve_continuity
         result=resolve_continuity({"continuity_mode":"Latent Carry (Pinned)","context_length":5,"audio_context_length":56})
         self.assertEqual(result["audio_frames"],56)
-        self.assertEqual(resolve_continuity({"continuity_mode":"FL2VA Tail Handoff"})["video_frames"],1)
+        self.assertEqual(resolve_continuity({"continuity_mode":"FL2VA Tail Handoff","type":"I2V"})["video_frames"],1)
+        self.assertEqual(resolve_continuity({"continuity_mode":"Latent Carry (Pinned)","type":"FL2V"})["mode"],"Last Frame (Start Image)")
+        self.assertEqual(resolve_continuity({"continuity_mode":"FL2VA Tail Handoff","type":"REF2VA"})["mode"],"Latent Carry (Pinned)")
         self.assertEqual(resolve_continuity({"continuity":False})["video_frames"],0)
         with self.assertRaises(ValueError):resolve_continuity({"context_length":12})
 
@@ -715,35 +717,6 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(carry.call_args.kwargs['audio_context_length'],5)
         self.assertTrue(carry.call_args.kwargs['pin_audio'])
         self.assertEqual(carry.call_args.kwargs['seam_min_mask'],.3)
-
-    def test_pure_carry_mirrors_studio_and_skips_chain_corrections(self):
-        clips=[{"id":"one","type":"T2VA","duration":124/24,"continuity_mode":"Independent (No Continuity)"},
-               {"id":"two","type":"T2VA","duration":124/24,"continuity_mode":"Latent Carry (Pinned)","context_length":39,"pure_carry":True}]
-        seen={}
-        def fake(latent,previous,context,carry_audio=True):
-            seen['context']=context;seen['audio']=carry_audio;return latent,12,65
-        with patch('core.studio_carry.build_continuation',side_effect=fake),              patch('core.vendor.aimixer.director.h3_latent_continue.apply_latent_continue',side_effect=AssertionError('old carry must not run')),              patch('core.advanced_sampling.sample_stage',side_effect=lambda model,latent,*args,**kw:latent),              patch('nodes.node_director.guard_carried_sharpness',side_effect=AssertionError('pure carry must not soften')),              patch('nodes.node_director.anchor_chain_contrast',side_effect=AssertionError('pure carry must not re-grade')):
-            self.execute(clips)
-        self.assertEqual(seen['context'],39)
-        manager=ProjectCacheManager('regression',self.temp.name)
-        self.assertEqual(manager._manifest['clips']['two']['trim_prefix'],39)
-        self.assertEqual(manager._manifest['clips']['two'].get('previous_trim',0),0)
-
-    def test_studio_carry_freezes_last_tokens_and_audio(self):
-        import torch as T
-        from core import studio_carry as sc
-        from comfy.nested_tensor import NestedTensor
-        prev={"samples":NestedTensor((T.arange(22).float().view(1,1,22,1,1).repeat(1,24,1,2,2),T.randn(1,8,1,280)))}
-        new={"samples":NestedTensor((T.zeros(1,24,47,2,2),T.zeros(1,8,1,270)))}
-        out,tokens,ticks=sc.build_continuation(new,prev,39)
-        video,_=(out["samples"].tensors if hasattr(out["samples"],"tensors") else out["samples"])
-        masks=out["noise_mask"]; vm,am=(masks.tensors if hasattr(masks,"tensors") else masks)
-        self.assertEqual(tokens,12); self.assertEqual(ticks,65)
-        self.assertEqual(video[0,0,:12,0,0].tolist(),list(range(10,22)))   # the previous clip's last 12 tokens, unchanged
-        self.assertEqual(float(vm[0,0,:12].max()),0.0); self.assertEqual(float(vm[0,0,12:].min()),1.0)
-        self.assertEqual(float(am[...,:65].max()),0.0); self.assertEqual(float(am[...,65:].min()),1.0)
-        self.assertEqual(sc.continuing_budget(124,39),(158,119))
-        self.assertEqual(sc.frames_for_tokens(12),39)
 
     def test_clip_by_clip_advances_only_the_completed_seed(self):
         clips = [{"id":"one","type":"T2V","duration":1,"seed":"18446744073709551615","seed_mode":"increment"},

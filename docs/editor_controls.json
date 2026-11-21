@@ -1,6 +1,12 @@
 {
   "Master timeline": [
     [
+      "Settings bar",
+      "Canvas, size, sampler, CFG, steps, scheduler and output at the top of the Master.",
+      "Setting up a project or changing quality settings.",
+      "Steps and scheduler are greyed out when a sigmas or steps input is connected."
+    ],
+    [
       "Clip type",
       "Choose how this clip is made: text, keyframes, references, a source video, or an edit.",
       "Choose the task first, then assign media. The picker enforces the types and counts that task accepts.",
@@ -203,92 +209,80 @@
     [
       "Independent",
       "Start without borrowing previous video or audio context.",
-      "Use for a scene change or a fresh shot.",
-      "Does not imply references are disabled; selected pool references still apply."
+      "A new shot or scene.",
+      "No context is reused."
     ],
     [
       "Motion Context",
-      "Use the previous sampled audiovisual latents as native guides, with decoded fallback when needed.",
-      "Try for a continuous action or camera motion across clips.",
-      "Conditions new sampling from context; it does not guarantee exact choreography or identical frames."
+      "Guide the new clip with the previous clip's ending (sampled latents, decoded fallback).",
+      "Motion should flow on but small changes are welcome.",
+      "Context frames are re-rendered and trimmed from the delivered clip."
     ],
     [
       "Latent Carry",
-      "Copy a previous latent tail into the new sampling window with tapered redraw masks.",
-      "Use when directly anchoring a seam is useful.",
-      "Different from Motion Context guidance; some source/canvas combinations require a decoded fallback."
+      "Continue the previous clip's ending directly in the new sampling window.",
+      "Long chains with the least drift.",
+      "The tail is carried with tapered redraw masks."
     ],
     [
-      "FL2VA Tail Handoff",
-      "Use the previous ending frame as a new opening-frame handoff.",
-      "Use a simple visual endpoint continuation on the compatible family.",
-      "It does not carry a full moving audiovisual context window."
+      "Start from the previous clip's last frame",
+      "I2V and FL2V clips can begin from the previous clip's final frame.",
+      "You are building a sequence and do not know the start image ahead of time.",
+      "The frame replaces the start image; when off, choose exactly one start image (two images for FL2V)."
     ],
     [
-      "Video Context",
-      "How much preceding video context the next clip borrows.",
-      "Choose a short supported duration sufficient for the action.",
-      "Choices are displayed as seconds and frames: 5, 22, 39 or 56 frames. More context adds work and is removed from delivered new footage."
+      "Video Context / Audio Context",
+      "How much preceding video and sound the next clip borrows.",
+      "Tuning continuity strength.",
+      "More context holds motion and sound more firmly."
     ],
     [
-      "Audio Context",
-      "How much preceding sound context is borrowed, independently of video.",
-      "Use 24 frames for one second, another supported value, or Off when you want no audio carry.",
-      "Choices are 0, 5, 22, 24, 39 or 56 frames. It is not clamped to the video context length."
+      "Clip length",
+      "Keep the full requested length after the reused frames, or fit them inside it.",
+      "Controlling duration and processing time.",
+      "Changes how many new frames are generated."
     ],
     [
-      "Duration = new footage",
-      "The requested duration describes visible new material.",
-      "Use when you want a ten-second clip to contribute approximately ten seconds of new footage.",
-      "Sampling includes additional borrowed context; final timing still follows H3 frame-grid rounding."
+      "Transition flexibility",
+      "How much Latent Carry lets the model change near the join.",
+      "A join looks frozen or too rigid.",
+      "Higher values allow more change at the join."
     ],
     [
-      "Duration includes context (Extender)",
-      "The requested duration includes the context sampling prefix.",
-      "Use when matching the original Extender's sampling-length interpretation.",
-      "After context is removed, delivered new footage is shorter than the requested sampling window."
+      "Automatic join fix",
+      "Keeps sharpness, contrast and colour cast from building up at each join.",
+      "Always, unless you are testing raw carry.",
+      "Corrects the new clip during generation; on by default."
     ],
     [
-      "Seam redraw strength",
-      "How much Latent Carry permits the seam region to change.",
-      "Use a small value to anchor it more strongly or a larger value for more freedom.",
-      "Range 0–0.95. This changes sampling masks; it is unrelated to the output audio Join Fade."
+      "Hold look to the chain's first clip",
+      "Pulls brightness and colour back to the first clip of the chain after decoding.",
+      "Long chains that slowly darken or shift colour.",
+      "A gentle per-channel gain ramped from the join, so there is no jump."
     ],
     [
-      "Look controls",
-      "Per-clip exposure, contrast, saturation and supported seam colour treatment.",
-      "Use for a deliberate grade or to reduce visible colour differences between joins.",
-      "These adjustments do not replace reference preparation, face refinement or prompt conditioning."
+      "Look editor (start image / previous tail)",
+      "Brightness, contrast, black level, saturation, temperature and tint with a live before/after preview.",
+      "You want to correct a start frame or the tail a clip continues from.",
+      "The preview shows exactly what the model receives; adjusted tails are re-encoded from pixels."
+    ],
+    [
+      "Anti-burn (Auto)",
+      "An anti-burn LoRA added automatically to clips that continue the previous clip.",
+      "Continuing clips; switch off or change strength per clip.",
+      "Uses the anti-burn file found in models/loras at strength 0.5 by default."
     ],
     [
       "LoRA enabled / file / model strength",
       "Add a model LoRA patch for this clip.",
-      "Use a compatible subject/style or acceleration LoRA only on the intended shot.",
-      "The enabled patch and strength affect the model used for that clip. They are separate from a globally patched input model and cannot undo its existing patches."
+      "A clip needs a style or subject adapter.",
+      "Speed LoRAs such as Lightning stay in the workflow, outside the Master."
     ],
     [
       "LoRA information / remove",
       "Inspect a selected patch or remove that clip-local entry.",
-      "Check the filename and strength before comparing output.",
-      "Removing a clip entry does not delete the model file or unpatch a separate upstream model branch."
-    ],
-    [
-      "Exposure",
-      "Per-clip exposure adjustment after decode.",
-      "Correct the brightness of this output clip.",
-      "Zero is neutral. This does not change the original pool image or sampling noise schedule."
-    ],
-    [
-      "Contrast",
-      "Per-clip contrast adjustment after decode.",
-      "Change separation between dark and bright output values.",
-      "One is neutral. Strong contrast can lose visible detail."
-    ],
-    [
-      "Saturation",
-      "Per-clip colour saturation after decode.",
-      "Tone down or increase this clip’s colour intensity.",
-      "One is neutral. It does not change the assigned reference colours or guarantee seam colour consistency."
+      "Checking or cleaning up a clip's LoRAs.",
+      "Shows metadata or removes the entry."
     ]
   ],
   "Project panel": [
