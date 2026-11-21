@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { bindShotDrag } from "./minimax_timeline.js";
 import {transferRequest,transferLabel} from "./minimax_transfer.js";
-import {createLookEditor,lookIsNeutral,calibrateLook,lookChanges} from "./minimax_look.js";
+import {createLookEditor,lookIsNeutral,calibrateLook,lookChanges,fitToneCurve,LOOK_NEUTRAL as LOOK_DEFAULTS} from "./minimax_look.js";
 
 const CONTINUITY_MODES={independent:"Independent (No Continuity)",motion:"Motion Context (Chained)",carry:"Latent Carry (Pinned)",frame:"Last Frame (Start Image)"};
 
@@ -2388,6 +2388,18 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-zoom { position:absolute;right:6px;bottom:6px;display:flex;gap:2px;padding:2px;border-radius:6px;background:rgba(0,0,0,.55); }
 .mmx-director-root .mmx-look-zoom button { height:20px;min-width:26px;padding:0 5px!important;border:0!important;border-radius:4px!important;background:transparent!important;color:#dfe6ee!important;font-size:11px!important;font-weight:600;cursor:pointer; }
 .mmx-director-root .mmx-look-zoom button.active { background:#3d4f63!important;color:#fff!important; }
+.mmx-director-root .mmx-look-zoom { align-items:center; }
+.mmx-director-root .mmx-look-zoom span { font-size:11px;color:#dfe6ee;padding-right:2px; }
+.mmx-director-root .mmx-look-zoom-box { width:46px;height:20px;padding:0 4px!important;border:1px solid #4b5866!important;border-radius:4px!important;background:#1b2128!important;color:#fff!important;font-size:11px!important;text-align:right;font-variant-numeric:tabular-nums; }
+.mmx-director-root .mmx-look-mode { position:absolute;left:6px;bottom:6px;display:flex;gap:2px;padding:2px;border-radius:6px;background:rgba(0,0,0,.55); }
+.mmx-director-root .mmx-look-mode[hidden] { display:none; }
+.mmx-director-root .mmx-look-mode button { height:20px;padding:0 8px!important;border:0!important;border-radius:4px!important;background:transparent!important;color:#dfe6ee!important;font-size:11px!important;font-weight:600;cursor:pointer; }
+.mmx-director-root .mmx-look-mode button.active { background:#3d4f63!important;color:#fff!important; }
+.mmx-director-root .mmx-look-notice { position:absolute;right:8px;top:32px;max-width:48%;padding:4px 8px;border-radius:4px;background:rgba(0,0,0,.7);color:#f0c674;font-size:11px;pointer-events:none; }
+.mmx-director-root .mmx-look-notice[hidden] { display:none; }
+.mmx-director-root .mmx-look-curve { width:100%;height:32px; }
+.mmx-director-root .mmx-look-curve-row[hidden] { display:none; }
+.mmx-director-root .mmx-look-missing .mmx-look-mode { display:none; }
 .mmx-director-root .mmx-look-labels { position:absolute;left:0;right:0;top:6px;display:flex;justify-content:space-between;padding:0 8px;pointer-events:none; }
 .mmx-director-root .mmx-look-labels span { font-size:10.5px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:4px; }
 .mmx-director-root .mmx-look-empty { display:flex;align-items:center;justify-content:center;min-height:90px;padding:14px;text-align:center;font-size:11.5px;color:#8ea2b4; }
@@ -5372,7 +5384,8 @@ function mountDirectorUI(node) {
       box.append(head);
       if(extra.note){const p=document.createElement("p");p.className="mmx-continuity-mode-note";p.textContent=extra.note;box.append(p);}
       box.editor=createLookEditor({imageUrl,emptyText,look:activeClip[key],beforeLabel:extra.before || "Original",afterLabel:extra.after || "Adjusted",
-        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,compareOriginal:extra.compareOriginal,viewKey:`${timelineState.project_id||""}:${activeClip.id}:${key}`,
+        anchorUrl:extra.anchorUrl,anchorLabel:extra.anchorLabel,compareOriginal:extra.compareOriginal,
+        generatedUrl:extra.generatedUrl,generatedLabel:extra.generatedLabel,generatedNote:extra.generatedNote,viewKey:`${timelineState.project_id||""}:${activeClip.id}:${key}`,
         onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}});
       box.append(box.editor);
       return box;
@@ -5403,13 +5416,18 @@ function mountDirectorUI(node) {
         // Calibrate from the look this take actually used, not from edits made since.
         const current=activeClip.tail_look||null;
         const used=m.tail_look_known?(m.tail_look||null):(lookIsNeutral(current)?null:current);
-        const next=calibrateLook(used,m.previous_end,m.first,{contrast:true});
+        // Calibrate with a tone curve, not the sliders: per channel, the take's
+        // start tones are mapped onto the previous end's (darks, mids and
+        // whites separately). The sliders stay as this take used them.
+        const next=m.first_tones&&m.previous_end_tones
+          ?{...LOOK_DEFAULTS,...(used||{}),curve:fitToneCurve(used?.curve,m.first_tones,m.previous_end_tones)}
+          :calibrateLook(used,m.previous_end,m.first,{contrast:true});
         button.disabled=false;status.textContent=summary;
-        button.title="Set the sliders so the next take starts the way the previous clip ended. Click again to go back to the calibrated values after editing.";
+        button.title="Fit a tone curve so the next take starts the way the previous clip ended (darks, mids and whites each matched). Click again to go back to the calibrated values after editing.";
         button.onclick=()=>{
           editor.setLook(next);delete activeClip.calibrated_from;
           const changes=lookChanges(used,next);
-          status.textContent=(changes.length?"Calibrated: "+changes.join(" · "):"The join already matches; sliders set to what this take used.")+" Regenerate this clip to use them.";
+          status.textContent=(next.curve?"Tone curve calibrated"+(changes.length?" · sliders back to this take's: "+changes.join(" · "):""):changes.length?"Calibrated: "+changes.join(" · "):"The join already matches; sliders set to what this take used.")+". Regenerate this clip to use it.";
         };
       }).catch(error=>{
         calibrationCache.delete(cacheKey);
@@ -5472,8 +5490,10 @@ function mountDirectorUI(node) {
         continuityPanel.append(fixes);
         const tailSection=lookSection("Start of this clip","tail_look",frameUrl(previousClip,"last",true),
           "Generate the previous clip to preview its last frame. Adjustments you set here still apply.",
-          {note:"The same region of the frame, zoomed, from both images: left, the previous clip's last frame; right, how this clip will start. Drag the picture to move the region; 1× 2× 4× sets the zoom. The first second follows these sliders closely (within about 1% in tests); after that the model's own look takes over, so the sliders cannot fix drift later in the clip. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
+          {note:"The same region of both images, zoomed. Preview: left, the previous clip's last frame; right, that frame with these sliders and the calibrated tone curve, as the model receives it. Generated: right shows this clip's real first frame. Drag to move the region; scroll over the picture or use the zoom box to zoom. The first second follows the tail closely; after that the model's own look takes over. Auto calibrate fits a tone curve from the last take so darks, mids and whites each match the previous clip's end. When adjusted, the tail is re-encoded from these pixels (slightly softer join).",
            compareOriginal:true,anchorLabel:"Predicted start of this clip vs. the previous clip's end",
+           generatedUrl:cachedClipResults[activeClip.id]?.generation?frameUrl(activeClip,"first",true):null,generatedLabel:"This clip's first frame, generated",
+           generatedNote:"Left: the previous clip's last frame. Right: this clip's real first frame as generated (colour correction removed). It is one frame later, so a small movement is normal.",
            before:"Previous clip's end",after:"Start of this clip"});
         continuityPanel.append(tailSection);
         if(previousClip)addAutoCalibrate(tailSection);

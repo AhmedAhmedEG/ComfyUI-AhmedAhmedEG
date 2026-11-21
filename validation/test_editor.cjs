@@ -365,7 +365,8 @@ const node = {id:7,type:'MiniMaxH3MasterDirector',comfyClass:'MiniMaxH3MasterDir
   assert(editorRoot.textContent.includes('Prevent build-up at joins'),'The join fix is a visible switch');
   assert(editorRoot.textContent.includes("Keep colour on the chain's first clip"),'Look hold switch is offered');
   assert(editorRoot.querySelector('.mmx-look-section .mmx-look-controls'),'Previous tail has a live look editor');
-  assert.equal(editorRoot.querySelectorAll('.mmx-look-row').length,6);
+  assert.equal(editorRoot.querySelectorAll('.mmx-look-row:not(.mmx-look-curve-row)').length,6);
+  assert(editorRoot.querySelector('.mmx-look-curve-row').hidden,'No tone curve row until calibrated');
   assert([...editorRoot.querySelectorAll('details.mmx-section > summary')].some(s=>s.textContent.includes('Continuity')));
   const off=editorRoot.querySelector('.mmx-shot-continuity-mode');off.value='Independent (No Continuity)';off.onchange();
   assert.equal(editorRoot.querySelectorAll('.mmx-continuity-link').length,0);

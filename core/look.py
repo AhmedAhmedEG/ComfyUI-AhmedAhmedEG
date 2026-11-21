@@ -12,6 +12,36 @@ import math
 NEUTRAL = {"exposure": 0.0, "contrast": 1.0, "black": 0.0, "saturation": 1.0, "temperature": 0.0, "tint": 0.0}
 RANGES = {"exposure": (-2.0, 2.0), "contrast": (0.5, 1.5), "black": (-0.1, 0.1),
           "saturation": (0.0, 2.0), "temperature": (-1.0, 1.0), "tint": (-1.0, 1.0)}
+# Optional calibrated tone curve, applied after the sliders: one lookup table
+# per channel, CURVE_POINTS outputs for evenly spaced inputs 0..1. Auto
+# calibrate fits it so the darks, mids and whites each match, not just averages.
+CURVE_POINTS = 33
+# Tone measurement points (fractions of pixels) for calibration.
+TONE_QUANTILES = (0.005, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 0.995)
+
+
+def clean_curve(curve):
+    """Validated monotone per-channel lookup tables, or None for an identity/absent curve."""
+    if curve is None:
+        return None
+    if not isinstance(curve, (list, tuple)) or len(curve) != 3:
+        raise ValueError("Look curve must have three channels.")
+    out = []
+    for channel in curve:
+        if not isinstance(channel, (list, tuple)) or len(channel) != CURVE_POINTS:
+            raise ValueError(f"Each look curve channel must have {CURVE_POINTS} points.")
+        values, top = [], 0.0
+        for value in channel:
+            value = float(value)
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError("Look curve values must be between 0 and 1.")
+            top = max(top, value)
+            values.append(top)
+        out.append(values)
+    step = 1.0 / (CURVE_POINTS - 1)
+    if all(abs(v - i * step) < 1e-4 for channel in out for i, v in enumerate(channel)):
+        return None
+    return out
 
 
 def clean_look(look):
@@ -25,9 +55,45 @@ def clean_look(look):
         if not math.isfinite(value) or not low <= value <= high:
             raise ValueError(f"Look {key} must be between {low} and {high}.")
         values[key] = value
-    if all(abs(values[key] - NEUTRAL[key]) < 1e-6 for key in NEUTRAL):
+    curve = clean_curve(look.get("curve"))
+    if curve is None and all(abs(values[key] - NEUTRAL[key]) < 1e-6 for key in NEUTRAL):
         return None
+    if curve is not None:
+        values["curve"] = curve
     return values
+
+
+def apply_curve(x, curve):
+    """Per-channel piecewise-linear lookup on float RGB 0..1 [..., 3]."""
+    import torch
+    lut = torch.tensor(curve, dtype=torch.float32, device=x.device)  # [3, P]
+    pos = x.clamp(0, 1) * (CURVE_POINTS - 1)
+    lo = pos.floor().clamp(0, CURVE_POINTS - 2)
+    frac = pos - lo
+    lo = lo.long()
+    out = torch.empty_like(x)
+    for c in range(3):
+        table = lut[c]
+        a = table[lo[..., c]]
+        b = table[lo[..., c] + 1]
+        out[..., c] = a + (b - a) * frac[..., c]
+    return out
+
+
+def tone_quantiles(frames, count=24, from_end=False):
+    """Per-channel values (0..1) at TONE_QUANTILES over up to ``count`` frames."""
+    import torch
+    total = int(frames.shape[0])
+    n = min(int(count), total)
+    part = frames[total - n:] if from_end else frames[:n]
+    x = part[::3, ::4, ::4].float()
+    if x.numel() and float(x.max()) > 2:
+        x = x / 255
+    x = x.reshape(-1, 3)
+    if x.shape[0] > 2_000_000:
+        x = x[:: x.shape[0] // 2_000_000 + 1]
+    q = torch.tensor(TONE_QUANTILES, dtype=torch.float32)
+    return [[float(v) for v in torch.quantile(x[:, c], q)] for c in range(3)]
 
 
 def apply_look(images, look):
@@ -44,6 +110,9 @@ def apply_look(images, look):
     x = lift + x * (1 - lift)
     luma = (x * x.new_tensor([0.299, 0.587, 0.114])).sum(dim=-1, keepdim=True)
     x = luma + (x - luma) * values["saturation"]
+    x = x.clamp(0, 1)
+    if values.get("curve"):
+        x = apply_curve(x, values["curve"])
     return x.clamp(0, 1).to(images.dtype)
 
 

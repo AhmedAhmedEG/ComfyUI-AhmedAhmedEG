@@ -12,13 +12,57 @@ export const LOOK_CONTROLS = [
   ["tint","Tint",-1,1,0.005,v=>Math.abs(v)<5e-4?"0":`${v>0?"green":"magenta"} ${Math.abs(v).toFixed(3)}`],
 ];
 
+// Calibrated tone curve (core/look.py CURVE_POINTS): one lookup table per
+// channel, outputs for evenly spaced inputs 0..1, applied after the sliders.
+export const CURVE_POINTS = 33;
+export function curveIsIdentity(curve) {
+  return !Array.isArray(curve) || curve.every(ch => ch.every((v, i) => Math.abs(v - i/(CURVE_POINTS-1)) < 1e-4));
+}
 export function lookIsNeutral(look) {
-  return !look || Object.entries(LOOK_NEUTRAL).every(([k,n])=>Math.abs(Number(look[k] ?? n)-n)<1e-6);
+  return !look || (curveIsIdentity(look.curve) && Object.entries(LOOK_NEUTRAL).every(([k,n])=>Math.abs(Number(look[k] ?? n)-n)<1e-6));
+}
+const sampleCurve = (table, x) => {
+  const pos = Math.max(0, Math.min(1, x)) * (CURVE_POINTS-1), lo = Math.min(CURVE_POINTS-2, Math.floor(pos)), f = pos - lo;
+  return table[lo] + (table[lo+1] - table[lo]) * f;
+};
+
+// Fit the calibrated tone curve from a generated take: per channel, map the
+// take's start tones onto the previous clip's end tones (histogram matching
+// at TONE_QUANTILES), on top of the curve that take used. Darks, mids and
+// whites are matched separately, so a sleeve that stays whiter is corrected
+// even when the averages already agree.
+export function fitToneCurve(usedCurve, startTones, targetTones) {
+  return [0, 1, 2].map(c => {
+    const xs = [], ys = [];
+    for (let j = 0; j < startTones[c].length; j++) {
+      const x = startTones[c][j], y = targetTones[c][j];
+      if (xs.length && x <= xs[xs.length-1] + 1e-4) { ys[ys.length-1] = Math.max(ys[ys.length-1], y); continue; }
+      xs.push(x); ys.push(y);
+    }
+    const correct = x => {
+      if (!xs.length) return x;
+      // Outside the measured range keep the end offsets (slope 1).
+      if (x <= xs[0]) return ys[0] + (x - xs[0]);
+      if (x >= xs[xs.length-1]) return ys[ys.length-1] + (x - xs[xs.length-1]);
+      let k = 1; while (xs[k] < x) k++;
+      return ys[k-1] + (ys[k] - ys[k-1]) * (x - xs[k-1]) / (xs[k] - xs[k-1]);
+    };
+    const used = Array.isArray(usedCurve) ? usedCurve[c] : null;
+    let top = 0;
+    return Array.from({length: CURVE_POINTS}, (_, i) => {
+      const x = i/(CURVE_POINTS-1), before = used ? sampleCurve(used, x) : x;
+      // A gentle limit keeps one odd take from bending the tail too far.
+      const y = Math.max(0, Math.min(1, Math.max(before - .25, Math.min(before + .25, correct(before)))));
+      top = Math.max(top, y);
+      return Math.round(top * 10000) / 10000;
+    });
+  });
 }
 
 export function applyLookPixels(data, look) {
   if (lookIsNeutral(look)) return data;
   const v = {...LOOK_NEUTRAL, ...look};
+  const curve = curveIsIdentity(v.curve) ? null : v.curve;
   const gain = 2 ** v.exposure, t = v.temperature, g = v.tint;
   const gr = gain*(1+0.1*t)*(1-0.05*g), gg = gain*(1+0.1*g), gb = gain*(1-0.1*t)*(1-0.05*g);
   const c = v.contrast, lift = v.black, s = v.saturation;
@@ -28,7 +72,9 @@ export function applyLookPixels(data, look) {
     r = lift+r*(1-lift); gn = lift+gn*(1-lift); b = lift+b*(1-lift);
     const l = .299*r+.587*gn+.114*b;
     r = l+(r-l)*s; gn = l+(gn-l)*s; b = l+(b-l)*s;
-    data[i] = Math.max(0,Math.min(1,r))*255; data[i+1] = Math.max(0,Math.min(1,gn))*255; data[i+2] = Math.max(0,Math.min(1,b))*255;
+    r = Math.max(0,Math.min(1,r)); gn = Math.max(0,Math.min(1,gn)); b = Math.max(0,Math.min(1,b));
+    if (curve) { r = sampleCurve(curve[0], r); gn = sampleCurve(curve[1], gn); b = sampleCurve(curve[2], b); }
+    data[i] = r*255; data[i+1] = gn*255; data[i+2] = b*255;
   }
   return data;
 }
@@ -117,8 +163,10 @@ async function imagePixels(url, maxWidth = 560) {
 /**
  * Build a look editor.
  * opts: {imageUrl, emptyText, look, onInput(look), onChange(look), anchorUrl, anchorLabel, beforeLabel, afterLabel,
- *        compareOriginal: readouts compare the adjusted frame with the unadjusted one}
- * viewKey: keeps the compare zoom and region across rebuilds of the same editor.
+ *        compareOriginal: readouts compare the adjusted frame with the unadjusted one,
+ *        generatedUrl / generatedLabel / generatedNote: adds a "Generated" view comparing the before image
+ *        with that real frame (for example this clip's first frame as generated),
+ *        viewKey: keeps the compare mode, zoom and region across rebuilds of the same editor}
  * The returned element has .actions (a row above the sliders, hidden until used) and .setLook(look).
  */
 export function createLookEditor(opts) {
@@ -127,22 +175,52 @@ export function createLookEditor(opts) {
   const stage = document.createElement("div"); stage.className = "mmx-look-stage";
   const canvas = document.createElement("canvas"); canvas.className = "mmx-look-canvas";
   // Compare view: the SAME zoomed region from both images side by side (before
-  // left, after right). Drag the picture to move the region; 1x/2x/4x zoom.
-  const view = opts.viewKey && savedViews.get(opts.viewKey) || {x: .5, y: .5, zoom: 2};
+  // left, after right). Drag to move the region; the wheel or the zoom box
+  // zooms freely.
+  const view = opts.viewKey && savedViews.get(opts.viewKey) || {x: .5, y: .5, zoom: 2, mode: "preview"};
   if (opts.viewKey) savedViews.set(opts.viewKey, view);
+  if (!opts.generatedUrl) view.mode = "preview";
+  const ZOOM_MIN = 1, ZOOM_MAX = 64;
   const zoomBar = document.createElement("div"); zoomBar.className = "mmx-look-zoom";
-  for (const z of [1, 2, 4]) {
-    const b = document.createElement("button"); b.type = "button"; b.textContent = `${z}×`; b.dataset.zoom = z;
-    b.title = z === 1 ? "Whole width of each half" : `Zoom ${z}×`;
-    b.onclick = event => { event.stopPropagation(); view.zoom = z; render(); };
-    zoomBar.append(b);
+  const zoomOut = document.createElement("button"); zoomOut.type = "button"; zoomOut.textContent = "−"; zoomOut.title = "Zoom out";
+  const zoomBox = document.createElement("input"); zoomBox.type = "number"; zoomBox.min = String(ZOOM_MIN); zoomBox.step = "0.25";
+  zoomBox.className = "mmx-look-zoom-box"; zoomBox.title = "Zoom (type a value, or scroll over the picture)"; zoomBox.setAttribute("aria-label", "Zoom");
+  const zoomUnit = document.createElement("span"); zoomUnit.textContent = "×";
+  const zoomIn = document.createElement("button"); zoomIn.type = "button"; zoomIn.textContent = "+"; zoomIn.title = "Zoom in";
+  zoomBar.append(zoomOut, zoomBox, zoomUnit, zoomIn);
+  for (const el of [zoomBar, zoomBox]) for (const ev of ["pointerdown", "mousedown"]) el.addEventListener(ev, e => e.stopPropagation());
+  const setZoom = (z, focus) => {
+    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(z) || ZOOM_MIN));
+    if (focus) {
+      // Keep the point under the cursor in place.
+      view.x = focus.px - (focus.u - .5) * (.5 / next);
+      view.y = focus.py - (focus.v - .5) * (1 / next);
+    }
+    view.zoom = Math.round(next * 100) / 100; render();
+  };
+  zoomOut.onclick = e => { e.stopPropagation(); setZoom(view.zoom / 1.25); };
+  zoomIn.onclick = e => { e.stopPropagation(); setZoom(view.zoom * 1.25); };
+  zoomBox.onchange = () => setZoom(zoomBox.value);
+  zoomBox.addEventListener("wheel", e => { e.preventDefault(); setZoom(view.zoom * (e.deltaY < 0 ? 1.1 : 1/1.1)); }, {passive: false});
+  // Preview / Generated switch.
+  const modeBar = document.createElement("div"); modeBar.className = "mmx-look-mode";
+  const modes = [["preview", "Preview", "Left: the previous clip's last frame. Right: the same frame with these sliders and the calibrated curve, as the model receives it."],
+                 ["generated", "Generated", opts.generatedNote || "Left: the previous clip's last frame. Right: the real first frame of this clip, as generated."]];
+  for (const [id, text, title] of modes) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.title = title; b.dataset.mode = id;
+    b.onclick = e => { e.stopPropagation(); view.mode = id; render(); };
+    b.addEventListener("pointerdown", e => e.stopPropagation());
+    modeBar.append(b);
   }
+  modeBar.hidden = !opts.generatedUrl;
   const labels = document.createElement("div"); labels.className = "mmx-look-labels";
-  labels.innerHTML = `<span>${opts.beforeLabel || "Before"}</span><span>${opts.afterLabel || "After"}</span>`;
+  const beforeLabel = document.createElement("span"), afterLabel = document.createElement("span");
+  beforeLabel.textContent = opts.beforeLabel || "Before"; labels.append(beforeLabel, afterLabel);
   const empty = document.createElement("div"); empty.className = "mmx-look-empty"; empty.textContent = "Loading frame…";
+  const notice = document.createElement("div"); notice.className = "mmx-look-notice"; notice.hidden = true;
   stage.classList.add("mmx-look-missing");
-  stage.append(canvas, labels, zoomBar, empty);
-  stage.title = "Drag to move the compared region";
+  stage.append(canvas, labels, modeBar, zoomBar, empty, notice);
+  stage.title = "Drag to move the compared region; scroll to zoom";
   const readout = document.createElement("div"); readout.className = "mmx-look-readout";
   const controls = document.createElement("div"); controls.className = "mmx-look-controls";
   // Optional action row (for example Auto calibrate) right above the sliders.
@@ -150,37 +228,52 @@ export function createLookEditor(opts) {
   root.append(stage, readout, actions, controls);
   root.actions = actions;
 
-  let original = null, anchor = null;
+  let original = null, anchor = null, generated = null, generatedState = opts.generatedUrl ? "loading" : "none";
   const render = () => {
+    for (const b of modeBar.children) b.classList.toggle("active", b.dataset.mode === view.mode);
+    zoomBox.value = String(view.zoom);
     if (!original) return;
     const ctx = canvas.getContext("2d");
-    const after = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
-    applyLookPixels(after.data, look);
+    const showGenerated = view.mode === "generated";
+    afterLabel.textContent = showGenerated ? (opts.generatedLabel || "Generated") : (opts.afterLabel || "After");
+    notice.hidden = !showGenerated || generatedState === "ready";
+    notice.textContent = generatedState === "loading" ? "Loading the generated frame…" : "Generate this clip to see its real first frame.";
+    let after;
+    if (showGenerated && generated) {
+      const t = document.createElement("canvas"); t.width = generated.width; t.height = generated.height;
+      t.getContext("2d").putImageData(generated, 0, 0);
+      const g = sources.after.getContext("2d", {willReadFrequently: true});
+      g.imageSmoothingQuality = "high"; g.drawImage(t, 0, 0, original.width, original.height);
+      after = g.getImageData(0, 0, original.width, original.height);
+    } else {
+      after = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
+      if (!showGenerated) applyLookPixels(after.data, look);
+      sources.after.getContext("2d").putImageData(after, 0, 0);
+    }
     // The same region of the frame twice, zoomed: before left, after right.
     const w = original.width, h = original.height, half = Math.max(1, Math.round(w / 2));
     const cw = half / view.zoom, ch = h / view.zoom;
     const sx = Math.min(w - cw, Math.max(0, view.x * w - cw / 2)), sy = Math.min(h - ch, Math.max(0, view.y * h - ch / 2));
     view.x = (sx + cw / 2) / w; view.y = (sy + ch / 2) / h;
     sources.before.getContext("2d").putImageData(original, 0, 0);
-    sources.after.getContext("2d").putImageData(after, 0, 0);
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.imageSmoothingEnabled = view.zoom < 6; ctx.imageSmoothingQuality = "high";
     ctx.drawImage(sources.before, sx, sy, cw, ch, 0, 0, half, h);
     ctx.drawImage(sources.after, sx, sy, cw, ch, half, 0, w - half, h);
     ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillRect(half - 1, 0, 2, h);
-    for (const b of zoomBar.children) b.classList.toggle("active", Number(b.dataset.zoom) === view.zoom);
     const s = frameStats(after.data);
     const delta = (value, base, digits = 1, pct = false) => {
       if (base == null) return "";
       const d = pct ? (value/base-1)*100 : value - base;
       return ` <em class="${Math.abs(d) < (pct ? 1 : .5) ? "" : d > 0 ? "up" : "down"}">${d > 0 ? "+" : ""}${d.toFixed(digits)}${pct ? "%" : ""}</em>`;
     };
-    const a = opts.compareOriginal ? frameStats(original.data) : anchor ? frameStats(anchor.data) : null;
+    const a = showGenerated || opts.compareOriginal ? frameStats(original.data) : anchor ? frameStats(anchor.data) : null;
+    const label = showGenerated ? "Real first frame vs. the previous clip's end" : (opts.anchorLabel || "Change vs. the chain's first clip");
     readout.innerHTML =
-      `<span title="Average brightness of the adjusted frame (0-255)">Brightness <b>${s.brightness.toFixed(1)}</b>${delta(s.brightness, a?.brightness, 1, true)}</span>` +
+      `<span title="Average brightness (0-255)">Brightness <b>${s.brightness.toFixed(1)}</b>${delta(s.brightness, a?.brightness, 1, true)}</span>` +
       `<span title="Share of pixels darker than 16/255">Near-black <b>${s.dark.toFixed(1)}%</b>${delta(s.dark, a?.dark)}</span>` +
       `<span title="Red vs green balance">Warm <b>${s.warm.toFixed(3)}</b>${delta(s.warm, a?.warm, 1, true)}</span>` +
       `<span title="Blue vs green balance">Cool <b>${s.cool.toFixed(3)}</b>${delta(s.cool, a?.cool, 1, true)}</span>` +
-      (a ? `<small>${opts.anchorLabel || "Change vs. the chain's first clip"}</small>` : "");
+      (a ? `<small>${label}</small>` : "");
   };
   const sources = {before: document.createElement("canvas"), after: document.createElement("canvas")};
   let drag = null;
@@ -195,6 +288,14 @@ export function createLookEditor(opts) {
   });
   const endDrag = () => { drag = null; };
   canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("wheel", event => {
+    if (!original) return;
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect(), halfW = rect.width / 2;
+    const u = ((event.clientX - rect.left) % halfW) / halfW, v = (event.clientY - rect.top) / rect.height;
+    const px = view.x + (u - .5) * (.5 / view.zoom), py = view.y + (v - .5) * (1 / view.zoom);
+    setZoom(view.zoom * (event.deltaY < 0 ? 1.15 : 1/1.15), {u, v, px, py});
+  }, {passive: false});
 
   const inputs = {};
   for (const [key, title, min, max, step, format] of LOOK_CONTROLS) {
@@ -217,16 +318,42 @@ export function createLookEditor(opts) {
     row.classList.toggle("changed", Math.abs(look[key] - LOOK_NEUTRAL[key]) > 1e-6);
     row.append(name, slider, value, reset); controls.append(row); inputs[key] = set;
   }
+  // The calibrated tone curve, shown as one row with its own reset.
+  const curveRow = document.createElement("div"); curveRow.className = "mmx-look-row mmx-look-curve-row changed";
+  const curveName = document.createElement("span"); curveName.textContent = "Tone curve";
+  const curveArt = document.createElement("canvas"); curveArt.className = "mmx-look-curve"; curveArt.width = 120; curveArt.height = 40;
+  const curveText = document.createElement("output"); curveText.textContent = "calibrated";
+  const curveReset = document.createElement("button"); curveReset.type = "button"; curveReset.className = "mmx-look-reset"; curveReset.textContent = "↺";
+  curveReset.title = "Remove the calibrated tone curve";
+  curveRow.append(curveName, curveArt, curveText, curveReset);
+  const drawCurve = () => {
+    const on = !curveIsIdentity(look.curve);
+    curveRow.hidden = !on; if (!on) return;
+    const g = curveArt.getContext("2d"), W = curveArt.width, H = curveArt.height;
+    g.clearRect(0, 0, W, H);
+    g.strokeStyle = "rgba(255,255,255,.25)"; g.beginPath(); g.moveTo(0, H); g.lineTo(W, 0); g.stroke();
+    // Show the difference from a straight line, magnified so small bends are visible.
+    ["#ff7b7b", "#7bdc8f", "#7bb4ff"].forEach((color, c) => {
+      g.strokeStyle = color; g.beginPath();
+      look.curve[c].forEach((y, i) => { const x = i/(CURVE_POINTS-1), d = (y - x) * 4; const px = x*W, py = H*(1 - x) - d*H; i ? g.lineTo(px, py) : g.moveTo(px, py); });
+      g.stroke();
+    });
+  };
+  curveReset.onclick = () => { delete look.curve; drawCurve(); render(); opts.onChange?.({...look}); };
+  controls.append(curveRow); drawCurve();
   const resetAll = document.createElement("button"); resetAll.type = "button"; resetAll.className = "mmx-look-reset-all";
   resetAll.textContent = "Reset all";
-  resetAll.onclick = () => { for (const key of Object.keys(LOOK_NEUTRAL)) { look[key] = LOOK_NEUTRAL[key]; } for (const [key, set] of Object.entries(inputs)) set(LOOK_NEUTRAL[key], false); opts.onChange?.({...look}); };
+  resetAll.onclick = () => { delete look.curve; drawCurve(); for (const key of Object.keys(LOOK_NEUTRAL)) { look[key] = LOOK_NEUTRAL[key]; } for (const [key, set] of Object.entries(inputs)) set(LOOK_NEUTRAL[key], false); opts.onChange?.({...look}); };
   controls.append(resetAll);
-  // Set every slider in place: the preview, its zoom and drag position stay
-  // as they are, so the change is visible right away. Commits once.
+  // Set every slider (and the curve) in place: the preview, its zoom and drag
+  // position stay as they are, so the change is visible right away. Commits once.
   root.setLook = next => {
     const target = {...LOOK_NEUTRAL, ...(next || {})};
+    if (curveIsIdentity(target.curve)) delete look.curve; else look.curve = target.curve.map(ch => [...ch]);
+    drawCurve();
     for (const [key, set] of Object.entries(inputs)) set(target[key], false);
-    opts.onChange?.({...look});
+    if (view.mode === "generated") view.mode = "preview";
+    render(); opts.onChange?.({...look});
   };
 
   const show = pixels => {
@@ -236,9 +363,12 @@ export function createLookEditor(opts) {
   };
   if (opts.imageUrl) {
     if (opts.anchorUrl && pixelReady.has(opts.anchorUrl)) anchor = pixelReady.get(opts.anchorUrl);
+    if (opts.generatedUrl && pixelReady.has(opts.generatedUrl)) { generated = pixelReady.get(opts.generatedUrl); generatedState = "ready"; }
     if (pixelReady.has(opts.imageUrl)) show(pixelReady.get(opts.imageUrl));
     else cachedPixels(opts.imageUrl).then(show).catch(() => { empty.textContent = opts.emptyText || "Frame not available yet."; stage.classList.add("mmx-look-missing"); });
     if (opts.anchorUrl && !anchor) cachedPixels(opts.anchorUrl).then(pixels => { anchor = pixels; render(); }).catch(() => {});
+    if (opts.generatedUrl && !generated) cachedPixels(opts.generatedUrl).then(pixels => { generated = pixels; generatedState = "ready"; render(); }).catch(() => { generatedState = "missing"; render(); });
   } else { empty.textContent = opts.emptyText || "No frame to preview."; stage.classList.add("mmx-look-missing"); }
+  render();
   return root;
 }

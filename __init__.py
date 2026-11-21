@@ -605,9 +605,10 @@ if getattr(PromptServer, "instance", None) is not None:
     async def clip_frame(request):
         """One saved frame of a generated clip (first or last visible frame) for continuity previews.
 
-        ``carried=1`` returns the frame as the next clip receives it (hold-look gain removed)."""
+        ``carried=1`` returns the frame without the hold-look gain: the last frame as
+        the next clip receives it, the first frame as the model generated it."""
         try:
-            from .core.look import undo_hold
+            from .core.look import undo_hold, undo_hold_at
             mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
             clip_id = request.query.get("clip_id", "")
             which = request.query.get("which", "last")
@@ -627,6 +628,8 @@ if getattr(PromptServer, "instance", None) is not None:
                 frame = frames[index:index + 1].float()
                 if request.query.get("carried") == "1" and which == "last":
                     frame = undo_hold(frame, meta.get("hold_gain"), total)
+                elif request.query.get("carried") == "1" and meta.get("hold_gain"):
+                    frame = undo_hold_at(frame, meta.get("hold_gain"), total, index)
                 frame = frame[0]
                 if frame.max() > 2:
                     frame = frame / 255
@@ -651,7 +654,7 @@ if getattr(PromptServer, "instance", None) is not None:
         second, before the hold-look gain, with the end of the chain's first clip
         (the same anchor Hold look uses). Reads saved frames only; writes nothing."""
         try:
-            from .core.look import undo_hold, undo_hold_at, frame_stats
+            from .core.look import undo_hold, undo_hold_at, frame_stats, tone_quantiles, TONE_QUANTILES
             mgr = ProjectCacheManager(request.query.get("project_id", "default_director"))
             clip_id = request.query.get("clip_id", "")
             before = [v for v in request.query.get("before", "").split(",") if v]
@@ -673,11 +676,13 @@ if getattr(PromptServer, "instance", None) is not None:
                 # Hold look removed), so the join compares raw with raw.
                 previous_hold = clips.get(before[-1], {}).get("hold_gain")
                 previous_raw = undo_hold(previous[-24:], previous_hold, int(previous.shape[0])) if previous_hold else previous[-24:]
-                return {"generation": meta.get("generation"), "anchor_id": anchor_id,
+                first_raw = undo_hold_at(frames[trim:trim + 24], hold, total, trim)
+                return {"tone_points": list(TONE_QUANTILES), "first_tones": tone_quantiles(first_raw), "previous_end_tones": tone_quantiles(previous_raw, from_end=True),
+                        "generation": meta.get("generation"), "anchor_id": anchor_id,
                         "tail_look": meta.get("tail_look"), "tail_look_known": "tail_look" in meta, "auto_fix": meta.get("auto_fix"), "hold_gain": hold,
                         # The join is measured on what the model generated: the
                         # small Hold look ramp at the start is removed first.
-                        "first": frame_stats(undo_hold_at(frames[trim:trim + 24], hold, total, trim)), "previous_end": frame_stats(previous_raw, from_end=True),
+                        "first": frame_stats(first_raw), "previous_end": frame_stats(previous_raw, from_end=True),
                         "end": frame_stats(frames, from_end=True), "raw_end": frame_stats(raw_end, from_end=True),
                         "anchor": frame_stats(anchor, from_end=True) if anchor is not None and anchor.shape[0] else None}
             return web.json_response(await asyncio.to_thread(build), headers={"Cache-Control": "no-store"})

@@ -53,6 +53,38 @@ class LookMath(unittest.TestCase):
         self.assertAlmostEqual(frame_stats(frames * 255)["rgb"][0], start["rgb"][0], places=4)
 
 
+class ToneCurve(unittest.TestCase):
+    def test_identity_curve_is_neutral_and_bad_curves_are_refused(self):
+        from core.look import CURVE_POINTS
+        identity = [[i / (CURVE_POINTS - 1) for i in range(CURVE_POINTS)] for _ in range(3)]
+        self.assertIsNone(clean_look({"curve": identity}))
+        with self.assertRaises(ValueError):
+            clean_look({"curve": [[0.5] * 5] * 3})
+        with self.assertRaises(ValueError):
+            clean_look({"curve": [[1.5] * CURVE_POINTS] * 3})
+
+    def test_curve_is_kept_monotone_and_applied_per_channel(self):
+        from core.look import CURVE_POINTS
+        step = 1 / (CURVE_POINTS - 1)
+        darker_whites = [min(1.0, i * step) if i * step < 0.5 else 0.5 + (i * step - 0.5) * 0.8 for i in range(CURVE_POINTS)]
+        wobble = list(darker_whites); wobble[20] = wobble[19] - 0.01  # dips are flattened
+        look = clean_look({"curve": [wobble, [i * step for i in range(CURVE_POINTS)], [i * step for i in range(CURVE_POINTS)]]})
+        self.assertGreaterEqual(look["curve"][0][20], look["curve"][0][19])
+        image = torch.tensor([[[1.0, 1.0, 1.0], [0.25, 0.25, 0.25]]])
+        out = apply_look(image, look)
+        self.assertAlmostEqual(float(out[0, 0, 0]), 0.9, places=3)   # red whites pulled down
+        self.assertAlmostEqual(float(out[0, 0, 1]), 1.0, places=3)   # green untouched
+        self.assertAlmostEqual(float(out[0, 1, 0]), 0.25, places=3)  # darks untouched
+
+    def test_tone_quantiles_measure_each_channel(self):
+        from core.look import tone_quantiles, TONE_QUANTILES
+        frames = torch.zeros(24, 8, 8, 3)
+        frames[..., 0] = torch.linspace(0, 1, 8).view(1, 1, 8)
+        q = tone_quantiles(frames)
+        self.assertEqual(len(q), 3); self.assertEqual(len(q[0]), len(TONE_QUANTILES))
+        self.assertEqual(q[0], sorted(q[0])); self.assertAlmostEqual(q[1][-1], 0.0)
+
+
 class BoundaryFrame(unittest.TestCase):
     def frames(self, levels):
         noise = torch.rand((len(levels), 8, 8, 3)) * 0.01
