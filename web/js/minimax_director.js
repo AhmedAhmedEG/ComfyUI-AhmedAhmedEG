@@ -2113,8 +2113,29 @@ const embeddedCSS = `
 .mmx-director-root .mmx-clip-vid-cell video { width:100%;height:100%;object-fit:contain; background:#151515; }
 .mmx-director-root .mmx-img-block, .mmx-director-root .mmx-vid-block, .mmx-director-root .mmx-aud-block { height:52px; }
 .mmx-cache-button{font-size:9px;padding:1px 4px;border:1px solid #516779;border-radius:4px;background:#25343e;color:#a8d7cc;white-space:nowrap;cursor:pointer}
-.mmx-cache-dialog{background:#222b32;color:#e1e8ee;border:1px solid #556573;border-radius:8px;padding:18px;max-width:560px;max-height:80vh;overflow:auto;font:13px system-ui}
-.mmx-cache-dialog table{border-collapse:collapse;width:100%;margin:12px 0}.mmx-cache-dialog td,.mmx-cache-dialog th{padding:6px 10px;text-align:left;border-bottom:1px solid #ffffff18}.mmx-cache-dialog p{font-size:11px;color:#a9b7c4;max-width:480px}
+.mmx-cache-dialog{background:#1d2228;color:#e1e8ee;border:1px solid #3a444e;border-radius:12px;padding:0;width:min(460px,92vw);max-height:80vh;overflow:auto;font:13px system-ui;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+.mmx-cache-dialog::backdrop{background:rgba(8,10,13,.55)}
+.mmx-cache-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px 10px;border-bottom:1px solid #2c343d;position:sticky;top:0;background:#1d2228;z-index:1}
+.mmx-cache-titles{display:flex;flex-direction:column;gap:2px}.mmx-cache-titles strong{font-size:14px}.mmx-cache-titles span{font-size:11.5px;color:#8ea2b4}
+.mmx-cache-close{width:28px;height:28px;min-height:28px!important;padding:0!important;border:1px solid #3a444e!important;border-radius:7px!important;background:#262d35!important;color:#cfd8e0!important;font-size:16px!important;line-height:1;cursor:pointer}
+.mmx-cache-close:hover{background:#323b45!important}
+.mmx-cache-verdict{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:12px 16px 4px;padding:10px 12px;border-radius:8px;border:1px solid #2f3a44;background:#232a31}
+.mmx-cache-verdict strong{font-size:13px}.mmx-cache-verdict span{font-size:11.5px;color:#9fb0c0}
+.mmx-cache-verdict.reused{border-color:#2f5446;background:#1c2a25}.mmx-cache-verdict.fresh{border-color:#5a4a2c;background:#2a251b}
+.mmx-cache-group{margin:14px 16px 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7d8e9e}
+.mmx-cache-list{margin:0 16px;border:1px solid #2c343d;border-radius:8px;overflow:hidden}
+.mmx-cache-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;background:#20262d}
+.mmx-cache-row+.mmx-cache-row{border-top:1px solid #2c343d}
+.mmx-cache-text{display:flex;flex-direction:column;gap:2px;min-width:0}.mmx-cache-text strong{font-size:12.5px;font-weight:600}.mmx-cache-text small{font-size:11px;color:#8ea2b4;line-height:1.35}
+.mmx-cache-pill{flex:none;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.02em}
+.mmx-cache-pill.reused{background:#1f3d33;color:#7fd3b0}.mmx-cache-pill.fresh{background:#3d321c;color:#f0c674}.mmx-cache-pill.bypass{background:#2c333b;color:#9fb0c0}.mmx-cache-pill.partial{background:#24363d;color:#8cc7e0}
+.mmx-cache-technical{margin:14px 16px 0}.mmx-cache-technical summary{cursor:pointer;font-size:12px;color:#b9c6d2}
+.mmx-cache-technical .mmx-cache-group{margin:10px 0 4px}
+.mmx-cache-technical table{border-collapse:collapse;width:100%;font-size:11.5px}.mmx-cache-technical th{font-weight:600;color:#7d8e9e;text-align:right;padding:4px 6px;border-bottom:1px solid #2c343d}.mmx-cache-technical th:first-child{text-align:left}
+.mmx-cache-technical td{padding:4px 6px;border-bottom:1px solid #262d35;text-align:right;font-variant-numeric:tabular-nums}.mmx-cache-technical td:first-child{text-align:left;color:#cfd8e0}
+.mmx-cache-technical td.zero{color:#4f5d6a}.mmx-cache-technical td.hit{color:#7fd3b0}.mmx-cache-technical td.miss{color:#f0c674}.mmx-cache-technical td.bypass{color:#9fb0c0}
+.mmx-cache-technical p,.mmx-cache-foot{font-size:11px;color:#7d8e9e;line-height:1.45}
+.mmx-cache-foot{margin:12px 16px 14px}
 .mmx-director-root .mmx-clip-img-cell .mmx-ref-type-label { display:none; }
 
 .mmx-reference-dialog { padding:16px;background:#24262b;color:#eee;border:1px solid #61697b;border-radius:8px;max-width:85vw; }
@@ -2341,7 +2362,7 @@ const embeddedCSS = `
 .mmx-director-root .mmx-setting-size { display:inline-flex;align-items:center;gap:4px;color:#8ea2b4; }
 .mmx-director-root .mmx-setting-divider { width:1px;height:20px;background:#3a444e; }
 .mmx-director-root .mmx-setting-external select:disabled,.mmx-director-root .mmx-setting-external input:disabled { opacity:.45;cursor:not-allowed; }
-.mmx-director-root .mmx-setting-note { font-size:11px;color:#7d8e9e; }
+.mmx-director-root .mmx-setting-pill { display:inline-flex;align-items:center;height:22px;padding:0 8px;border:1px dashed #4b5866;border-radius:11px;font-size:11px;color:#9fb0c0; }
 .mmx-director-root .mmx-switch-row { display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;cursor:pointer; }
 .mmx-director-root .mmx-switch-row.disabled { opacity:.55;cursor:default; }
 .mmx-director-root .mmx-switch-row .mmx-lora-switch { margin-top:1px; }
@@ -2377,9 +2398,10 @@ const embeddedCSS = `
 .mmx-director-root .mmx-look-row input[type=range] { width:100%;margin:0;accent-color:var(--mmx-accent,#a396ff); }
 .mmx-director-root .mmx-look-row output { text-align:right;font-variant-numeric:tabular-nums;color:#8ea2b4;font-size:11px;white-space:nowrap; }
 .mmx-director-root .mmx-look-row.changed span,.mmx-director-root .mmx-look-row.changed output { color:#e8edf2; }
-.mmx-director-root .mmx-look-reset { width:24px;height:22px;min-height:22px;padding:0;border:1px solid transparent;border-radius:5px;background:transparent;color:#6f8090;cursor:pointer;font-size:13px;line-height:1; }
-.mmx-director-root .mmx-look-row.changed .mmx-look-reset { color:#dfe7ee;border-color:#4b5866; }
-.mmx-director-root .mmx-look-reset-all { align-self:flex-end;margin-top:6px;height:26px;padding:0 10px;border:1px solid #4b5866;border-radius:6px;background:#2c343d;color:#dfe7ee;font-size:11.5px;cursor:pointer; }
+.mmx-director-root .mmx-look-reset { width:24px!important;height:22px!important;min-height:22px!important;padding:0!important;border:1px solid transparent!important;border-radius:5px!important;background:transparent!important;color:#6f8090!important;cursor:pointer;font-size:13px!important;line-height:1;visibility:hidden; }
+.mmx-director-root .mmx-look-row.changed .mmx-look-reset { visibility:visible;color:#dfe7ee!important;border-color:#4b5866!important; }
+.mmx-director-root .mmx-look-row.changed .mmx-look-reset:hover { background:#2c343d!important; }
+.mmx-director-root .mmx-look-reset-all { align-self:flex-end;margin-top:6px;height:26px!important;min-height:26px!important;padding:0 10px!important;border:1px solid #4b5866!important;border-radius:6px!important;background:#2c343d!important;color:#dfe7ee!important;font-size:11.5px!important;cursor:pointer; }
 .mmx-director-root .mmx-join-result { margin-top:12px; }
 .mmx-director-root .mmx-join-result > strong { font-size:12.5px;color:#e8edf2; }
 .mmx-director-root .mmx-join-pair { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px; }
@@ -3664,7 +3686,7 @@ function mountDirectorUI(node) {
       size.append(number(res.width ?? 1344,32,4096,32,v=>{res.width=v;save();},68),Object.assign(document.createElement("span"),{textContent:"×"}),number(res.height ?? 768,32,4096,32,v=>{res.height=v;save();},68));
       item("Size",size,"Pixels; multiples of 32.");
     } else if(res.mode==="auto"){
-      item("Megapixels",number(res.megapixels ?? 1,0.1,16,0.1,v=>{res.megapixels=v;save();},60));
+      item("MP",number(res.megapixels ?? 1,0.1,16,0.1,v=>{res.megapixels=v;save();},60));
       item("Aspect",select(["16:9","9:16","1:1","4:3","3:4","21:9","3:2","2:3","auto"].map(v=>[v,v]),res.aspect||"16:9",v=>{res.aspect=v;save();}));
     }
     const divider=()=>{const d=document.createElement("span");d.className="mmx-setting-divider";settingsBar.append(d);};
@@ -3677,11 +3699,11 @@ function mountDirectorUI(node) {
     item("Sampler",sampler,"Sampling method used for every clip.");
     item("CFG",number(st.cfg ?? 1,0,20,0.1,v=>{st.cfg=v;save();},54),"Guidance scale. 1.0 for distilled or Lightning setups.");
     const sigmas=socketLinked("sigmas"),stepsLinked=socketLinked("steps");
-    const steps=number(st.steps ?? 25,1,200,1,v=>{st.steps=v;save();},54);steps.disabled=sigmas||stepsLinked;
-    item("Steps",steps,sigmas?"Set by the connected sigmas input.":stepsLinked?"Set by the connected steps input.":"Sampling steps.").classList.toggle("mmx-setting-external",sigmas||stepsLinked);
-    scheduler.disabled=sigmas;
-    item("Scheduler",scheduler,sigmas?"Set by the connected sigmas input.":"Noise schedule.").classList.toggle("mmx-setting-external",sigmas);
-    for(const wrap of settingsBar.querySelectorAll(".mmx-setting-external")){const tag=document.createElement("span");tag.className="mmx-setting-note";tag.textContent=sigmas?"(sigmas)":"(input)";wrap.append(tag);}
+    const pill=text=>{const el=document.createElement("span");el.className="mmx-setting-pill";el.textContent=text;return el;};
+    if(sigmas || stepsLinked)item("Steps",pill(sigmas?"from sigmas":"from input"),sigmas?"Steps come from the connected sigmas schedule.":"Steps come from the connected steps input.");
+    else item("Steps",number(st.steps ?? 25,1,200,1,v=>{st.steps=v;save();},54),"Sampling steps.");
+    if(sigmas)item("Scheduler",pill("from sigmas"),"The schedule comes from the connected sigmas input.");
+    else item("Scheduler",scheduler,"Noise schedule.");
     divider();
     item("Output",select([["latest","Latest clip"],["full","Full sequence"]],st.decoded_output||"latest",v=>{st.decoded_output=v;save();}),
       "Latest returns the last generated clip as frames (all clips still save for Smart Preview and Project Video). Full assembles every clip.");
@@ -4317,49 +4339,59 @@ function mountDirectorUI(node) {
         cache.onclick=e=>{
           e.stopPropagation();node.__mmxCacheDialog?.remove();
           const dialog=document.createElement('dialog');dialog.className='mmx-cache-dialog';node.__mmxCacheDialog=dialog;
-          const heading=document.createElement('strong');heading.textContent=`${clip.name || 'Clip'} · Cache report`;dialog.append(heading);
+          const el=(tag,cls,text)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!=null)x.textContent=text;return x;};
           const explanations={
-            'Reference preparation':['Reference preparation','Checks whether the same references and encoding settings were prepared before. Reuse skips the extra preparation pass.'],
-            'Reference latents':['Encoded references','Images, video and audio converted into model inputs. Reuse avoids running the VAE again.'],
-            'Saved clip':['Generated clip','The saved generation for this timeline clip. Approval controls whether it can be reused.'],
-            'Text conditioning':['Prompt understanding','The text encoder’s interpretation of your prompt and visual references. Reuse avoids encoding them again.'],
-            'Model setup':['Model configuration','The selected model’s LoRA and sampling configuration. This does not store another copy of the model.'],
-            'LoRA weights':['LoRA files','Recently used adapter weights kept in a bounded CPU cache.']
+            'Saved clip':['Generated clip','The saved generation for this clip. Approval controls whether it is reused.'],
+            'Text conditioning':['Prompt understanding','The text encoder’s reading of your prompt and visual references.'],
+            'Reference preparation':['Reference preparation','The same references and encoding settings prepared before.'],
+            'Reference latents':['Encoded references','Images, video and audio converted into model inputs (skips the VAE).'],
+            'Model setup':['Model configuration','LoRA and sampling configuration. Not another copy of the model.'],
+            'LoRA weights':['LoRA files','Recently used adapter weights kept in a small CPU cache.']
           };
           const report=clip.cache_report;
-          const describe=(name,count)=>{
-            const messages=[];
-            if(count.hit)messages.push(name==='Saved clip'?'Reused the saved generation':'Reused saved data');
-            if(count.miss)messages.push(name==='Saved clip'?'Needed a new generation':'Prepared fresh');
-            if(count.bypass)messages.push('Calculated fresh; reuse was unavailable');
-            return messages.join(' · ');
-          };
-          const intro=document.createElement('p');intro.textContent='Results from this clip’s latest run. Reuse can come from earlier runs, including runs before the Cache button was added. Counts are lookups, not numbers of assets.';dialog.append(intro);
-          const tableFor=(rows,title)=>{
-            const visible=Object.entries(rows || {}).filter(([name])=>explanations[name]);
-            if(!visible.length)return;
-            const label=document.createElement('h4');label.textContent=title;dialog.append(label);
+          const state=count=>count.hit && !count.miss && !count.bypass?'reused':count.hit?'partial':count.miss?'fresh':count.bypass?'bypass':'reused';
+          const label={reused:'Reused',partial:'Partly reused',fresh:'Fresh',bypass:'Not reusable'};
+          const head=el('div','mmx-cache-head');
+          const titles=el('div','mmx-cache-titles');titles.append(el('strong',null,'Cache report'),el('span',null,clip.name || 'Clip'));
+          const close=el('button','mmx-cache-close','×');close.type='button';close.title='Close';close.setAttribute('aria-label','Close cache report');close.onclick=()=>dialog.remove();
+          head.append(titles,close);dialog.append(head);
+          const rowsOf=rows=>Object.entries(rows || {}).filter(([name])=>explanations[name]);
+          const all=[...rowsOf(report.stats),...rowsOf(report.run_preparation)];
+          const reused=all.filter(([,c])=>state(c)==='reused').length;
+          const savedRow=(report.stats || {})['Saved clip'];
+          const verdict=el('div','mmx-cache-verdict '+(savedRow && state(savedRow)==='reused'?'reused':'fresh'));
+          verdict.append(el('strong',null,savedRow && state(savedRow)==='reused'?'Saved result reused':'Generated this run'),
+            el('span',null,`${reused} of ${all.length} caches reused`));
+          dialog.append(verdict);
+          const group=(rows,title)=>{
+            const visible=rowsOf(rows);if(!visible.length)return;
+            dialog.append(el('div','mmx-cache-group',title));
+            const list=el('div','mmx-cache-list');
             for(const [name,count] of visible){
-              const row=document.createElement('div');row.style.cssText='margin:12px 0';
-              const heading=document.createElement('strong');heading.textContent=explanations[name][0];row.append(heading);
-              const outcome=document.createElement('div');outcome.textContent=describe(name,count);row.append(outcome);
-              const help=document.createElement('p');help.style.margin='4px 0';help.textContent=explanations[name][1];row.append(help);dialog.append(row);
+              const row=el('div','mmx-cache-row'),kind=state(count);
+              const text=el('div','mmx-cache-text');text.append(el('strong',null,explanations[name][0]),el('small',null,explanations[name][1]));
+              const pill=el('span','mmx-cache-pill '+kind,label[kind]);
+              row.append(text,pill);list.append(row);
             }
+            dialog.append(list);
           };
-          tableFor(report.stats,'This clip');tableFor(report.run_preparation,'Shared run preparation');
-          const technical=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Technical checks and lookup counts';technical.append(summary);
-          const why=document.createElement('p');why.textContent='File fingerprints are small saved identity hashes. Tensor fingerprints check in-memory data; when a tensor has no reliable change counter it must be read again. These checks do not cache additional copies of your media.';technical.append(why);
+          group(report.stats,'This clip');group(report.run_preparation,'Shared run preparation');
+          const technical=document.createElement('details');technical.className='mmx-cache-technical';
+          const summary=document.createElement('summary');summary.textContent='Technical details';technical.append(summary);
           for(const [scope,rows] of [['This clip',report.stats],['Shared run preparation',report.run_preparation]]){
             if(!Object.keys(rows || {}).length)continue;
-            const label=document.createElement('h4');label.textContent=scope;technical.append(label);
-            const table=document.createElement('table'),head=document.createElement('tr');
-            for(const text of ['Cache / Check','Reused','Fresh','Not reusable']){const cell=document.createElement('th');cell.textContent=text;head.append(cell);}table.append(head);
-            for(const [name,count] of Object.entries(rows)){const row=document.createElement('tr');for(const text of [name,count.hit || 0,count.miss || 0,count.bypass || 0]){const cell=document.createElement('td');cell.textContent=String(text);row.append(cell);}table.append(row);}technical.append(table);
+            technical.append(el('div','mmx-cache-group',scope));
+            const table=document.createElement('table'),hr=document.createElement('tr');
+            for(const text of ['Check','Reused','Fresh','Not reusable']){hr.append(el('th',null,text));}table.append(hr);
+            for(const [name,count] of Object.entries(rows)){const tr=document.createElement('tr');
+              tr.append(el('td',null,name));for(const [k,v] of [['hit',count.hit],['miss',count.miss],['bypass',count.bypass]])tr.append(el('td',v?'n '+k:'n zero',String(v || 0)));table.append(tr);}
+            technical.append(table);
           }
-          for(const [name,reason] of Object.entries(report.reasons || {})){const text=document.createElement('p');text.textContent=`${name}: ${reason}`;technical.append(text);}
+          for(const [name,reason] of Object.entries(report.reasons || {}))technical.append(el('p',null,`${name}: ${reason}`));
+          technical.append(el('p',null,'File fingerprints are small saved identity hashes. Tensor fingerprints check in-memory data; without a reliable change counter it must be read again. These checks store no extra copies of your media.'));
           dialog.append(technical);
-          const note=document.createElement('p');note.textContent='Model configuration reuse does not guarantee that weights stayed in VRAM. Missing rows mean that part of the cache was not consulted.';dialog.append(note);
-          const close=document.createElement('button');close.textContent='Close';close.onclick=()=>dialog.remove();dialog.append(close);
+          dialog.append(el('p','mmx-cache-foot','Counts are lookups, not numbers of assets, and reuse can come from earlier runs. Model configuration reuse does not guarantee the weights stayed in VRAM.'));
+          dialog.onclick=event=>{if(event.target===dialog)dialog.remove();};
           dialog.onclose=()=>dialog.remove();document.body.append(dialog);if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
         };shotTopBar.append(cache);
       }
@@ -5296,6 +5328,17 @@ function mountDirectorUI(node) {
         onChange:look=>{if(lookIsNeutral(look))delete activeClip[key];else activeClip[key]=look;syncState();head.querySelector(".mmx-look-badge")?.remove();if(!lookIsNeutral(look)){const badge=document.createElement("span");badge.className="mmx-look-badge";badge.textContent="Adjusted";head.append(badge);}}}));
       return box;
     };
+    const joinResult=(caption)=>{
+      if(!previousClip || !cachedClipResults[activeClip.id] || mode===MODE.independent)return;
+      const result=document.createElement("div");result.className="mmx-join-result";
+      const title=document.createElement("strong");title.textContent="Join result";result.append(title);
+      const pair=document.createElement("div");pair.className="mmx-join-pair";
+      for(const [label,src] of [["Previous clip · last frame",frameUrl(previousClip,"last")],[caption,frameUrl(activeClip,"first")]]){
+        const fig=document.createElement("figure");const img=document.createElement("img");img.src=src;img.alt=label;img.onerror=()=>fig.remove();
+        const cap=document.createElement("figcaption");cap.textContent=label;fig.append(img,cap);pair.append(fig);
+      }
+      result.append(pair);continuityPanel.append(result);
+    };
     if(startImage){
       const code=clipCode(activeClip);
       const on=mode===MODE.frame && clipIndex>0;
@@ -5310,6 +5353,7 @@ function mountDirectorUI(node) {
         empty=first?"This reference has no file to preview. Adjustments still apply.":"Choose the start image in References to preview it.";
       }
       continuityPanel.append(lookSection("Start image look","start_look",url,empty,{note:"Adjust the start image before it is used. The preview shows exactly what the model receives."}));
+      if(on)joinResult("This clip · first frame");
     } else {
       const method=document.createElement("select");method.className="mmx-shot-continuity-mode";
       for(const [value,label] of [[MODE.independent,"Independent"],[MODE.motion,"Motion Context"],[MODE.carry,"Latent Carry"]]){const option=document.createElement("option");option.value=value;option.textContent=label;method.append(option);}
@@ -5352,16 +5396,7 @@ function mountDirectorUI(node) {
           {note:"Optional manual correction of the tail this clip continues from. Leave it untouched for a pure latent join; when adjusted, the tail is re-encoded from these pixels (the join is slightly softer).",
            anchorUrl:anchor && anchor!==activeClip?frameUrl(anchor,"last"):null,anchorLabel:`Change vs. the last frame of ${anchor?.name || "the chain's first clip"}`,
            before:"As generated",after:"Carried"}));
-        if(previousClip && cachedClipResults[activeClip.id]){
-          const result=document.createElement("div");result.className="mmx-join-result";
-          const title=document.createElement("strong");title.textContent="Join result";result.append(title);
-          const pair=document.createElement("div");pair.className="mmx-join-pair";
-          for(const [label,src] of [["Previous clip · last frame",frameUrl(previousClip,"last")],["This clip · first frame (after the join fix)",frameUrl(activeClip,"first")]]){
-            const fig=document.createElement("figure");const img=document.createElement("img");img.src=src;img.alt=label;img.onerror=()=>fig.remove();
-            const cap=document.createElement("figcaption");cap.textContent=label;fig.append(img,cap);pair.append(fig);
-          }
-          result.append(pair);continuityPanel.append(result);
-        }
+        joinResult("This clip · first frame (after the join fix)");
       }
     }
     shotSections.prepend(continuityPanel);
